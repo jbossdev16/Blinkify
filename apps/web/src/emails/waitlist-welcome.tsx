@@ -11,7 +11,8 @@ import {
   Link,
 } from "@react-email/components";
 
-const DEFAULT_LOGO_URL = "https://blinkify.ai/logo/blinkify-logo-color.svg";
+/** PNG URL for email; Gmail/Outlook block SVG. Use NEXT_PUBLIC_APP_URL in production. */
+const DEFAULT_LOGO_URL = "https://blinkify.ai/logo/blinkify-logo-color.png";
 
 export function WaitlistWelcomeEmail({ logoSrc }: { logoSrc?: string }) {
   const src = logoSrc ?? DEFAULT_LOGO_URL;

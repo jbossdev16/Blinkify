@@ -2,21 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 import React from "react";
-import { readFileSync, existsSync } from "fs";
-import { join } from "path";
 import { WaitlistWelcomeEmail } from "@/emails/waitlist-welcome";
 
-function getLogoDataUri(): string | null {
-  try {
-    const path = join(process.cwd(), "public", "logo", "blinkify-logo-color.svg");
-    if (!existsSync(path)) return null;
-    const svg = readFileSync(path, "utf-8");
-    const base64 = Buffer.from(svg).toString("base64");
-    return `data:image/svg+xml;base64,${base64}`;
-  } catch {
-    return null;
-  }
-}
+const BASE_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://blinkify.ai";
+/** PNG is used in email; most clients (Gmail, Outlook) block SVG. PNG is generated at build time. */
+const LOGO_PNG_URL = `${BASE_URL}/logo/blinkify-logo-color.png`;
 
 let _supabase: SupabaseClient | null = null;
 function getSupabase() {
@@ -72,13 +62,12 @@ export async function POST(req: NextRequest) {
   }
 
   if (data && resend) {
-    const logoSrc = getLogoDataUri() ?? `${process.env.NEXT_PUBLIC_APP_URL ?? "https://blinkify.ai"}/logo/blinkify-logo-color.svg`;
     resend.emails
       .send({
         from: FROM_EMAIL,
         to: email,
         subject: "You're on the Blinkify waitlist!",
-        react: React.createElement(WaitlistWelcomeEmail, { logoSrc }),
+        react: React.createElement(WaitlistWelcomeEmail, { logoSrc: LOGO_PNG_URL }),
       })
       .catch((err) => console.error("waitlist welcome email error:", err));
   }
