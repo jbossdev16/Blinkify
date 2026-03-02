@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { ThreeDMarquee } from "@/components/ui/3d-marquee";
 import { cn } from "@/lib/utils";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4001";
 
 const baseImages = [
   "/blinkify-1770839372135.png",
@@ -111,7 +110,7 @@ export default function WaitlistPage() {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(`${API_URL}/waitlist`, {
+      const res = await fetch("/api/waitlist", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: trimmed }),
