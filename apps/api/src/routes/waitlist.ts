@@ -11,6 +11,20 @@ const router = Router();
 const FROM_EMAIL =
   process.env.RESEND_FROM_EMAIL ?? "Blinkify <no-reply@blinkify.ai>";
 
+const SITE_URL = process.env.PUBLIC_SITE_URL ?? "https://blinkify.ai";
+
+async function getLogoDataUri(): Promise<string> {
+  try {
+    const res = await fetch(`${SITE_URL}/logo/blinkify-logo-color.svg`);
+    if (!res.ok) return `${SITE_URL}/logo/blinkify-logo-color.svg`;
+    const svg = await res.text();
+    const base64 = Buffer.from(svg).toString("base64");
+    return `data:image/svg+xml;base64,${base64}`;
+  } catch {
+    return `${SITE_URL}/logo/blinkify-logo-color.svg`;
+  }
+}
+
 const waitlistLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
@@ -42,12 +56,13 @@ router.post("/", waitlistLimiter, async (req: Request, res: Response) => {
 
   // Only send welcome email for new signups (data returned means it was inserted)
   if (data && resend) {
+    const logoSrc = await getLogoDataUri();
     resend.emails
       .send({
         from: FROM_EMAIL,
         to: email,
         subject: "You're on the Blinkify waitlist!",
-        react: React.createElement(WaitlistWelcomeEmail),
+        react: React.createElement(WaitlistWelcomeEmail, { logoSrc }),
       })
       .catch((err) => console.error("waitlist welcome email error:", err));
   }

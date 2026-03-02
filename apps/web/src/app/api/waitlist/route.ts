@@ -2,7 +2,21 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 import React from "react";
+import { readFileSync, existsSync } from "fs";
+import { join } from "path";
 import { WaitlistWelcomeEmail } from "@/emails/waitlist-welcome";
+
+function getLogoDataUri(): string | null {
+  try {
+    const path = join(process.cwd(), "public", "logo", "blinkify-logo-color.svg");
+    if (!existsSync(path)) return null;
+    const svg = readFileSync(path, "utf-8");
+    const base64 = Buffer.from(svg).toString("base64");
+    return `data:image/svg+xml;base64,${base64}`;
+  } catch {
+    return null;
+  }
+}
 
 let _supabase: SupabaseClient | null = null;
 function getSupabase() {
@@ -58,12 +72,13 @@ export async function POST(req: NextRequest) {
   }
 
   if (data && resend) {
+    const logoSrc = getLogoDataUri() ?? `${process.env.NEXT_PUBLIC_APP_URL ?? "https://blinkify.ai"}/logo/blinkify-logo-color.svg`;
     resend.emails
       .send({
         from: FROM_EMAIL,
         to: email,
         subject: "You're on the Blinkify waitlist!",
-        react: React.createElement(WaitlistWelcomeEmail),
+        react: React.createElement(WaitlistWelcomeEmail, { logoSrc }),
       })
       .catch((err) => console.error("waitlist welcome email error:", err));
   }

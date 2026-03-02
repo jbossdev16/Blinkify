@@ -11,7 +11,10 @@ import {
   Link,
 } from "@react-email/components";
 
-export function WaitlistWelcomeEmail() {
+const DEFAULT_LOGO_URL = "https://blinkify.ai/logo/blinkify-logo-color.svg";
+
+export function WaitlistWelcomeEmail({ logoSrc }: { logoSrc?: string }) {
+  const src = logoSrc ?? DEFAULT_LOGO_URL;
   return (
     <Html>
       <Head />
@@ -19,7 +22,7 @@ export function WaitlistWelcomeEmail() {
         <Container style={container}>
           <Section style={section}>
             <Img
-              src="https://blinkify.ai/logo/blinkify-logo-color.svg"
+              src={src}
               width="140"
               height="32"
               alt="Blinkify"
