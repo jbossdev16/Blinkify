@@ -24,7 +24,7 @@ Use this checklist to export all Blinkify logo variants for the brand page and e
 ## Formats
 
 | Format | Use | Variants |
-|--------|-----|----------|
+|--------|-----|----------| 
 | **SVG** | Web, scalable, dev/design | 1–4, 9–10 (transparent variants) |
 | **PNG** | Email, social, presentations | All 10 variants |
 
