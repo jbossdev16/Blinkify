@@ -1,19 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 import React from "react";
 import { WaitlistWelcomeEmail } from "@/emails/waitlist-welcome";
 
-const supabaseUrl = process.env.SUPABASE_URL ?? "";
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
-const supabase = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: { persistSession: false, autoRefreshToken: false },
-});
+let _supabase: SupabaseClient | null = null;
+function getSupabase() {
+  if (!_supabase) {
+    const url = process.env.SUPABASE_URL;
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!url || !key) throw new Error("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
+    _supabase = createClient(url, key, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+  }
+  return _supabase;
+}
 
-const resendApiKey = process.env.RESEND_API_KEY;
-const resend = resendApiKey ? new Resend(resendApiKey) : null;
-const FROM_EMAIL =
-  process.env.RESEND_FROM_EMAIL ?? "Blinkify <no-reply@blinkify.ai>";
+let _resend: Resend | null | undefined;
+function getResend() {
+  if (_resend === undefined) {
+    const apiKey = process.env.RESEND_API_KEY;
+    _resend = apiKey ? new Resend(apiKey) : null;
+  }
+  return _resend;
+}
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -26,6 +37,11 @@ export async function POST(req: NextRequest) {
   }
 
   const email = rawEmail.trim().toLowerCase();
+
+  const FROM_EMAIL =
+    process.env.RESEND_FROM_EMAIL ?? "Blinkify <no-reply@blinkify.ai>";
+  const supabase = getSupabase();
+  const resend = getResend();
 
   const { data, error } = await supabase
     .from("waitlist")
