@@ -582,7 +582,7 @@ router.post(
 
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), LOGO_FETCH_TIMEOUT_MS);
-      let imageRes: Response;
+      let imageRes: globalThis.Response;
       try {
         imageRes = await fetch(url, {
           signal: controller.signal,
