@@ -1,0 +1,320 @@
+@import 'tailwindcss';
+
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  --font-sans: var(--font-manrope), system-ui, sans-serif;
+
+  --text-h1: 3rem;
+  --text-h1--line-height: 1.1;
+  --text-h1--font-weight: 800;
+  --text-h2: 2.25rem;
+  --text-h2--line-height: 1.2;
+  --text-h2--font-weight: 700;
+  --text-h3: 1.75rem;
+  --text-h3--line-height: 1.3;
+  --text-h3--font-weight: 600;
+  --text-h4: 1.375rem;
+  --text-h4--line-height: 1.4;
+  --text-h4--font-weight: 600;
+  --text-h5: 1.125rem;
+  --text-h5--line-height: 1.45;
+  --text-h5--font-weight: 600;
+  --text-h6: 0.875rem;
+  --text-h6--line-height: 1.5;
+  --text-h6--font-weight: 600;
+  --text-h6--letter-spacing: 0.02em;
+  --text-body: 1rem;
+  --text-body--line-height: 1.6;
+  --text-body--font-weight: 400;
+  --text-body-sm: 0.875rem;
+  --text-body-sm--line-height: 1.55;
+  --text-body-sm--font-weight: 400;
+
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+}
+
+@theme inline {
+  @keyframes shine {
+    0% {
+      background-position: 0% 0%;
+    }
+    50% {
+      background-position: 100% 100%;
+    }
+    to {
+      background-position: 0% 0%;
+    }
+  }
+}
+
+/*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
+  }
+}
+
+@layer base {
+  :root {
+    /* Brand colors: #007AFF primary, #ffffff bg, #000000 text */
+    --background: 0 0% 100%;
+    --foreground: 0 0% 11%; /* #1d1d1d */
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 11%;
+    --primary: 211 100% 50%; /* #007AFF */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 0 0% 11%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+    --accent: 210 40% 96%;
+    --accent-foreground: 0 0% 11%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 211 100% 50%;
+    --radius: 0.5rem;
+  }
+  /* Figma-style dark mode: #2c2c2e bg, #3a3a3c surfaces, #8e8e93 muted, #38383a borders */
+  .dark {
+    --background: 240 2% 17%; /* #2c2c2e */
+    --foreground: 0 0% 100%;
+    --card: 240 2% 23%; /* #3a3a3c */
+    --card-foreground: 0 0% 100%;
+    --popover: 240 2% 23%;
+    --popover-foreground: 0 0% 100%;
+    --primary: 211 100% 51%; /* #0a84ff Figma blue */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 240 2% 23%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 240 2% 23%;
+    --muted-foreground: 240 2% 56%; /* #8e8e93 */
+    --accent: 240 2% 23%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 62% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 240 3% 21%; /* #38383a */
+    --input: 240 3% 21%;
+    --ring: 211 100% 51%;
+  }
+  .theme {
+    --animate-shine: shine var(--duration) infinite linear;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-manrope), system-ui, sans-serif;
+  }
+  h1 {
+    @apply text-5xl font-extrabold leading-tight tracking-tight;
+  }
+  h2 {
+    @apply text-4xl font-bold leading-tight;
+  }
+  h3 {
+    @apply text-2xl font-semibold leading-snug;
+  }
+  h4 {
+    @apply text-xl font-semibold leading-normal;
+  }
+  h5 {
+    @apply text-lg font-semibold;
+  }
+  h6 {
+    @apply text-sm font-semibold uppercase tracking-wide;
+  }
+  input:focus,
+  input:focus-visible,
+  textarea:focus,
+  textarea:focus-visible,
+  select:focus,
+  select:focus-visible {
+    outline: none !important;
+    box-shadow: none !important;
+    --tw-ring-shadow: none !important;
+  }
+}
+
+@layer utilities {
+  /* Marquee Animation */
+  @keyframes marquee {
+    0% {
+      transform: translateX(0);
+    }
+    100% {
+      transform: translateX(-50%);
+    }
+  }
+
+  .animate-marquee {
+    animation: marquee 25s linear infinite;
+  }
+
+  .animate-marquee:hover {
+    animation-play-state: paused;
+  }
+
+  .animate-marquee-no-pause:hover {
+    animation-play-state: running !important;
+  }
+
+  .ai-creatives-carousel .carousel-contain {
+    contain: layout paint;
+  }
+
+  @keyframes marquee-reverse {
+    0% {
+      transform: translateX(-50%);
+    }
+    100% {
+      transform: translateX(0);
+    }
+  }
+
+  .animate-marquee-reverse {
+    animation: marquee-reverse 25s linear infinite;
+  }
+
+  /* Orbiting circles animation */
+  @keyframes orbit {
+    0% {
+      transform: rotate(0deg) translateY(calc(var(--radius) * 1px)) rotate(0deg);
+    }
+    100% {
+      transform: rotate(360deg) translateY(calc(var(--radius) * 1px)) rotate(-360deg);
+    }
+  }
+
+  .animate-orbit {
+    animation: orbit calc(var(--duration) * 1s) linear infinite;
+  }
+
+  /* Hero cards float – subtle up/down, same speed, different directions */
+  @keyframes float {
+    0%, 100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-8px);
+    }
+  }
+
+  @keyframes float-reverse {
+    0%, 100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(8px);
+    }
+  }
+
+  .animate-float {
+    animation: float 4s ease-in-out infinite;
+  }
+
+  .animate-float-reverse {
+    animation: float-reverse 4s ease-in-out infinite;
+  }
+
+  /* Brand gradient (Apple-style) for text and accents – even stops so all 4 colors show */
+  .text-gradient-brand {
+    background: linear-gradient(
+      90deg,
+      #0079d0 0%,
+      #9e52d8 33%,
+      #da365c 66%,
+      #d04901 100%
+    );
+    background-size: 100% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    display: inline-block;
+  }
+
+  .bg-gradient-brand {
+    background: linear-gradient(
+      135deg,
+      #0079d0 0,
+      #9e52d8 32%,
+      #da365c 84%,
+      #d04901 100%
+    );
+  }
+
+  /* Gradient brand color for Lucide (stroke-based) SVG icons */
+  .icon-gradient-brand {
+    stroke: url(#brandGradient);
+  }
+
+  .dark .icon-gradient-brand {
+    stroke: white;
+  }
+
+  .icon-gradient-brand-landing {
+    stroke: url(#brandGradientLanding);
+  }
+
+  /* Hero h1: no gradient/background, flex layout (browser-preview overrides) */
+  .hero-title {
+    background: unset;
+    background-image: none;
+    background-clip: unset;
+    -webkit-background-clip: unset;
+    display: flex;
+    flex-wrap: wrap;
+  }
+}
