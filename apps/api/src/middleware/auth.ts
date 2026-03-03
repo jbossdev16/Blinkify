@@ -40,13 +40,23 @@ export async function requireAuth(
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser(token);
-
-  if (error || !user) {
-    res.status(401).json({ error: "Invalid or expired token" });
+  let user;
+  try {
+    const { data, error } = await supabase.auth.getUser(token);
+    if (error || !data.user) {
+      res.status(401).json({ error: "Invalid or expired token" });
+      return;
+    }
+    user = data.user;
+  } catch (err: unknown) {
+    const code = (err as { cause?: { code?: string } })?.cause?.code;
+    if (code === "UND_ERR_CONNECT_TIMEOUT" || code === "ETIMEDOUT" || code === "ECONNREFUSED") {
+      console.error("Auth: cannot reach Supabase –", code);
+      res.status(503).json({ error: "Authentication service unreachable. Check your network or Supabase status." });
+      return;
+    }
+    console.error("Auth: unexpected error verifying token", err);
+    res.status(502).json({ error: "Authentication service error" });
     return;
   }
 

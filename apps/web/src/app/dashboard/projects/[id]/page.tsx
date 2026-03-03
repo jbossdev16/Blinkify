@@ -3,12 +3,10 @@ import { notFound, redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
-export default async function ProjectPage({
-  params,
-}: {
+export default async function ProjectPage(props: {
   params: Promise<{ id: string }>;
 }) {
-  const { id } = await params;
+  const { id } = await props.params;
 
   const { workspaces } = await getWorkspaces();
   const workspace = workspaces?.[0];

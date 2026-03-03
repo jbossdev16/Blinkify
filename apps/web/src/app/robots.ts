@@ -10,6 +10,7 @@ export default function robots(): MetadataRoute.Robots {
       rules: [{ userAgent: "*", disallow: ["/"] }],
     };
   }
+  const origin = new URL(baseUrl).host;
   return {
     rules: [
       {
@@ -19,5 +20,6 @@ export default function robots(): MetadataRoute.Robots {
       },
     ],
     sitemap: `${baseUrl}/sitemap.xml`,
+    host: origin,
   };
 }

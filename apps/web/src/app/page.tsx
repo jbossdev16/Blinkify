@@ -5,14 +5,14 @@ import Image from "next/image";
 import dynamic from "next/dynamic";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card-legacy";
-import { Store, ShoppingCart, Users, ArrowRight, Check, X, Palette, Target, Zap, Lock, ChevronDown } from "lucide-react";
+import { Store, ShoppingCart, Users, ArrowRight, Check, X, Palette, Target, Zap, Lock, ChevronDown, Play, Pause } from "lucide-react";
 import { FlickeringGrid } from "@/components/ui/flickering-grid";
 import { BlurFade } from "@/components/ui/blur-fade";
 import { BorderBeam } from "@/components/ui/border-beam";
 import { BlinkifyLogo } from "@/components/blinkify-logo";
 import { LandingHeader } from "@/components/landing-header";
 import { LandingFooter } from "@/components/landing-footer";
-import React, { useState, useRef, useEffect, forwardRef } from "react";
+import React, { useState, useRef, useEffect, forwardRef, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { AnimatePresence, motion } from "motion/react";
 
@@ -30,6 +30,58 @@ const AnimatedBeam = dynamic(
 );
 
 /* ─────────────────────────────────────────────
+   DEMO VIDEO PLAYER
+───────────────────────────────────────────── */
+const DEMO_VIDEO_SRC = "/blinkify-demo.webm";
+
+function DemoVideoPlayer({ className }: { className?: string }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [playing, setPlaying] = useState(false);
+
+  const toggle = useCallback(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    if (v.paused) {
+      v.play().catch(() => {});
+      setPlaying(true);
+    } else {
+      v.pause();
+      setPlaying(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    const onPause = () => setPlaying(false);
+    const onPlay = () => setPlaying(true);
+    v.addEventListener("pause", onPause);
+    v.addEventListener("play", onPlay);
+    return () => { v.removeEventListener("pause", onPause); v.removeEventListener("play", onPlay); };
+  }, []);
+
+  return (
+    <div className={cn("relative w-full h-full cursor-pointer group", className)} onClick={toggle}>
+      <video
+        ref={videoRef}
+        src={DEMO_VIDEO_SRC}
+        loop
+        playsInline
+        preload="metadata"
+        className="absolute inset-0 w-full h-full object-cover"
+      />
+      {!playing && (
+        <div className="absolute inset-0 flex items-center justify-center z-10 bg-black/20 transition-opacity">
+          <div className="w-16 h-16 md:w-20 md:h-20 rounded-full bg-white/90 backdrop-blur-sm flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform">
+            <Play className="h-7 w-7 md:h-9 md:w-9 text-black ml-1" fill="currentColor" />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────
    COMPANY LOGOS
 ───────────────────────────────────────────── */
 const companyLogos = [
@@ -44,8 +96,8 @@ const companyLogos = [
 
 function CompaniesSection() {
   return (
-    <section className="py-[40px] bg-[#ffffff]">
-      <div className="max-w-[1200px] mx-auto px-6">
+    <section className="py-8 md:py-[40px] bg-[#ffffff]">
+      <div className="max-w-[1200px] mx-auto px-4 sm:px-6">
         <p className="text-center text-body-sm text-muted-foreground mb-8 uppercase tracking-wider font-normal">
           Companies Leveraging Gen AI
         </p>
@@ -88,22 +140,22 @@ function CompaniesSection() {
 ───────────────────────────────────────────── */
 function HeroSection() {
   return (
-    <section className="relative flex-1 flex flex-col justify-center min-h-[calc(100svh-68px)] pt-[120px] pb-[100px] bg-[#ffffff] overflow-x-clip overflow-y-visible">
-      <div className="relative z-10 max-w-[1200px] mx-auto px-6 w-full flex-1 flex flex-col justify-center">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-start pt-12">
-          {/* Left: CTA – top aligned with Sunglasses card (top-[90px]) */}
-          <div className="flex flex-col items-start pt-[90px]">
-            <h1 className="text-5xl md:text-6xl font-extrabold leading-tight tracking-tight text-foreground mb-2 whitespace-nowrap">
+    <section className="relative flex-1 flex flex-col justify-center min-h-[calc(100svh-68px)] pt-[88px] pb-10 md:pt-[120px] md:pb-[100px] bg-[#ffffff] overflow-x-clip overflow-y-visible">
+      <div className="relative z-10 max-w-[1200px] mx-auto px-4 sm:px-6 w-full flex-1 flex flex-col justify-center">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12 items-start pt-0 md:pt-12">
+          {/* Left: CTA – clear fixed header on mobile (header ~84px) */}
+          <div className="flex flex-col items-start pt-2 md:pt-[90px] order-1">
+            <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold leading-tight tracking-tight text-foreground mb-2 whitespace-nowrap">
               Better Ad Creatives.
             </h1>
-            <h1 className="text-5xl md:text-6xl font-extrabold leading-tight tracking-tight text-foreground mb-8">
+            <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold leading-tight tracking-tight text-foreground mb-6 md:mb-8">
               <span className="text-gradient-brand">10x Faster.</span>
             </h1>
-            <p className="text-lg text-muted-foreground max-w-md mb-8 leading-relaxed">
+            <p className="text-base sm:text-lg text-muted-foreground max-w-md mb-6 md:mb-8 leading-relaxed">
               AI-powered creative enhancement for product ads. Upload once, get scroll-stopping visuals in seconds.
             </p>
-<Button asChild size="lg" className="text-base font-semibold px-8">
-            <Link href="/waitlist">
+            <Button asChild size="lg" className="text-base font-semibold px-8">
+              <Link href="/waitlist">
                 Join Waitlist
                 <ArrowRight className="ml-2 h-5 w-5" />
               </Link>
@@ -113,8 +165,13 @@ function HeroSection() {
             </p>
           </div>
 
-          {/* Right: Overlapping visual cards */}
-          <div className="relative h-[700px] md:h-[720px] ml-[140px]">
+          {/* Mobile: demo video */}
+          <div className="relative w-full aspect-video max-w-[min(100vw,400px)] mx-auto rounded-2xl overflow-hidden border border-black/5 shadow-md md:hidden order-2 bg-black">
+            <DemoVideoPlayer />
+          </div>
+
+          {/* Right: Overlapping visual cards – desktop only */}
+          <div className="relative h-[700px] md:h-[720px] ml-0 md:ml-[140px] hidden md:block order-3">
             {/* Back card: $2,400 Saved Monthly – tallest, white, BorderBeam, bottom-aligned with front card, extends to header nav */}
             <div className="absolute bottom-[34px] right-[-200px] w-[320px] h-[630px] rounded-2xl bg-white border border-black/5 p-6 md:p-7 flex flex-col justify-between transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xs z-0 relative overflow-visible animate-float">
               <div className="absolute inset-0 rounded-[inherit] z-10 pointer-events-none">
@@ -322,8 +379,8 @@ function VisualDemoSection() {
   }, [isDragging]);
 
   return (
-    <section className="py-[192px] bg-[#ffffff] overflow-x-hidden">
-      <div className="max-w-[1200px] mx-auto px-6">
+    <section className="py-16 md:py-[192px] bg-[#ffffff] overflow-x-hidden">
+      <div className="max-w-[1200px] mx-auto px-4 sm:px-6">
         <div className="text-center mb-16">
           <h2 className="text-h2 text-foreground mb-4 max-w-[600px] mx-auto">
             See the Transformation
@@ -334,7 +391,7 @@ function VisualDemoSection() {
         </div>
       </div>
 
-      <div className="max-w-[1200px] mx-auto px-6">
+      <div className="max-w-[1200px] mx-auto px-4 sm:px-6">
         <div className="relative overflow-hidden">
           <div
             ref={containerRef}
@@ -424,36 +481,7 @@ function MacbookScrollSection() {
         }
         showGradient={false}
       >
-        {/* Before/After comparison */}
-        <div className="relative w-full h-full flex items-center justify-center bg-white">
-          {/* Before image */}
-          <div className="absolute left-0 top-0 w-1/2 h-full">
-            <BlurFade inView inViewMargin="-50px" className="w-full h-full">
-              <img
-                src="/Starbucks%20BEFORE.jpeg"
-                alt="Before - Starbucks"
-                className="w-full h-full object-cover"
-              />
-            </BlurFade>
-            <div className="absolute bottom-4 left-4 bg-black/60 text-white text-xs font-normal px-2 py-1 rounded">
-              Before
-            </div>
-          </div>
-          
-          {/* After image */}
-          <div className="absolute right-0 top-0 w-1/2 h-full">
-            <BlurFade inView inViewMargin="-50px" className="w-full h-full">
-              <img
-                src="/Starbucks%20AFTER.png"
-                alt="After - AI enhanced"
-                className="w-full h-full object-cover"
-              />
-            </BlurFade>
-            <div className="absolute bottom-4 right-4 bg-primary/80 text-white text-xs font-normal px-2 py-1 rounded">
-              After
-            </div>
-          </div>
-        </div>
+        <DemoVideoPlayer />
       </MacbookScroll>
     </section>
   );
@@ -462,31 +490,97 @@ function MacbookScrollSection() {
 /* ─────────────────────────────────────────────
    HOW IT WORKS
 ───────────────────────────────────────────── */
-const howItWorksSteps = [
+const howItWorksSteps: {
+  title: string;
+  description: string;
+  video: string;
+  videoParts?: [string, string];
+}[] = [
   {
     title: "1. Signup",
     description: "Create your account and get started in seconds.",
-    image: "/howitworks1.png",
-    imageAlt: "Signup",
+    video: "/howitworks1.webm",
   },
   {
     title: "2. Apply your brand options",
     description: "Add your brand colors, fonts, and guidelines so every creative stays on-brand.",
-    image: "/howitworks2.png",
-    imageAlt: "Apply your brand options",
+    video: "/howitworks2.webm",
   },
   {
     title: "3. Get high converting Ad Creatives in a Blink",
     description: "Generate multiple ad-ready variations for Meta, Google, and your store.",
-    image: "/howitworks3.png",
-    imageAlt: "Get high converting Ad Creatives in a Blink",
+    video: "/howitworks3a.webm",
+    videoParts: ["/howitworks3a.webm", "/howitworks3b.webm"],
   },
 ];
 
+/** Single-source looping video (steps 1 & 2). */
+function StepVideo({ src }: { src: string }) {
+  return (
+    <video
+      src={src}
+      autoPlay
+      loop
+      muted
+      playsInline
+      preload="metadata"
+      className="h-full w-full object-cover"
+    />
+  );
+}
+
+/** Two-part video: plays part A once, then loops part B. */
+function StepVideoTwoPart({ parts }: { parts: [string, string] }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const videoARef = useRef<HTMLVideoElement>(null);
+  const videoBRef = useRef<HTMLVideoElement>(null);
+  const [showB, setShowB] = useState(false);
+  const hasPlayedA = useRef(false);
+
+  useEffect(() => {
+    const vA = videoARef.current;
+    const vB = videoBRef.current;
+    if (!vA || !vB) return;
+
+    const onEndA = () => {
+      hasPlayedA.current = true;
+      setShowB(true);
+      vB.currentTime = 0;
+      vB.play().catch(() => {});
+    };
+
+    vA.addEventListener("ended", onEndA);
+    return () => vA.removeEventListener("ended", onEndA);
+  }, []);
+
+  return (
+    <div ref={containerRef} className="relative h-full w-full">
+      <video
+        ref={videoARef}
+        src={parts[0]}
+        autoPlay
+        muted
+        playsInline
+        preload="metadata"
+        className={cn("absolute inset-0 h-full w-full object-cover transition-opacity duration-300", showB ? "opacity-0 pointer-events-none" : "opacity-100")}
+      />
+      <video
+        ref={videoBRef}
+        src={parts[1]}
+        loop
+        muted
+        playsInline
+        preload="metadata"
+        className={cn("absolute inset-0 h-full w-full object-cover transition-opacity duration-300", showB ? "opacity-100" : "opacity-0 pointer-events-none")}
+      />
+    </div>
+  );
+}
+
 function HowItWorksSection() {
   return (
-    <section id="how-it-works" className="py-[192px] bg-[#ffffff]">
-      <div className="max-w-[1200px] mx-auto px-6">
+    <section id="how-it-works" className="py-16 md:py-[192px] bg-[#ffffff]">
+      <div className="max-w-[1200px] mx-auto px-4 sm:px-6">
         <div className="space-y-8 md:space-y-10">
           {howItWorksSteps.map((step, i) => {
             const imageLeft = i % 2 === 1;
@@ -504,11 +598,11 @@ function HowItWorksSection() {
                 </p>
               </div>
               <BlurFade inView inViewMargin="-40px" delay={i * 0.08} className={`relative overflow-hidden rounded-xl bg-slate-100 order-1 aspect-4/3 w-full border border-black/5 ${imageLeft ? "md:order-1" : "md:order-2"}`}>
-                <img
-                  src={step.image}
-                  alt={step.imageAlt}
-                  className="h-full w-full object-cover"
-                />
+                {step.videoParts ? (
+                  <StepVideoTwoPart parts={step.videoParts} />
+                ) : (
+                  <StepVideo src={step.video} />
+                )}
               </BlurFade>
             </div>
             );
@@ -545,8 +639,8 @@ const audiences = [
 
 function WhoItsForSection() {
   return (
-    <section id="who-its-for" className="py-[192px] bg-[#ffffff]">
-      <div className="max-w-[1200px] mx-auto px-6">
+    <section id="who-its-for" className="py-16 md:py-[192px] bg-[#ffffff]">
+      <div className="max-w-[1200px] mx-auto px-4 sm:px-6">
         <div className="text-center mb-12">
           <h2 className="text-h2 font-medium tracking-tight text-foreground mb-4 max-w-[600px] mx-auto">
             Who It&apos;s For
@@ -638,7 +732,7 @@ const platformLogos = [
 
 function ValueSection() {
   return (
-    <section id="value" className="py-[192px] bg-[#ffffff]">
+    <section id="value" className="py-16 md:py-[192px] bg-[#ffffff]">
       <svg width="0" height="0" className="absolute" aria-hidden>
         <defs>
           <linearGradient id="brandGradientLanding" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -649,7 +743,7 @@ function ValueSection() {
           </linearGradient>
         </defs>
       </svg>
-      <div className="max-w-[1200px] mx-auto px-6">
+      <div className="max-w-[1200px] mx-auto px-4 sm:px-6">
         <div className="text-center mb-12 md:mb-16">
           <h2 className="text-h2 font-medium tracking-tight text-foreground mb-3 max-w-[560px] mx-auto">
             Built for Your Brand
@@ -841,8 +935,8 @@ function AICreativesCarouselSection() {
   }, []);
 
   return (
-    <section ref={sectionRef} className="ai-creatives-carousel py-[192px] bg-[#ffffff] overflow-x-hidden">
-      <div className="max-w-[1200px] mx-auto px-6 mb-12">
+    <section ref={sectionRef} className="ai-creatives-carousel py-16 md:py-[192px] bg-[#ffffff] overflow-x-hidden">
+      <div className="max-w-[1200px] mx-auto px-4 sm:px-6 mb-12">
         <div className="text-center">
           <BlurFade inView inViewMargin="-40px">
             <h2 className="text-h2 font-medium tracking-tight text-foreground mb-3 max-w-[560px] mx-auto">
@@ -855,7 +949,7 @@ function AICreativesCarouselSection() {
         </div>
       </div>
 
-      <div className="max-w-[1200px] mx-auto px-6">
+      <div className="max-w-[1200px] mx-auto px-4 sm:px-6">
         <div className="relative overflow-hidden carousel-contain">
           {/* Row 1: 9:16 images + videos (evenly spaced), moves right to left; object-contain so full content visible; no pause on hover */}
           <div className="relative overflow-hidden py-2">
@@ -1145,37 +1239,35 @@ const BENTO_10X_VIDEO = "/blinkify-video-1771438910604.mp4";
 
 function StatsBentoSection() {
   return (
-    <section className="py-[192px] bg-[#ffffff]">
-      <div className="max-w-[1200px] mx-auto px-6">
-        <div className="grid grid-cols-3 grid-rows-3 gap-6 md:gap-8 h-[1000px]">
-          {/* Left column rows 1–2: carousel image */}
-          <BlurFade inView inViewMargin="-40px" delay={0.16} className="col-start-1 row-start-1 col-span-1 row-span-2">
-            <div className="h-full rounded-2xl overflow-hidden border border-black/5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xs flex items-center justify-center bg-slate-100">
-              <img
-                src={BENTO_CAROUSEL_IMAGE}
-                alt="AI creative"
-                className="h-full w-auto max-w-full object-contain"
-                loading="lazy"
+    <section className="py-16 md:py-[192px] bg-[#ffffff]">
+      <div className="max-w-[1200px] mx-auto px-4 sm:px-6">
+        <div className="flex flex-col gap-6 md:grid md:grid-cols-3 md:grid-rows-3 md:gap-8 md:h-[1000px]">
+          {/* 10x Faster – first on mobile for clear message */}
+          <BlurFade inView inViewMargin="-40px" delay={0} className="order-1 md:order-none md:col-start-2 md:row-start-2 md:col-span-2 md:row-span-2 min-h-[240px] md:min-h-0">
+            <div className="h-full min-h-[240px] md:min-h-0 rounded-2xl overflow-hidden relative border border-black/5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xs flex flex-col justify-center">
+              <video
+                autoPlay
+                loop
+                muted
+                playsInline
+                className="absolute inset-0 w-full h-full object-cover"
+                src={BENTO_10X_VIDEO}
+                aria-hidden
               />
+              <div className="absolute inset-0 bg-black/30" aria-hidden />
+              <div className="relative z-10 p-6 md:p-7 flex flex-col justify-center">
+                <p className="text-5xl sm:text-6xl md:text-7xl lg:text-8xl font-medium text-white mb-3 drop-shadow-md">10x</p>
+                <p className="text-lg sm:text-xl md:text-2xl font-medium text-white drop-shadow-md">Faster Ad Creation</p>
+              </div>
             </div>
           </BlurFade>
 
-          {/* Left column row 3: notifications – directly below image */}
-          <BlurFade inView inViewMargin="-40px" delay={0.24} className="col-start-1 row-start-3 col-span-1 row-span-1 h-full">
-            <div className="relative flex h-full w-full flex-col overflow-hidden">
-              <LoopingBentoList />
-              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/4 bg-gradient-to-t from-[#ffffff] to-transparent" />
-            </div>
-          </BlurFade>
-
-          {/* Top row right: $2,400 – white bg, OrbitingCircles left (fit to card), stat above beam right, no inner bg */}
-          <BlurFade inView inViewMargin="-40px" delay={0.08} className="col-start-2 row-start-1 col-span-2 row-span-1">
-            <div className="h-full rounded-2xl overflow-hidden relative border border-black/5 bg-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xs flex flex-row items-stretch">
-              {/* Left: OrbitingCircles – scaled to fit card left side */}
-              <div className="relative w-[42%] min-w-0 flex shrink-0 items-center justify-center overflow-hidden rounded-l-2xl">
+          {/* $2,400 card – second on mobile */}
+          <BlurFade inView inViewMargin="-40px" delay={0.08} className="order-2 md:order-none md:col-start-2 md:row-start-1 md:col-span-2 md:row-span-1 min-h-[200px] md:min-h-0">
+            <div className="h-full min-h-[200px] md:min-h-0 rounded-2xl overflow-hidden relative border border-black/5 bg-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xs flex flex-col md:flex-row items-stretch">
+              <div className="relative w-full md:w-[42%] min-h-0 flex shrink-0 items-center justify-center overflow-hidden rounded-t-2xl md:rounded-l-2xl md:rounded-tr-none aspect-[2/1] md:aspect-auto">
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <div className="relative size-[266px] sm:size-[304px]">
-                    {/* Inner ring – closer to center; icons same size as outer (h-9) */}
+                  <div className="relative size-[180px] sm:size-[220px] md:size-[266px] lg:size-[304px]">
                     <OrbitingCircles radius={72} duration={20} delay={2.22} className="border-0 bg-transparent">
                       <img src="/Amazon/Amazon_Symbol_30.svg" alt="Amazon" className="h-9 w-9 object-contain" />
                     </OrbitingCircles>
@@ -1185,7 +1277,6 @@ function StatsBentoSection() {
                     <OrbitingCircles radius={72} duration={20} delay={15.55} className="border-0 bg-transparent">
                       <img src="/X/X_idJxGuURW1_0.svg" alt="X" className="h-9 w-9 object-contain" />
                     </OrbitingCircles>
-                    {/* Outer ring */}
                     <OrbitingCircles radius={133} duration={20} delay={4.44} className="border-0 bg-transparent">
                       <img src="/Instagram/Instagram_Symbol_0.svg" alt="Instagram" className="h-9 w-9 object-contain" />
                     </OrbitingCircles>
@@ -1198,14 +1289,13 @@ function StatsBentoSection() {
                   </div>
                 </div>
               </div>
-              {/* Right: $2,400 Saved Monthly in 1 line (centered), beam below stretching full width */}
               <div className="relative z-10 flex flex-1 flex-col items-center justify-center gap-4 p-6 md:p-7">
                 <div className="flex w-full flex-col items-center justify-center gap-4">
-                  <p className="text-center text-4xl md:text-5xl font-medium leading-tight">
+                  <p className="text-center text-3xl sm:text-4xl md:text-5xl font-medium leading-tight">
                     <span className="text-gradient-brand">$2,400</span>
-                    <span className="ml-2 text-lg font-medium text-slate-600">Saved Monthly</span>
+                    <span className="ml-2 text-base md:text-lg font-medium text-slate-600">Saved Monthly</span>
                   </p>
-                  <div className="w-full min-w-0">
+                  <div className="w-full min-w-0 hidden sm:block">
                     <AnimatedBeamBiDirectional />
                   </div>
                 </div>
@@ -1213,23 +1303,23 @@ function StatsBentoSection() {
             </div>
           </BlurFade>
 
-          {/* Right 2x2: 10x Faster – fills remaining space (col 2–3, row 2–3) */}
-          <BlurFade inView inViewMargin="-40px" delay={0} className="col-start-2 row-start-2 col-span-2 row-span-2">
-            <div className="h-full rounded-2xl overflow-hidden relative border border-black/5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xs flex flex-col justify-center">
-              <video
-                autoPlay
-                loop
-                muted
-                playsInline
-                className="absolute inset-0 w-full h-full object-cover"
-                src={BENTO_10X_VIDEO}
-                aria-hidden
+          {/* Carousel image */}
+          <BlurFade inView inViewMargin="-40px" delay={0.16} className="order-3 md:order-none md:col-start-1 md:row-start-1 md:col-span-1 md:row-span-2 min-h-[280px] md:min-h-0">
+            <div className="h-full min-h-[280px] md:min-h-0 rounded-2xl overflow-hidden border border-black/5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xs flex items-center justify-center bg-slate-100">
+              <img
+                src={BENTO_CAROUSEL_IMAGE}
+                alt="AI creative"
+                className="h-full w-auto max-w-full object-contain"
+                loading="lazy"
               />
-              <div className="absolute inset-0 bg-black/30" aria-hidden />
-              <div className="relative z-10 p-6 md:p-7 flex flex-col justify-center">
-                <p className="text-6xl md:text-7xl lg:text-8xl font-medium text-white mb-3 drop-shadow-md">10x</p>
-                <p className="text-xl md:text-2xl font-medium text-white drop-shadow-md">Faster Ad Creation</p>
-              </div>
+            </div>
+          </BlurFade>
+
+          {/* Notifications list – shorter on mobile */}
+          <BlurFade inView inViewMargin="-40px" delay={0.24} className="order-4 md:order-none md:col-start-1 md:row-start-3 md:col-span-1 md:row-span-1 min-h-[160px] max-h-[220px] md:min-h-0 md:max-h-none">
+            <div className="relative flex h-full w-full min-h-[160px] max-h-[220px] md:min-h-0 md:max-h-none flex-col overflow-hidden rounded-2xl border border-black/5">
+              <LoopingBentoList />
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/4 bg-gradient-to-t from-[#ffffff] to-transparent" />
             </div>
           </BlurFade>
         </div>
@@ -1329,7 +1419,7 @@ const testimonials: {
 function TestimonialBentoSection() {
   return (
     <section className="py-16 md:py-24 bg-[#ffffff]">
-      <div className="max-w-[1200px] mx-auto px-6">
+      <div className="max-w-[1200px] mx-auto px-4 sm:px-6">
         <div className="text-center mb-8">
           <h2 className="text-h2 font-medium tracking-tight text-foreground mb-2">
             Loved by Creators and Teams
@@ -1479,8 +1569,8 @@ const plans: {
 
 function PricingSection() {
   return (
-    <section id="pricing" className="py-[192px] bg-[#ffffff]">
-      <div className="max-w-[1200px] mx-auto px-6">
+    <section id="pricing" className="py-16 md:py-[192px] bg-[#ffffff]">
+      <div className="max-w-[1200px] mx-auto px-4 sm:px-6">
         <div className="text-center mb-16 md:mb-20">
           <h2 className="text-h2 font-medium tracking-tight text-foreground mb-4 max-w-[600px] mx-auto">
             Predictable Pricing
@@ -1658,7 +1748,7 @@ function FAQSection() {
 
   return (
     <section className="py-[80px] md:py-[100px] bg-[#ffffff]">
-      <div className="max-w-[1200px] mx-auto px-6">
+      <div className="max-w-[1200px] mx-auto px-4 sm:px-6">
         <h2 className="text-h2 font-medium tracking-tight text-foreground mb-8 text-center">
           Frequently Asked Questions
         </h2>
@@ -1718,8 +1808,8 @@ function FAQSection() {
 ───────────────────────────────────────────── */
 function FinalCTASection() {
   return (
-    <section className="py-[120px] bg-[#ffffff]">
-      <div className="max-w-[1200px] mx-auto px-6 text-center">
+    <section className="py-16 md:py-[120px] bg-[#ffffff]">
+      <div className="max-w-[1200px] mx-auto px-4 sm:px-6 text-center">
         <div>
           <h2 className="text-h2 text-foreground mb-4 max-w-[700px] mx-auto">
             Create Ad Creatives <span className="text-gradient-brand">10x Faster</span>
@@ -1750,7 +1840,9 @@ export default function Home() {
         <div className="min-h-[calc(100svh-68px)] flex flex-col">
           <HeroSection />
         </div>
-        <MacbookScrollSection />
+        <div className="hidden md:block">
+          <MacbookScrollSection />
+        </div>
         <StatsBentoSection />
         <CompaniesSection />
         <VisualDemoSection />
