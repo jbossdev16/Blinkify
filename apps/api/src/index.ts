@@ -16,6 +16,7 @@ import cleanupFailedGenerationsRoutes from "./routes/cleanup-failed-generations"
 import waitlistRoutes from "./routes/waitlist";
 import { runCleanupFailedGenerations } from "./lib/cleanup-failed-generations";
 import { runCleanupUnsavedGenerations } from "./lib/cleanup-unsaved-generations";
+import { ensureEmailAssetsBucket } from "./lib/storage-constants";
 
 const app = express();
 
@@ -80,6 +81,7 @@ app.use(
 
 app.listen(PORT, () => {
   console.log(`API running on http://localhost:${PORT}`);
+  ensureEmailAssetsBucket().catch((err) => console.error("ensureEmailAssetsBucket error:", err));
   if (CLEANUP_INTERVAL_MS > 0) {
     setInterval(() => {
       runCleanupFailedGenerations()

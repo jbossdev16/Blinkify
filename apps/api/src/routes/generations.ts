@@ -337,7 +337,7 @@ router.post(
       const batchId = crypto.randomUUID();
 
       // --- Create N pending generation rows (one per image) ---
-      const primaryModel = isVertexImageEnabled() ? VERTEX_IMAGE_MODEL : IMAGE_MODEL;
+      const primaryModel = IMAGE_MODEL;
       const generationRows: { id: string }[] = [];
       for (let i = 0; i < numberOfImages; i++) {
         const rowPrompt = carousel && slidePrompts ? slidePrompts[i]! : prompt;
@@ -375,7 +375,7 @@ router.post(
       );
       const firstSeedUsed = seeds[0];
 
-      /** Run one image generation: Vertex 2.5 Flash (default, no priority) → Vertex 3 Pro Image (fallback) → Vertex 2.5 Flash (Priority PayGo). If Vertex disabled: API Nano Banana → API Flash. */
+      /** Run one image generation: API NB2 → API NB Pro → Vertex 2.5 Flash (last resort). */
       async function runOneImageGeneration(
         contents: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }>,
         systemInstruction: string,
@@ -385,30 +385,13 @@ router.post(
         let partText: string | null = null;
         let safetyBlocked = false;
 
-        const tryVertex = async (
-          vertexModel: string,
-          usePriorityPayGo: boolean
-        ): Promise<boolean> => {
-          try {
-            const vertexResult = await generateProImage({
-              contents,
-              systemInstruction,
-              seed: seedUsed,
-              aspectRatio,
-              imageSize,
-              temperature,
-              vertexModel,
-              usePriorityPayGo,
-            });
-            if (vertexResult.safetyBlocked) safetyBlocked = true;
-            else {
-              imageBuffer = vertexResult.imageBuffer;
-              partText = vertexResult.partText;
-            }
-            return true;
-          } catch {
-            return false;
+        const parseResult = (result: { candidates?: Array<{ content?: { parts?: Array<{ text?: string; inlineData?: { data?: string } }> }; finishReason?: string }> }) => {
+          const parts = result.candidates?.[0]?.content?.parts ?? [];
+          for (const part of parts) {
+            if (part.text) partText = part.text;
+            else if (part.inlineData?.data) imageBuffer = Buffer.from(part.inlineData.data, "base64");
           }
+          if (result.candidates?.[0]?.finishReason === "SAFETY") safetyBlocked = true;
         };
 
         const tryApiModel = async (model: string) => {
@@ -424,49 +407,33 @@ router.post(
               httpOptions: { timeout: GENERATION_TIMEOUT_MS },
             },
           });
-          const parts = result.candidates?.[0]?.content?.parts ?? [];
-          for (const part of parts) {
-            if (part.text) partText = part.text;
-            else if (part.inlineData?.data) imageBuffer = Buffer.from(part.inlineData.data, "base64");
-          }
-          if (result.candidates?.[0]?.finishReason === "SAFETY") safetyBlocked = true;
+          parseResult(result);
         };
 
-        try {
-          if (isVertexImageEnabled()) {
-            const ok =
-              (await tryVertex(VERTEX_IMAGE_MODEL, false)) ||
-              (await tryVertex(IMAGE_MODEL, false)) ||
-              (await tryVertex(VERTEX_IMAGE_MODEL, true));
-            if (!ok && imageBuffer === null) {
-              throw new Error("All Vertex image attempts failed.");
+        const tryVertex = async (usePriorityPayGo: boolean): Promise<boolean> => {
+          try {
+            const vertexResult = await generateProImage({
+              contents,
+              systemInstruction,
+              seed: seedUsed,
+              aspectRatio,
+              imageSize,
+              temperature,
+              vertexModel: VERTEX_IMAGE_MODEL,
+              usePriorityPayGo,
+            });
+            if (vertexResult.safetyBlocked) safetyBlocked = true;
+            else {
+              imageBuffer = vertexResult.imageBuffer;
+              partText = vertexResult.partText;
             }
-          } else {
-            try {
-              await tryApiModel(IMAGE_MODEL);
-            } catch (apiErr: unknown) {
-              const message = extractGeminiErrorMessage(apiErr, "Gemini API error");
-              if (!isRetryableImageError(apiErr, message)) {
-                const status = (apiErr as { status?: number })?.status;
-                const isAborted =
-                  (apiErr instanceof Error && apiErr.name === "AbortError") ||
-                  /aborted|AbortError/i.test(message);
-                const isOverloaded =
-                  status === 503 ||
-                  status === 429 ||
-                  /high demand|try again later|unavailable|503|429|resource exhausted/i.test(message);
-                if (isAborted) throw { status: 499, message: "Request was cancelled or timed out. Please try again." };
-                if (isOverloaded) throw { status: 503, message: "AI is at capacity. Please try again in a few minutes." };
-                const hint = /api key|quota|permission|unauthorized|403|401/i.test(message)
-                  ? " Check GEMINI_API_KEY and Google AI project settings."
-                  : "";
-                throw { status: 502, message: (message || "Image generation failed") + hint };
-              }
-              await tryApiModel(IMAGE_MODEL_FALLBACK);
-            }
+            return true;
+          } catch {
+            return false;
           }
-        } catch (err: unknown) {
-          const message = extractGeminiErrorMessage(err, "Gemini API error");
+        };
+
+        const throwForError = (err: unknown, message: string): never => {
           const status = (err as { status?: number })?.status;
           const isAborted =
             (err instanceof Error && err.name === "AbortError") ||
@@ -481,7 +448,45 @@ router.post(
             ? " Check GEMINI_API_KEY and Google AI project settings."
             : "";
           throw { status: 502, message: (message || "Image generation failed") + hint };
+        };
+
+        const MAX_RETRIES = 3;
+
+        const tryApiWithRetries = async (model: string): Promise<boolean> => {
+          let lastErr: unknown;
+          for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+            try {
+              imageBuffer = null; partText = null; safetyBlocked = false;
+              await tryApiModel(model);
+              return true;
+            } catch (err: unknown) {
+              lastErr = err;
+              const msg = extractGeminiErrorMessage(err, "Gemini API error");
+              if (!isRetryableImageError(err, msg)) throwForError(err, msg);
+            }
+          }
+          // All retries exhausted — return false so caller moves to next model
+          void lastErr;
+          return false;
+        };
+
+        // 1) Primary: Nano Banana 2 — up to 3 attempts
+        if (!(await tryApiWithRetries(IMAGE_MODEL))) {
+          // 2) Fallback: Nano Banana Pro — up to 3 attempts
+          if (!(await tryApiWithRetries(IMAGE_MODEL_FALLBACK))) {
+            // 3) Last resort: Vertex AI 2.5 Flash (if configured)
+            imageBuffer = null; partText = null; safetyBlocked = false;
+            if (isVertexImageEnabled()) {
+              const ok = (await tryVertex(false)) || (await tryVertex(true));
+              if (!ok && imageBuffer === null) {
+                throw { status: 503, message: "All image generation models failed. Please try again." };
+              }
+            } else {
+              throw { status: 503, message: "All image generation models failed. Please try again." };
+            }
+          }
         }
+
         if (safetyBlocked) {
           return { imageBuffer: Buffer.alloc(0), partText, safetyBlocked: true };
         }
@@ -650,8 +655,8 @@ function parseEmailNumberOfImages(v: unknown): 1 | 2 | 3 {
   return (EMAIL_NUMBER_OF_IMAGES as readonly number[]).includes(n) ? (n as 1 | 2 | 3) : 1;
 }
 
-/** Signed URL expiry for brand logo in email HTML (7 days). */
-const EMAIL_LOGO_SIGNED_EXPIRY_SECONDS = 604800;
+/** Signed URL expiry for brand logo in email HTML (1 year). */
+const EMAIL_LOGO_SIGNED_EXPIRY_SECONDS = 365 * 24 * 60 * 60;
 
 router.post(
   "/:workspaceId/projects/:projectId/generate-email",
@@ -743,51 +748,55 @@ router.post(
       const EMAIL_REALISM_SUFFIX = " Ultra realistic, photorealistic, real-life photography, 8K quality, sharp detail. No fantasy, cartoon, or artificial look — must look like a real photograph.";
       const NO_CTA = " Do not include any buttons, CTAs, or call-to-action elements in the image; the email HTML will add those separately.";
       const templateImage = emailTemplate ? loadTemplateImage(emailTemplate) : null;
-      const prompts: string[] = [];
-      let heroPrompt: string;
-      if (templateImage) {
-        heroPrompt = buildTemplateReplacePrompt(emailCopy);
-        heroPrompt += NO_CTA + EMAIL_REALISM_SUFFIX;
-        if (heroPrompt.length > 4500) heroPrompt = heroPrompt.slice(0, 4500);
-      } else {
+      const moodSnippet = emailCopy.introCopy.slice(0, 200);
+
+      const buildPrompts = async (): Promise<string[]> => {
+        if (templateImage) {
+          let heroPrompt = buildTemplateReplacePrompt(emailCopy) + NO_CTA + EMAIL_REALISM_SUFFIX;
+          if (heroPrompt.length > 4500) heroPrompt = heroPrompt.slice(0, 4500);
+          if (numberOfImages === 1) return [heroPrompt];
+          const extras: Promise<string>[] = [];
+          if (numberOfImages >= 2) {
+            const secondBase = `Supporting email image for this campaign. Must be different from the hero — different angle, scene, or detail. Headline: "${emailCopy.headline}". Mood: ${moodSnippet}. No long text.${NO_CTA} Professional, on-brand.${EMAIL_REALISM_SUFFIX}`;
+            extras.push((async () => { try { return (await enhancePromptForAdCreative(secondBase, project) || secondBase).slice(0, 4500); } catch { return secondBase.slice(0, 4500); } })());
+          }
+          if (numberOfImages >= 3) {
+            const thirdBase = `Closing email image for this campaign. Distinct from hero and second image. Different angle, scene, or focus. Headline: "${emailCopy.headline}". Mood: ${moodSnippet}. No long text.${NO_CTA} Professional, on-brand.${EMAIL_REALISM_SUFFIX}`;
+            extras.push((async () => { try { return (await enhancePromptForAdCreative(thirdBase, project) || thirdBase).slice(0, 4500); } catch { return thirdBase.slice(0, 4500); } })());
+          }
+          return [heroPrompt, ...(await Promise.all(extras))];
+        }
         const onlyOrFirst = numberOfImages === 1
           ? "This is the only image in the email — make it the single hero that carries the whole message."
           : numberOfImages === 2
             ? "This is the first of two images. Opening/hero visual."
             : "This is the first of three images. Opening hero visual.";
-        const heroPromptBase = `Email hero/banner image for this campaign. ${onlyOrFirst} Headline: "${emailCopy.headline}". Mood and message: ${emailCopy.introCopy.slice(0, 300)}. Single strong visual, on-brand, professional. Do not put long text or headlines in the image — the email copy will provide that.${NO_CTA} Conversion-focused, clean composition.${EMAIL_REALISM_SUFFIX}`;
-        try {
-          heroPrompt = await enhancePromptForAdCreative(heroPromptBase, project) || heroPromptBase;
-        } catch {
-          heroPrompt = heroPromptBase;
+        const heroBase = `Email hero/banner image for this campaign. ${onlyOrFirst} Headline: "${emailCopy.headline}". Mood and message: ${emailCopy.introCopy.slice(0, 300)}. Single strong visual, on-brand, professional. Do not put long text or headlines in the image — the email copy will provide that.${NO_CTA} Conversion-focused, clean composition.${EMAIL_REALISM_SUFFIX}`;
+
+        const enhanceTasks: Promise<string>[] = [
+          (async () => {
+            try {
+              let p = await enhancePromptForAdCreative(heroBase, project) || heroBase;
+              if (emailTemplate?.image_generation) p += buildTemplateImagePromptSuffix(emailTemplate);
+              return p.slice(0, 4500);
+            } catch { return heroBase.slice(0, 4500); }
+          })(),
+        ];
+        if (numberOfImages >= 2) {
+          const secondBase = `This is the second of two images. Must be clearly different from the first — different angle, scene, or detail. Supporting/mid-email visual for the same campaign. Headline: "${emailCopy.headline}". Mood: ${moodSnippet}. No long text.${NO_CTA} Professional, on-brand. Do not repeat or duplicate the first image's composition or subject.${EMAIL_REALISM_SUFFIX}`;
+          enhanceTasks.push(
+            (async () => { try { return (await enhancePromptForAdCreative(secondBase, project) || secondBase).slice(0, 4500); } catch { return secondBase.slice(0, 4500); } })()
+          );
         }
-        if (emailTemplate?.image_generation) {
-          heroPrompt += buildTemplateImagePromptSuffix(emailTemplate);
+        if (numberOfImages >= 3) {
+          const thirdBase = `This is the third of three images. Closing visual — distinct from the first and second. Different angle, scene, or focus. Headline: "${emailCopy.headline}". Mood: ${moodSnippet}. No long text.${NO_CTA} Professional, on-brand. Do not repeat the previous two images.${EMAIL_REALISM_SUFFIX}`;
+          enhanceTasks.push(
+            (async () => { try { return (await enhancePromptForAdCreative(thirdBase, project) || thirdBase).slice(0, 4500); } catch { return thirdBase.slice(0, 4500); } })()
+          );
         }
-        if (heroPrompt.length > 4500) heroPrompt = heroPrompt.slice(0, 4500);
-      }
-      prompts.push(heroPrompt);
-      const moodSnippet = emailCopy.introCopy.slice(0, 200);
-      if (numberOfImages >= 2) {
-        const secondBase = `This is the second of two images. Must be clearly different from the first — different angle, scene, or detail. Supporting/mid-email visual for the same campaign. Headline: "${emailCopy.headline}". Mood: ${moodSnippet}. No long text.${NO_CTA} Professional, on-brand. Do not repeat or duplicate the first image's composition or subject.${EMAIL_REALISM_SUFFIX}`;
-        let secondPrompt: string;
-        try {
-          secondPrompt = await enhancePromptForAdCreative(secondBase, project) || secondBase;
-        } catch {
-          secondPrompt = secondBase;
-        }
-        prompts.push(secondPrompt.slice(0, 4500));
-      }
-      if (numberOfImages >= 3) {
-        const thirdBase = `This is the third of three images. Closing visual — distinct from the first and second. Different angle, scene, or focus. Headline: "${emailCopy.headline}". Mood: ${moodSnippet}. No long text.${NO_CTA} Professional, on-brand. Do not repeat the previous two images.${EMAIL_REALISM_SUFFIX}`;
-        let thirdPrompt: string;
-        try {
-          thirdPrompt = await enhancePromptForAdCreative(thirdBase, project) || thirdBase;
-        } catch {
-          thirdPrompt = thirdBase;
-        }
-        prompts.push(thirdPrompt.slice(0, 4500));
-      }
+        return Promise.all(enhanceTasks);
+      };
+      const prompts = await buildPrompts();
 
       const inputImages: { data: string; mimeType: string }[] = [];
       if (project.brand_logo && typeof project.brand_logo === "string") {
@@ -818,7 +827,7 @@ router.post(
         ? `\n\n--- PROJECT INSTRUCTIONS ---\n${projectInstructions}`
         : "");
 
-      const emailPrimaryModel = isVertexImageEnabled() ? VERTEX_IMAGE_MODEL : IMAGE_MODEL;
+      const emailPrimaryModel = IMAGE_MODEL;
       const emailBaseCredits = Math.floor(totalCost / numberOfImages);
       const emailRemainder = totalCost - emailBaseCredits * numberOfImages;
       const { data: genRows, error: insertErr } = await supabase
@@ -845,10 +854,12 @@ router.post(
       req.on("close", () => { clientCancelled = true; });
       req.on("aborted", () => { clientCancelled = true; });
 
-      const imageUrls: string[] = [];
       const emailCopyJson = JSON.stringify(emailCopy);
+      const EMAIL_MAX_RETRIES = 3;
 
-      for (let i = 0; i < numberOfImages; i++) {
+      const generateOneEmailImage = async (
+        i: number
+      ): Promise<{ url: string; storagePath: string } | { error: string; err: unknown }> => {
         const genId = generationIds[i];
         const textPrompt = prompts[i];
         const defaultContents: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [];
@@ -863,29 +874,6 @@ router.post(
         const seedUsed = Math.floor(Math.random() * 2 ** 31);
         let imageBuffer: Buffer | null = null;
         let safetyBlocked = false;
-
-        const tryVertexEmail = async (
-          vertexModel: string,
-          usePriorityPayGo: boolean
-        ): Promise<boolean> => {
-          try {
-            const vertexResult = await generateProImage({
-              contents: defaultContents,
-              systemInstruction: baseSystemInstruction,
-              seed: seedUsed,
-              aspectRatio,
-              imageSize: emailImageSize,
-              temperature: TEMPERATURE_DEFAULT,
-              vertexModel,
-              usePriorityPayGo,
-            });
-            if (vertexResult.safetyBlocked) safetyBlocked = true;
-            else imageBuffer = vertexResult.imageBuffer;
-            return true;
-          } catch {
-            return false;
-          }
-        };
 
         const tryApiEmail = async (model: string) => {
           const result = await gemini.models.generateContent({
@@ -910,99 +898,61 @@ router.post(
           if (result.candidates?.[0]?.finishReason === "SAFETY") safetyBlocked = true;
         };
 
-        try {
-          if (isVertexImageEnabled()) {
-            const ok =
-              (await tryVertexEmail(VERTEX_IMAGE_MODEL, false)) ||
-              (await tryVertexEmail(IMAGE_MODEL, false)) ||
-              (await tryVertexEmail(VERTEX_IMAGE_MODEL, true));
-            if (!ok && imageBuffer === null) throw new Error("All Vertex image attempts failed.");
-          } else {
+        const tryVertexEmail = async (usePriorityPayGo: boolean): Promise<boolean> => {
+          try {
+            const vertexResult = await generateProImage({
+              contents: defaultContents,
+              systemInstruction: baseSystemInstruction,
+              seed: seedUsed,
+              aspectRatio,
+              imageSize: emailImageSize,
+              temperature: TEMPERATURE_DEFAULT,
+              vertexModel: VERTEX_IMAGE_MODEL,
+              usePriorityPayGo,
+            });
+            if (vertexResult.safetyBlocked) safetyBlocked = true;
+            else imageBuffer = vertexResult.imageBuffer;
+            return true;
+          } catch {
+            return false;
+          }
+        };
+
+        const tryApiEmailWithRetries = async (model: string): Promise<"ok" | "retry_next" | "fatal"> => {
+          for (let attempt = 0; attempt < EMAIL_MAX_RETRIES; attempt++) {
             try {
-              await tryApiEmail(IMAGE_MODEL);
-            } catch (apiErr: unknown) {
-              const message = extractGeminiErrorMessage(apiErr, "Gemini API error");
-              if (!isRetryableImageError(apiErr, message)) {
-                await supabase
-                  .from("generations")
-                  .update({ status: "failed", error_message: message })
-                  .eq("id", genId);
-                console.error("Gemini generateContent (email) error:", message, apiErr);
-                const status = (apiErr as { status?: number })?.status;
-                const isAborted =
-                  (apiErr instanceof Error && apiErr.name === "AbortError") ||
-                  /aborted|AbortError/i.test(message);
-                const isOverloaded =
-                  status === 503 ||
-                  status === 429 ||
-                  /high demand|try again later|unavailable|503|429|resource exhausted/i.test(message);
-                if (isAborted) {
-                  res.status(499).json({ error: "Request was cancelled or timed out. Please try again." });
-                  return;
-                }
-                if (isOverloaded) {
-                  res.status(503).json({ error: "AI is at capacity. Please try again in a few minutes." });
-                  return;
-                }
-                res.status(502).json({
-                  error: (message || "Image generation failed") + (/api key|quota|403|401/i.test(message) ? " Check GEMINI_API_KEY." : ""),
-                });
-                return;
-              }
-              await tryApiEmail(IMAGE_MODEL_FALLBACK);
+              imageBuffer = null; safetyBlocked = false;
+              await tryApiEmail(model);
+              return "ok";
+            } catch (err: unknown) {
+              const msg = extractGeminiErrorMessage(err, "Gemini API error");
+              if (!isRetryableImageError(err, msg)) return "fatal";
             }
           }
-        } catch (err: unknown) {
-          const message = extractGeminiErrorMessage(err, "Gemini API error");
-          await supabase
-            .from("generations")
-            .update({ status: "failed", error_message: message })
-            .eq("id", genId);
-          console.error("Gemini image generation (email) error:", message, err);
-          const status = (err as { status?: number })?.status;
-          const isOverloaded =
-            status === 503 ||
-            status === 429 ||
-            /resource exhausted|high demand|try again later|unavailable|503|429/i.test(message);
-          if (isOverloaded) {
-            res.status(503).json({ error: "AI is at capacity. Please try again in a few minutes." });
+          return "retry_next";
+        };
+
+        let status = await tryApiEmailWithRetries(IMAGE_MODEL);
+        if (status === "retry_next") status = await tryApiEmailWithRetries(IMAGE_MODEL_FALLBACK);
+        if (status === "retry_next") {
+          imageBuffer = null; safetyBlocked = false;
+          if (isVertexImageEnabled()) {
+            const ok = (await tryVertexEmail(false)) || (await tryVertexEmail(true));
+            if (!ok && imageBuffer === null) status = "fatal";
           } else {
-            res.status(502).json({
-              error: (message || "Image generation failed") + (/api key|quota|403|401/i.test(message) ? " Check GEMINI_API_KEY." : ""),
-            });
+            status = "fatal";
           }
-          return;
         }
 
-        if (clientCancelled) {
-          await supabase
-            .from("generations")
-            .update({ status: "failed", error_message: "Client cancelled" })
-            .in("id", generationIds);
-          try {
-            res.status(499).json({ error: "Request cancelled" });
-          } catch {
-            // client gone
-          }
-          return;
-        }
-
-        if (safetyBlocked) {
-          await supabase
-            .from("generations")
-            .update({ status: "failed", error_message: "Content blocked by safety filters" })
-            .eq("id", genId);
-          res.status(422).json({ error: "Content blocked by safety filters" });
-          return;
+        if (status === "fatal" || (safetyBlocked && !imageBuffer)) {
+          const errMsg = safetyBlocked ? "Content blocked by safety filters" : "All image generation models failed. Please try again.";
+          await supabase.from("generations").update({ status: "failed", error_message: errMsg }).eq("id", genId);
+          return { error: errMsg, err: new Error(errMsg) };
         }
 
         if (!imageBuffer) {
-          await supabase
-            .from("generations")
-            .update({ status: "failed", error_message: "No image in response" })
-            .eq("id", genId);
-          res.status(502).json({ error: "No image returned. Try again or a different prompt." });
-          return;
+          await supabase.from("generations").update({ status: "failed", error_message: "No image in response" }).eq("id", genId);
+          return { error: "No image returned. Try again or a different prompt.", err: new Error("No image") };
         }
 
         const storagePath = `${workspaceId}/${projectId}/${genId}.png`;
@@ -1012,30 +962,57 @@ router.post(
 
         if (uploadErr) {
           console.error("Storage upload error:", uploadErr);
-          await supabase
-            .from("generations")
-            .update({ status: "failed", error_message: "Storage upload failed" })
-            .eq("id", genId);
-          res.status(500).json({ error: "Failed to save generated image" });
-          return;
+          await supabase.from("generations").update({ status: "failed", error_message: "Storage upload failed" }).eq("id", genId);
+          return { error: "Failed to save generated image", err: uploadErr };
         }
 
         const resultUrl = `email-assets/${storagePath}`;
         const updatePayload: { status: string; result_url: string; text_response?: string } = {
-          status: "completed",
-          result_url: resultUrl,
+          status: "completed", result_url: resultUrl,
         };
         if (i === 0) updatePayload.text_response = emailCopyJson;
-        const { error: updateErr } = await supabase
-          .from("generations")
-          .update(updatePayload)
-          .eq("id", genId);
-
+        const { error: updateErr } = await supabase.from("generations").update(updatePayload).eq("id", genId);
         if (updateErr) throw updateErr;
 
         const { data: urlData } = supabase.storage.from(EMAIL_ASSETS_BUCKET).getPublicUrl(storagePath);
-        imageUrls.push(urlData.publicUrl);
+        return { url: urlData.publicUrl, storagePath };
+      };
+
+      if (clientCancelled) {
+        await supabase.from("generations").update({ status: "failed", error_message: "Client cancelled" }).in("id", generationIds);
+        try { res.status(499).json({ error: "Request cancelled" }); } catch { /* client gone */ }
+        return;
       }
+
+      const results = await Promise.all(
+        Array.from({ length: numberOfImages }, (_, i) => generateOneEmailImage(i))
+      );
+
+      const firstFailure = results.find((r): r is { error: string; err: unknown } => "error" in r);
+      if (firstFailure) {
+        await supabase.from("generations").update({ status: "failed", error_message: firstFailure.error }).in("id", generationIds);
+        const errObj = firstFailure.err;
+        const status = (errObj as { status?: number })?.status;
+        const isAborted = (errObj instanceof Error && errObj.name === "AbortError") || /aborted|AbortError/i.test(firstFailure.error);
+        const isOverloaded = status === 503 || status === 429 || /resource exhausted|high demand|try again later|unavailable|503|429/i.test(firstFailure.error);
+        const isSafety = /safety filter/i.test(firstFailure.error);
+        if (isAborted) { res.status(499).json({ error: "Request was cancelled or timed out. Please try again." }); }
+        else if (isSafety) { res.status(422).json({ error: firstFailure.error }); }
+        else if (isOverloaded) { res.status(503).json({ error: "AI is at capacity. Please try again in a few minutes." }); }
+        else { res.status(502).json({ error: firstFailure.error }); }
+        return;
+      }
+
+      const successResults = results as { url: string; storagePath: string }[];
+      const imageUrls = successResults.map((r) => r.url);
+
+      const EMAIL_SIGNED_URL_EXPIRY = 365 * 24 * 60 * 60; // 1 year
+      const signedUrlResults = await Promise.all(
+        successResults.map((r) =>
+          supabase.storage.from(EMAIL_ASSETS_BUCKET).createSignedUrl(r.storagePath, EMAIL_SIGNED_URL_EXPIRY)
+        )
+      );
+      const signedImageUrls = signedUrlResults.map((r, i) => r.data?.signedUrl ?? imageUrls[i]);
 
       const firstId = generationIds[0];
       const newBalance = Math.max(0, (workspace.credits ?? 0) - totalCost);
@@ -1085,6 +1062,7 @@ router.post(
         generation: { id: firstId },
         generationIds,
         imageUrls,
+        signedImageUrls,
         numberOfImages,
         subjectLine: emailCopy.subjectLine,
         headline: emailCopy.headline,

@@ -19,9 +19,14 @@ import { cn } from "@/lib/utils";
 
 /* Match creative studio labels */
 const IMAGE_ASPECT_RATIOS = [
-  { value: "1:1", label: "Square Post (1:1)" },
+  { value: "1:1", label: "Square (1:1)" },
   { value: "4:5", label: "Instagram Feed (4:5)" },
-  { value: "9:16", label: "Instagram Story (9:16)" },
+  { value: "5:4", label: "Landscape Photo (5:4)" },
+  { value: "3:4", label: "Portrait (3:4)" },
+  { value: "4:3", label: "Presentation (4:3)" },
+  { value: "2:3", label: "Tall Portrait (2:3)" },
+  { value: "3:2", label: "Photo Print (3:2)" },
+  { value: "9:16", label: "Story / Reel (9:16)" },
   { value: "16:9", label: "Landscape Ad (16:9)" },
   { value: "21:9", label: "Banner (21:9)" },
 ];

@@ -384,6 +384,13 @@ router.put(
         brandUpdates.website_url = raw.length > 0 ? raw.slice(0, 2048) : null;
       }
 
+      if (req.body?.target_audience !== undefined) {
+        updates.target_audience =
+          typeof req.body.target_audience === "string"
+            ? req.body.target_audience.trim().slice(0, 500) || null
+            : null;
+      }
+
       // Try with brand fields; fall back to base-only if columns don't exist yet
       let project;
       let error;
@@ -582,9 +589,9 @@ router.post(
 
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), LOGO_FETCH_TIMEOUT_MS);
-      let imageRes: Response;
+      let fetchRes: globalThis.Response;
       try {
-        imageRes = await fetch(url, {
+        fetchRes = await fetch(url, {
           signal: controller.signal,
           headers: {
             "User-Agent": "Mozilla/5.0 (compatible; BlinkifyBrandBot/1.0)",
@@ -595,16 +602,16 @@ router.post(
         clearTimeout(timeout);
       }
 
-      if (!imageRes.ok) {
+      if (!fetchRes.ok) {
         res.status(400).json({ error: "Could not download image from URL" });
         return;
       }
-      const contentType = imageRes.headers.get("content-type") ?? "";
+      const contentType = fetchRes.headers.get("content-type") ?? "";
       if (!contentType.toLowerCase().startsWith("image/")) {
         res.status(400).json({ error: "URL did not return an image" });
         return;
       }
-      const buf = Buffer.from(await imageRes.arrayBuffer());
+      const buf = Buffer.from(await fetchRes.arrayBuffer());
       if (buf.length > LOGO_MAX_BYTES) {
         res.status(400).json({ error: "Image too large (max 5MB)" });
         return;
@@ -713,7 +720,7 @@ router.post(
       const themeHex = extract.themeColor?.trim();
       const hasValidTheme = themeHex && /^#[0-9a-fA-F]{6}$/.test(themeHex);
       if (hasValidTheme) {
-        suggestions.suggestedColors = [themeHex, ...suggestions.suggestedColors].slice(0, 6);
+        suggestions.suggestedColors = [themeHex, ...suggestions.suggestedColors].slice(0, 3);
       } else {
         const logoUrlForColors = extract.logoUrlForColors ?? extract.suggestedLogoUrl ?? "";
         let logoColors = await extractColorsFromLogoImage(logoUrlForColors);
@@ -724,21 +731,13 @@ router.post(
             if (fallbackColors.length > 0 && !isMostlyGrayscale(fallbackColors)) logoColors = fallbackColors;
           }
         }
-        if (logoColors.length > 0) suggestions.suggestedColors = logoColors;
+        if (logoColors.length > 0) suggestions.suggestedColors = logoColors.slice(0, 3);
       }
-      const defaults = ["#1a1a1a", "#666666", "#007AFF", "#2563eb", "#ffffff", "#1a1a1a"];
+      const defaults = ["#000000", "#666666", "#FFFFFF"];
       const colors = [...suggestions.suggestedColors];
-      while (colors.length < 6) colors.push("#ffffff");
+      while (colors.length < 3) colors.push(defaults[colors.length] ?? "#000000");
       const hex6 = /^#[0-9a-fA-F]{6}$/;
-      if (extract.backgroundColor) {
-        const bg = styleValueToHex(extract.backgroundColor);
-        if (bg && hex6.test(bg)) colors[4] = bg;
-      }
-      if (extract.ctaColor) {
-        const cta = styleValueToHex(extract.ctaColor);
-        if (cta && hex6.test(cta)) colors[3] = cta;
-      }
-      suggestions.suggestedColors = colors.slice(0, 6).map((c, i) => {
+      suggestions.suggestedColors = colors.slice(0, 3).map((c, i) => {
         const hex = typeof c === "string" ? styleValueToHex(c) : null;
         return hex && hex6.test(hex) ? hex : defaults[i]!;
       });

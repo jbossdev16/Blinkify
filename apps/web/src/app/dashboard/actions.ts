@@ -7,6 +7,7 @@ import { apiFetch, type Project, type BrandFont, type FontStyles } from "@/lib/a
 export interface CreateProjectPayload {
   name: string;
   description: string;
+  target_audience?: string | null;
   brand_colors: string[];
   brand_fonts: BrandFont[];
   brand_logo: string | null;

@@ -118,36 +118,55 @@ export async function fetchAndParseWebsite(url: string): Promise<WebsiteExtract>
     const appleResolved = appleTouchIcon ? resolveUrl(appleTouchIcon, url) : "";
     const iconResolved = icon ? resolveUrl(icon, url) : "";
 
-    let pageLogoUrl = "";
-    $("img").each((_, el) => {
-      if (pageLogoUrl) return;
-      const $el = $(el);
+    const isLogoElement = ($el: cheerio.Cheerio<cheerio.Element>) => {
       const src = $el.attr("src")?.trim();
+      if (!src) return false;
       const alt = ($el.attr("alt") ?? "").toLowerCase();
       const cls = ($el.attr("class") ?? "").toLowerCase();
       const id = ($el.attr("id") ?? "").toLowerCase();
       const parentCls = ($el.parent().attr("class") ?? "").toLowerCase();
       const parentId = ($el.parent().attr("id") ?? "").toLowerCase();
-      const isLogo =
-        src &&
-        (/\blogo\b/.test(alt) ||
-          /\blogo\b/.test(cls) ||
-          /\blogo\b/.test(id) ||
-          /\blogo\b/.test(parentCls) ||
-          /\blogo\b/.test(parentId) ||
-          $el.closest("[class*='logo' i], [id*='logo' i]").length > 0);
-      if (isLogo) pageLogoUrl = resolveUrl(src!, url);
+      return (
+        /\blogo\b/.test(alt) ||
+        /\blogo\b/.test(cls) ||
+        /\blogo\b/.test(id) ||
+        /\blogo\b/.test(parentCls) ||
+        /\blogo\b/.test(parentId) ||
+        $el.closest("[class*='logo' i], [id*='logo' i]").length > 0
+      );
+    };
+
+    let headerLogoUrl = "";
+    $("img").each((_, el) => {
+      if (headerLogoUrl) return;
+      const $el = $(el);
+      if (isLogoElement($el)) headerLogoUrl = resolveUrl($el.attr("src")!.trim(), url);
     });
-    if (!pageLogoUrl && $('header img[src], [role="banner"] img[src]').length > 0) {
+    if (!headerLogoUrl && $('header img[src], [role="banner"] img[src]').length > 0) {
       const first = $('header img[src], [role="banner"] img[src]').first().attr("src")?.trim();
-      if (first) pageLogoUrl = resolveUrl(first, url);
+      if (first) headerLogoUrl = resolveUrl(first, url);
     }
+
+    let footerLogoUrl = "";
+    const footerSel = 'footer, [role="contentinfo"], [class*="footer" i], [id*="footer" i]';
+    $(footerSel).find("img[src]").each((_, el) => {
+      if (footerLogoUrl) return;
+      const $el = $(el);
+      const src = $el.attr("src")?.trim();
+      if (!src) return;
+      if (isLogoElement($el)) { footerLogoUrl = resolveUrl(src, url); return; }
+      const alt = ($el.attr("alt") ?? "").toLowerCase();
+      if (alt && !alt.includes("payment") && !alt.includes("badge") && !alt.includes("social")) {
+        footerLogoUrl = resolveUrl(src, url);
+      }
+    });
+
+    const faviconUrl = appleResolved || iconResolved || faviconFallback;
+    const pageLogoUrl = footerLogoUrl || headerLogoUrl || faviconUrl;
 
     const suggestedLogoUrl =
       pageLogoUrl ||
       ogResolved ||
-      appleResolved ||
-      iconResolved ||
       faviconFallback;
     const logoUrlForColors =
       appleResolved ||

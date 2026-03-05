@@ -1,3 +1,5 @@
+import { supabase } from "./supabase.js";
+
 /**
  * Signed URL expiry for Supabase Storage.
  * 1 hour keeps egress down while refetch-on-visibility and error handling
@@ -32,4 +34,24 @@ export async function resolveGenerationImageUrl(
   }
   const { data } = await storage.from(imagesBucket).createSignedUrl(resultUrl, SIGNED_URL_EXPIRY_SECONDS);
   return data?.signedUrl ?? null;
+}
+
+/**
+ * Ensures the email-assets bucket exists and is public.
+ * Call once at server startup. Safe to call multiple times.
+ */
+export async function ensureEmailAssetsBucket(): Promise<void> {
+  const { data: buckets } = await supabase.storage.listBuckets();
+  const exists = buckets?.some((b) => b.name === EMAIL_ASSETS_BUCKET);
+  if (!exists) {
+    const { error } = await supabase.storage.createBucket(EMAIL_ASSETS_BUCKET, {
+      public: true,
+      fileSizeLimit: 20 * 1024 * 1024,
+    });
+    if (error) console.error(`Failed to create ${EMAIL_ASSETS_BUCKET} bucket:`, error.message);
+    else console.log(`Created public bucket: ${EMAIL_ASSETS_BUCKET}`);
+  } else {
+    const { error } = await supabase.storage.updateBucket(EMAIL_ASSETS_BUCKET, { public: true });
+    if (error) console.error(`Failed to update ${EMAIL_ASSETS_BUCKET} bucket:`, error.message);
+  }
 }

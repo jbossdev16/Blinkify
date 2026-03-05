@@ -1,5 +1,4 @@
 import { Router, Request, Response } from "express";
-import * as fs from "fs";
 import { requireAuth } from "../middleware/auth.js";
 import { ensureCurrentUser } from "../middleware/currentUser.js";
 import { supabase } from "../lib/supabase.js";
