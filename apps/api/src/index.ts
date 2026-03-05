@@ -13,6 +13,7 @@ import videoGenerationRoutes from "./routes/video-generations";
 import assetCollectionRoutes from "./routes/asset-collection";
 import creativeStudioChatRoutes from "./routes/creative-studio-chat";
 import cleanupFailedGenerationsRoutes from "./routes/cleanup-failed-generations";
+import adminRoutes from "./routes/admin";
 import waitlistRoutes from "./routes/waitlist";
 import { runCleanupFailedGenerations } from "./lib/cleanup-failed-generations";
 import { runCleanupUnsavedGenerations } from "./lib/cleanup-unsaved-generations";
@@ -62,6 +63,7 @@ app.use("/workspaces", videoGenerationRoutes);
 app.use("/workspaces", assetCollectionRoutes);
 app.use("/workspaces", creativeStudioChatRoutes);
 app.use("/workspaces", cleanupFailedGenerationsRoutes);
+app.use("/admin", adminRoutes);
 
 // ─── Error handler ───────────────────────────────────────────────────────────
 

@@ -17,6 +17,7 @@ import {
 } from "../lib/veo.js";
 import { isUuid } from "../lib/validation.js";
 import { SIGNED_URL_EXPIRY_SECONDS } from "../lib/storage-constants.js";
+import { getPlanConfig } from "../lib/plan-config.js";
 
 const router = Router();
 const BUCKET = "generated-videos";
@@ -69,6 +70,17 @@ router.post(
 
       if (!membership) {
         res.status(403).json({ error: "Not a workspace member" });
+        return;
+      }
+
+      const { data: wsForPlan } = await supabase
+        .from("workspaces")
+        .select("plan")
+        .eq("id", workspaceId)
+        .single();
+
+      if (!getPlanConfig(wsForPlan?.plan ?? "trial").videoEnabled) {
+        res.status(403).json({ error: "Video generation is not available on your current plan. Upgrade to use this feature." });
         return;
       }
 
@@ -206,9 +218,14 @@ router.post(
       const creditsRequired = videoCreditCost(resolution);
       const { data: workspace } = await supabase
         .from("workspaces")
-        .select("credits")
+        .select("credits, plan")
         .eq("id", workspaceId)
         .single();
+
+      if (!getPlanConfig(workspace?.plan ?? "trial").videoEnabled) {
+        res.status(403).json({ error: "Video generation is not available on your current plan. Upgrade to use this feature." });
+        return;
+      }
 
       if (!workspace || (workspace.credits ?? 0) < creditsRequired) {
         res.status(402).json({

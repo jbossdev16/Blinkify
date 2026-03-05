@@ -23,17 +23,28 @@ export function BlinkifyLogo({
   priority = false,
 }: BlinkifyLogoProps) {
   const isFull = variant === "full";
-  const src = isFull ? "/logo/blinkify-logo-color.svg" : "/logo/blinkify-icon-color.svg";
-  const width = isFull ? undefined : height;
+  const lightSrc = isFull ? "/logo/blinkify-logo-color.svg" : "/logo/blinkify-icon-color.svg";
+  const darkSrc = isFull ? "/logo/blinkify-icon-color-logo-white.svg" : "/logo/blinkify-icon-color.svg";
+  const w = isFull ? Math.round(height * 3.2) : height;
   const img = (
-    <NextImage
-      src={src}
-      alt="Blinkify"
-      width={isFull ? Math.round(height * 3.2) : height}
-      height={height}
-      className={cn("object-contain", className)}
-      priority={priority}
-    />
+    <>
+      <NextImage
+        src={lightSrc}
+        alt="Blinkify"
+        width={w}
+        height={height}
+        className="object-contain dark:hidden"
+        priority={priority}
+      />
+      <NextImage
+        src={darkSrc}
+        alt="Blinkify"
+        width={w}
+        height={height}
+        className="object-contain hidden dark:block"
+        priority={priority}
+      />
+    </>
   );
 
   if (href) {

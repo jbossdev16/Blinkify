@@ -7,6 +7,7 @@ import { ensureCurrentUser } from "../middleware/currentUser.js";
 import { supabase } from "../lib/supabase.js";
 import { isUuid, isAllowedWebsiteUrl } from "../lib/validation.js";
 import { SIGNED_URL_EXPIRY_SECONDS } from "../lib/storage-constants.js";
+import { getPlanConfig } from "../lib/plan-config.js";
 import { fetchAndParseWebsite, styleValueToHex } from "../lib/fetch-website.js";
 import { suggestBrandFromWebsite, extractColorsFromLogoImage, isMostlyGrayscale, translateToEnglish, extractGeminiErrorMessage } from "../lib/gemini.js";
 
@@ -144,6 +145,27 @@ router.post(
 
       if (!membership) {
         res.status(403).json({ error: "Not a workspace member" });
+        return;
+      }
+
+      const { data: workspace } = await supabase
+        .from("workspaces")
+        .select("plan")
+        .eq("id", workspaceId)
+        .single();
+
+      const planConfig = getPlanConfig(workspace?.plan ?? "trial");
+
+      const { count: existingProjects } = await supabase
+        .from("projects")
+        .select("id", { count: "exact", head: true })
+        .eq("workspace_id", workspaceId)
+        .is("deleted_at", null);
+
+      if ((existingProjects ?? 0) >= planConfig.maxBrands) {
+        res.status(403).json({
+          error: `Brand limit reached. Your ${workspace?.plan ?? "trial"} plan allows up to ${planConfig.maxBrands} brand${planConfig.maxBrands > 1 ? "s" : ""}. Upgrade to add more.`,
+        });
         return;
       }
 
@@ -611,6 +633,10 @@ router.post(
         res.status(400).json({ error: "URL did not return an image" });
         return;
       }
+      if (contentType.toLowerCase().includes("svg")) {
+        res.status(400).json({ error: "SVG logos are not supported. Please use a PNG, JPEG, or WebP image." });
+        return;
+      }
       const buf = Buffer.from(await fetchRes.arrayBuffer());
       if (buf.length > LOGO_MAX_BYTES) {
         res.status(400).json({ error: "Image too large (max 5MB)" });
@@ -722,16 +748,20 @@ router.post(
       if (hasValidTheme) {
         suggestions.suggestedColors = [themeHex, ...suggestions.suggestedColors].slice(0, 3);
       } else {
-        const logoUrlForColors = extract.logoUrlForColors ?? extract.suggestedLogoUrl ?? "";
-        let logoColors = await extractColorsFromLogoImage(logoUrlForColors);
-        if (logoColors.length > 0 && isMostlyGrayscale(logoColors)) {
-          const fallbackUrl = extract.suggestedLogoUrl?.trim();
-          if (fallbackUrl && fallbackUrl !== logoUrlForColors) {
-            const fallbackColors = await extractColorsFromLogoImage(fallbackUrl);
-            if (fallbackColors.length > 0 && !isMostlyGrayscale(fallbackColors)) logoColors = fallbackColors;
+        try {
+          const logoUrlForColors = extract.logoUrlForColors ?? extract.suggestedLogoUrl ?? "";
+          let logoColors = await extractColorsFromLogoImage(logoUrlForColors);
+          if (logoColors.length > 0 && isMostlyGrayscale(logoColors)) {
+            const fallbackUrl = extract.suggestedLogoUrl?.trim();
+            if (fallbackUrl && fallbackUrl !== logoUrlForColors) {
+              const fallbackColors = await extractColorsFromLogoImage(fallbackUrl);
+              if (fallbackColors.length > 0 && !isMostlyGrayscale(fallbackColors)) logoColors = fallbackColors;
+            }
           }
+          if (logoColors.length > 0) suggestions.suggestedColors = logoColors.slice(0, 3);
+        } catch (colorErr) {
+          console.warn("extractColorsFromLogoImage failed, using defaults:", (colorErr as Error).message);
         }
-        if (logoColors.length > 0) suggestions.suggestedColors = logoColors.slice(0, 3);
       }
       const defaults = ["#000000", "#666666", "#FFFFFF"];
       const colors = [...suggestions.suggestedColors];

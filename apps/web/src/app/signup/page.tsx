@@ -329,7 +329,7 @@ export default function SignupPage() {
   async function handleGoogleSignUp() {
     await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${window.location.origin}/dashboard` },
+      options: { redirectTo: `${window.location.origin}/creative-studio` },
     });
   }
 

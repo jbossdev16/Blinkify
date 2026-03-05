@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { updateProject, deleteProject, uploadProjectLogo, setProjectLogoFromUrl, analyzeWebsite } from "@/app/dashboard/actions";
+import { updateProject, deleteProject, uploadProjectLogo, setProjectLogoFromUrl, analyzeWebsite } from "@/app/(app)/actions";
 import type { Project, BrandFont, FontStyles, FontStyleElement } from "@/lib/api";
 
 /* ─── Constants ───────────────────────────────────────────────────────── */
@@ -402,7 +402,7 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
     try {
       await deleteProject(workspaceId, project.id);
       toast.success("Project deleted.");
-      router.push("/dashboard");
+      router.push("/creative-studio");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to delete");
       setDeleting(false);
@@ -705,19 +705,19 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
                 ].map(({ label, color, setColor, slotIndex }) => (
                   <div key={slotIndex} className="shrink-0 space-y-3">
                     <div className="flex items-center justify-between gap-3">
-                      <span className="text-xs font-medium text-muted-foreground shrink-0">{label}</span>
+                      <span className="text-xs font-medium text-muted-foreground dark:text-white shrink-0">{label}</span>
                       <div className="flex gap-1.5 shrink-0">
                         <button
                           type="button"
                           onClick={() => setSlotMode(slotIndex, "solid")}
-                          className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${colorSlotModes[slotIndex] === "solid" ? "bg-primary text-primary-foreground" : "bg-muted/60 text-muted-foreground hover:bg-muted"}`}
+                          className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${colorSlotModes[slotIndex] === "solid" ? "bg-primary text-primary-foreground" : "bg-muted/60 text-muted-foreground dark:text-white hover:bg-muted"}`}
                         >
                           Solid
                         </button>
                         <button
                           type="button"
                           onClick={() => setSlotMode(slotIndex, "gradient")}
-                          className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${colorSlotModes[slotIndex] === "gradient" ? "bg-primary text-primary-foreground" : "bg-muted/60 text-muted-foreground hover:bg-muted"}`}
+                          className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${colorSlotModes[slotIndex] === "gradient" ? "bg-primary text-primary-foreground" : "bg-muted/60 text-muted-foreground dark:text-white hover:bg-muted"}`}
                         >
                           Gradient
                         </button>
@@ -1397,7 +1397,7 @@ function BrandCard({
       <div className="flex-1 p-5 min-h-0 flex flex-col">{children}</div>
       <div className="flex items-center justify-between px-5 pb-4 pt-1 border-t border-border/50">
         <p className="text-sm font-medium text-foreground">{label}</p>
-        {footerRight != null ? <span className="text-sm text-muted-foreground text-right">{footerRight}</span> : null}
+        {footerRight != null ? <span className="text-sm text-muted-foreground dark:text-white/70 text-right">{footerRight}</span> : null}
       </div>
     </div>
   );

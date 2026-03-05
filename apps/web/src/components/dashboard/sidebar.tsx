@@ -4,7 +4,6 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  LayoutDashboard,
   Palette,
   Sparkles,
   Menu,
@@ -21,12 +20,14 @@ import {
   Moon,
   Sun,
   Monitor,
+  Shield,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { PLAN_MAX_CREDITS } from "@/lib/constants";
+import { PLAN_MAX_CREDITS, getPlanFeatures } from "@/lib/constants";
 import { BlinkifyLogo } from "@/components/blinkify-logo";
 import { SettingsModal } from "@/components/dashboard/settings-modal";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
+import { ChevronDown as ChevronDownIcon, Plus } from "lucide-react";
 
 /* ─── Props ───────────────────────────────────────────────────────────── */
 
@@ -38,6 +39,7 @@ interface SidebarProps {
   };
   plan: string | null;
   credits: number | null;
+  isAdmin?: boolean;
   collapsed: boolean;
   onToggleCollapse: () => void;
 }
@@ -45,11 +47,10 @@ interface SidebarProps {
 /* ─── Nav items ───────────────────────────────────────────────────────── */
 
 const baseNav = [
-  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { label: "Creative Studio", href: "/dashboard/creative-studio", icon: Sparkles },
-  { label: "Brand", href: "/dashboard/brand", icon: Palette },
-  { label: "Asset Collection", href: "/dashboard/asset-collection", icon: Bookmark },
-  { label: "Billing", href: "/dashboard/billing", icon: CreditCard },
+  { label: "Creative Studio", href: "/creative-studio", icon: Sparkles },
+  { label: "Brand", href: "/brand", icon: Palette },
+  { label: "Asset Collection", href: "/asset-collection", icon: Bookmark },
+  { label: "Billing", href: "/billing", icon: CreditCard },
 ];
 
 /* ─── Component ───────────────────────────────────────────────────────── */
@@ -58,16 +59,39 @@ export function Sidebar({
   user,
   plan,
   credits,
+  isAdmin,
   collapsed,
   onToggleCollapse,
 }: SidebarProps) {
-  const nav = baseNav;
+  const nav = isAdmin
+    ? [...baseNav, { label: "Admin", href: "/admin", icon: Shield }]
+    : baseNav;
   const pathname = usePathname();
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
+
+  const planFeatures = getPlanFeatures(plan ?? "trial");
+  const hasMultiBrand = planFeatures.maxBrands > 1;
+  const [brandDropdownOpen, setBrandDropdownOpen] = useState(false);
+  const [brandProjects, setBrandProjects] = useState<{ id: string; name: string }[]>([]);
+  const [brandProjectsLoaded, setBrandProjectsLoaded] = useState(false);
+
+  useEffect(() => {
+    if (!hasMultiBrand || brandProjectsLoaded) return;
+    const supabase = createSupabaseBrowserClient();
+    supabase
+      .from("projects")
+      .select("id, name")
+      .is("deleted_at", null)
+      .order("created_at", { ascending: true })
+      .then(({ data }) => {
+        setBrandProjects(data ?? []);
+        setBrandProjectsLoaded(true);
+      });
+  }, [hasMultiBrand, brandProjectsLoaded]);
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -140,10 +164,62 @@ export function Sidebar({
       {/* Nav */}
       <nav className={cn("flex-1", collapsed ? "px-2" : "px-3")}>
         {nav.map((item) => {
+          const isBrand = item.href === "/brand";
           const active =
-            item.href === "/dashboard"
-              ? pathname === "/dashboard"
+            item.href === "/creative-studio"
+              ? pathname === "/creative-studio"
               : pathname.startsWith(item.href);
+
+          if (isBrand && hasMultiBrand && !collapsed) {
+            return (
+              <div key={item.href}>
+                <button
+                  type="button"
+                  onClick={() => setBrandDropdownOpen(!brandDropdownOpen)}
+                  className={cn(
+                    "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-normal transition-colors cursor-pointer",
+                    active
+                      ? "text-foreground"
+                      : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
+                  )}
+                >
+                  <item.icon className={cn("size-[18px] shrink-0", active && "icon-gradient-brand")} />
+                  <span className={cn("flex-1 text-left", active && "text-foreground font-medium")}>{item.label}</span>
+                  <ChevronDownIcon className={cn("size-3.5 transition-transform text-muted-foreground", brandDropdownOpen && "rotate-180")} />
+                </button>
+                {brandDropdownOpen && (
+                  <div className="ml-9 mt-0.5 space-y-0.5">
+                    {brandProjects.map((p) => {
+                      const projActive = pathname === "/brand" && typeof window !== "undefined" && new URLSearchParams(window.location.search).get("project") === p.id;
+                      return (
+                        <Link
+                          key={p.id}
+                          href={`/brand?project=${p.id}`}
+                          className={cn(
+                            "block px-3 py-1.5 rounded-lg text-xs font-normal transition-colors truncate",
+                            projActive
+                              ? "text-foreground bg-secondary/50 font-medium"
+                              : "text-muted-foreground hover:bg-secondary/40 hover:text-foreground"
+                          )}
+                        >
+                          {p.name}
+                        </Link>
+                      );
+                    })}
+                    {brandProjects.length < planFeatures.maxBrands && (
+                      <Link
+                        href="/brand?new=1"
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-normal text-primary hover:bg-primary/5 transition-colors"
+                      >
+                        <Plus className="size-3" />
+                        New Brand
+                      </Link>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          }
 
           const link = (
             <Link
@@ -194,8 +270,8 @@ export function Sidebar({
         {credits !== null && collapsed && (
           <SidebarTooltip label={`${credits} credits`} side="right" enabled>
             <Link
-              href="/dashboard/billing"
-              className="flex justify-center py-2.5 rounded-xl bg-secondary/40 text-amber-500 hover:bg-secondary/60 transition-colors"
+              href="/billing"
+              className="flex justify-center py-2.5 rounded-xl text-[#000000] dark:text-white hover:bg-secondary/60 transition-colors"
             >
               <Coins className="size-[18px]" />
             </Link>
@@ -377,8 +453,7 @@ const LOW_CREDITS_THRESHOLD = 0.2;
 
 function SidebarCreditsCard({ credits, plan }: { credits: number; plan: string }) {
   const max = PLAN_MAX_CREDITS[plan.toLowerCase()] ?? 30;
-  const used = max - credits;
-  const pct = max > 0 ? Math.round((used / max) * 100) : 0;
+  const remainingPct = max > 0 ? Math.round((credits / max) * 100) : 0;
   const lowCredits = credits <= max * LOW_CREDITS_THRESHOLD;
 
   return (
@@ -412,11 +487,11 @@ function SidebarCreditsCard({ credits, plan }: { credits: number; plan: string }
       <div className="h-1.5 w-full rounded-full bg-secondary/60 overflow-hidden mb-3">
         <div
           className="h-full rounded-full bg-primary transition-all duration-500"
-          style={{ width: `${Math.min(100, pct)}%` }}
+          style={{ width: `${Math.min(100, remainingPct)}%` }}
         />
       </div>
       <Link
-        href="/dashboard/billing"
+        href="/billing"
         className="flex items-center justify-center w-full h-10 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity"
       >
         Upgrade

@@ -1,6 +1,17 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+const PROTECTED_PREFIXES = [
+  "/creative-studio",
+  "/brand",
+  "/asset-collection",
+  "/billing",
+  "/settings",
+  "/admin",
+  "/studio",
+  "/projects",
+];
+
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
@@ -25,16 +36,26 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  // Refresh the session (important for server components)
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Protect /dashboard routes
-  if (!user && request.nextUrl.pathname.startsWith("/dashboard")) {
+  const pathname = request.nextUrl.pathname;
+
+  // Redirect old /dashboard routes to new paths
+  if (pathname.startsWith("/dashboard")) {
+    const url = request.nextUrl.clone();
+    const newPath = pathname.replace(/^\/dashboard/, "") || "/creative-studio";
+    url.pathname = newPath;
+    return NextResponse.redirect(url);
+  }
+
+  // Protect app routes
+  const isProtected = PROTECTED_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"));
+  if (!user && isProtected) {
     const url = request.nextUrl.clone();
     url.pathname = "/signin";
-    url.searchParams.set("returnTo", request.nextUrl.pathname);
+    url.searchParams.set("returnTo", pathname);
     return NextResponse.redirect(url);
   }
 
@@ -43,7 +64,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Run on all routes except static files and _next
     "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

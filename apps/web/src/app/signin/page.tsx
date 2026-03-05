@@ -13,9 +13,9 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4001";
 
 /** Allow only relative app paths to prevent open redirects. */
 function safeReturnTo(value: string | null): string {
-  if (!value || typeof value !== "string") return "/dashboard";
+  if (!value || typeof value !== "string") return "/creative-studio";
   const path = value.trim();
-  if (!path.startsWith("/") || path.includes("//") || path.includes(":")) return "/dashboard";
+  if (!path.startsWith("/") || path.includes("//") || path.includes(":")) return "/creative-studio";
   return path;
 }
 

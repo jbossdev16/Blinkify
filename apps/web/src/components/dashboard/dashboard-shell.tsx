@@ -12,10 +12,11 @@ interface DashboardShellProps {
   };
   plan: string | null;
   credits: number | null;
+  isAdmin?: boolean;
   children: React.ReactNode;
 }
 
-export function DashboardShell({ user, plan, credits, children }: DashboardShellProps) {
+export function DashboardShell({ user, plan, credits, isAdmin, children }: DashboardShellProps) {
   const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
@@ -48,6 +49,7 @@ export function DashboardShell({ user, plan, credits, children }: DashboardShell
         user={user}
         plan={plan}
         credits={credits}
+        isAdmin={isAdmin}
         collapsed={collapsed}
         onToggleCollapse={toggleCollapsed}
       />

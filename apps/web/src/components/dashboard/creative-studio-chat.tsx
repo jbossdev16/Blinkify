@@ -19,6 +19,9 @@ import {
   Copy,
   Reply,
   X,
+  Palette,
+  Check,
+  Hammer,
 } from "lucide-react";
 import { BlinkifyLogo } from "@/components/blinkify-logo";
 import { cn } from "@/lib/utils";
@@ -28,6 +31,7 @@ import type { Project } from "@/lib/api";
 import { apiClientFetch } from "@/lib/api-client";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { renderContentWithBold } from "@/lib/render-content-with-bold";
+import { getPlanFeatures } from "@/lib/constants";
 import { toast } from "sonner";
 import { isEmailTemplateId, type EmailTemplateId } from "@/lib/email-templates";
 
@@ -232,7 +236,7 @@ function continuationSlotsForDuration(seconds: number): number {
 
 const PREFERENCE_SNIPPETS_MAX = 10;
 
-async function loadCreativeStudioChatFromSupabase(workspaceId: string): Promise<{
+async function loadCreativeStudioChatFromSupabase(workspaceId: string, projectId: string): Promise<{
   messages: CreativeMessage[];
   prompt: string;
   selectedTool: CreativeTool;
@@ -249,7 +253,7 @@ async function loadCreativeStudioChatFromSupabase(workspaceId: string): Promise<
   const { data, error } = await supabase
     .from("creative_studio_chats")
     .select("data")
-    .eq("workspace_id", workspaceId)
+    .eq("project_id", projectId)
     .maybeSingle();
 
   if (error || !data?.data) {
@@ -312,6 +316,7 @@ async function loadCreativeStudioChatFromSupabase(workspaceId: string): Promise<
 
 async function saveCreativeStudioChatToSupabase(
   workspaceId: string,
+  projectId: string,
   state: {
     messages: CreativeMessage[];
     prompt: string;
@@ -342,6 +347,7 @@ async function saveCreativeStudioChatToSupabase(
   await supabase.from("creative_studio_chats").upsert(
     {
       workspace_id: workspaceId,
+      project_id: projectId,
       data: {
         messages: storedMessages,
         prompt: state.prompt,
@@ -356,7 +362,7 @@ async function saveCreativeStudioChatToSupabase(
         selectedEmailTemplateId: state.selectedEmailTemplateId ?? null,
       },
     },
-    { onConflict: "workspace_id" }
+    { onConflict: "project_id" }
   );
 }
 
@@ -364,11 +370,19 @@ async function saveCreativeStudioChatToSupabase(
 
 interface CreativeStudioChatProps {
   project: Project;
+  allProjects?: Project[];
   workspaceId: string;
+  plan: string;
 }
 
-export function CreativeStudioChat({ project, workspaceId }: CreativeStudioChatProps) {
-  const projectId = project.id;
+export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: CreativeStudioChatProps) {
+  const [activeProject, setActiveProject] = useState<Project>(project);
+  const projectId = activeProject.id;
+  const planFeatures = getPlanFeatures(plan);
+  const videoEnabled = planFeatures.videoEnabled;
+  const showBrandPicker = planFeatures.maxBrands > 1 && (allProjects?.length ?? 0) > 0;
+  const [brandPickerOpen, setBrandPickerOpen] = useState(false);
+  const brandPickerRef = useRef<HTMLDivElement>(null);
   const [selectedTool, setSelectedTool] = useState<CreativeTool>(null);
   const [imageOptions, setImageOptions] = useState<ImageOptions>(defaultImageOptions);
   const [videoOptions, setVideoOptions] = useState<VideoOptions>(defaultVideoOptions);
@@ -496,7 +510,7 @@ export function CreativeStudioChat({ project, workspaceId }: CreativeStudioChatP
 
   useEffect(() => {
     let cancelled = false;
-    loadCreativeStudioChatFromSupabase(workspaceId).then((loaded) => {
+    loadCreativeStudioChatFromSupabase(workspaceId, projectId).then((loaded) => {
       if (cancelled) return;
       setSelectedTool(null);
       setImageOptions(loaded.imageOptions);
@@ -663,7 +677,7 @@ export function CreativeStudioChat({ project, workspaceId }: CreativeStudioChatP
     if (!hydrated) return;
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     saveTimeoutRef.current = setTimeout(() => {
-      saveCreativeStudioChatToSupabase(workspaceId, {
+      saveCreativeStudioChatToSupabase(workspaceId, projectId, {
         messages,
         prompt,
         selectedTool,
@@ -683,6 +697,7 @@ export function CreativeStudioChat({ project, workspaceId }: CreativeStudioChatP
   }, [
     hydrated,
     workspaceId,
+    projectId,
     messages,
     prompt,
     selectedTool,
@@ -780,8 +795,9 @@ export function CreativeStudioChat({ project, workspaceId }: CreativeStudioChatP
       const target = e.target as Node;
       if (optionsRef.current && !optionsRef.current.contains(target)) setOptionsOpen(false);
       if (toolsRef.current && !toolsRef.current.contains(target)) setToolsOpen(false);
+      if (brandPickerRef.current && !brandPickerRef.current.contains(target)) setBrandPickerOpen(false);
     }
-    if (optionsOpen || toolsOpen) {
+    if (optionsOpen || toolsOpen || brandPickerOpen) {
       document.addEventListener("mousedown", handleClick);
       return () => document.removeEventListener("mousedown", handleClick);
     }
@@ -841,7 +857,7 @@ export function CreativeStudioChat({ project, workspaceId }: CreativeStudioChatP
     const snippet = getSnippetForMessage(msg, msgIndex);
     const nextLiked = [...likedSnippets, snippet].slice(-PREFERENCE_SNIPPETS_MAX);
     setLikedSnippets(nextLiked);
-    saveCreativeStudioChatToSupabase(workspaceId, { ...stateRef.current, likedSnippets: nextLiked });
+    saveCreativeStudioChatToSupabase(workspaceId, projectId, { ...stateRef.current, likedSnippets: nextLiked });
     toast.success("Thanks — we'll favor responses like this.");
   }
 
@@ -851,7 +867,7 @@ export function CreativeStudioChat({ project, workspaceId }: CreativeStudioChatP
     const snippet = getSnippetForMessage(msg, msgIndex);
     const nextDisliked = [...dislikedSnippets, snippet].slice(-PREFERENCE_SNIPPETS_MAX);
     setDislikedSnippets(nextDisliked);
-    saveCreativeStudioChatToSupabase(workspaceId, { ...stateRef.current, dislikedSnippets: nextDisliked });
+    saveCreativeStudioChatToSupabase(workspaceId, projectId, { ...stateRef.current, dislikedSnippets: nextDisliked });
     toast.success("Got it — we'll avoid responses like this.");
   }
 
@@ -1058,6 +1074,17 @@ ${bodyRows}
           return n;
         });
       } else if (intent === "video") {
+        if (!videoEnabled) {
+          setMessages((prev) => {
+            const n = [...prev];
+            const m = n[placeholderIndex];
+            if (m && m.role === "assistant") {
+              n[placeholderIndex] = { ...m, content: "Video generation is not available on your current plan. Upgrade to use this feature.", generating: false };
+            }
+            queueMicrotask(() => flushSave(n));
+            return n;
+          });
+        } else {
         const body: Record<string, unknown> = {
           prompt: userContent,
           model: videoOptions.model,
@@ -1083,6 +1110,7 @@ ${bodyRows}
           () => pollVideoStatus(genRes.generationId, placeholderIndex),
           POLL_INTERVAL_MS
         );
+        }
       } else if (intent === "email") {
         const abortCtrl = new AbortController();
         generationAbortRef.current = abortCtrl;
@@ -1182,12 +1210,12 @@ ${bodyRows}
 
   const flushSave = useCallback(
     (nextMessages: CreativeMessage[]) => {
-      saveCreativeStudioChatToSupabase(workspaceId, {
+      saveCreativeStudioChatToSupabase(workspaceId, projectId, {
         ...stateRef.current,
         messages: nextMessages,
       });
     },
-    [workspaceId]
+    [workspaceId, projectId]
   );
 
   const cancelGeneration = useCallback(
@@ -1457,6 +1485,17 @@ ${bodyRows}
           });
           setPendingFiles([]);
         } else if (intent === "video") {
+          if (!videoEnabled) {
+            setMessages((prev) => {
+              const next = [...prev];
+              const m = next[msgIndex];
+              if (m && m.role === "assistant") {
+                next[msgIndex] = { ...m, content: "Video generation is not available on your current plan. Upgrade to use this feature.", generating: false };
+              }
+              queueMicrotask(() => flushSave(next));
+              return next;
+            });
+          } else {
           const body: Record<string, unknown> = {
             prompt: text,
             model: videoOptions.model,
@@ -1482,6 +1521,7 @@ ${bodyRows}
             () => pollVideoStatus(genRes.generationId, msgIndex),
             POLL_INTERVAL_MS
           );
+          }
         } else if (intent === "email") {
           const abortCtrl = new AbortController();
           generationAbortRef.current = abortCtrl;
@@ -2080,7 +2120,12 @@ ${bodyRows}
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
-          className="flex items-center justify-center size-8 rounded-lg text-muted-foreground hover:bg-secondary/60 hover:text-foreground transition-colors shrink-0"
+          className={cn(
+            "flex items-center justify-center size-8 rounded-lg transition-colors shrink-0",
+            pendingFiles.length > 0
+              ? "text-[#000000] dark:text-white"
+              : "text-[#000000] dark:text-white hover:text-foreground"
+          )}
           title="Add images"
         >
           <Plus className="size-4" />
@@ -2088,16 +2133,11 @@ ${bodyRows}
         <div className="relative shrink-0" ref={optionsRef}>
           <button
             type="button"
-            onClick={() => setOptionsOpen((v) => !v)}
-            className={cn(
-              "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer",
-              optionsOpen
-                ? "bg-primary/10 text-primary"
-                : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
-            )}
+            onClick={() => { setOptionsOpen((v) => !v); setToolsOpen(false); setBrandPickerOpen(false); }}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer text-[#000000] dark:text-white hover:text-foreground"
           >
             <SlidersHorizontal className="size-3.5" />
-            Options
+            {optionsOpen ? <span className="text-gradient-brand">Options</span> : "Options"}
           </button>
           {optionsOpen && (
             <div className="absolute bottom-full left-0 mb-1 w-[280px] max-h-[70vh] overflow-y-auto rounded-xl border border-border bg-card shadow-lg z-50">
@@ -2108,17 +2148,11 @@ ${bodyRows}
         <div className="relative shrink-0" ref={toolsRef}>
           <button
             type="button"
-            onClick={() => setToolsOpen((v) => !v)}
-            className={cn(
-              "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer shrink-0",
-              toolsOpen
-                ? "bg-primary/10 text-primary"
-                : selectedTool
-                  ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
-            )}
+            onClick={() => { setToolsOpen((v) => !v); setOptionsOpen(false); setBrandPickerOpen(false); }}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer shrink-0 text-[#000000] dark:text-white hover:text-foreground"
           >
-            Tools
+            <Hammer className="size-3.5" />
+            {toolsOpen || selectedTool ? <span className="text-gradient-brand">Tools</span> : "Tools"}
             <ChevronDown className="size-3.5" />
           </button>
           {toolsOpen && (
@@ -2131,28 +2165,41 @@ ${bodyRows}
                 }}
                 className={cn(
                   "w-full flex items-center gap-2 px-3 py-2 text-left text-xs font-medium",
-                  selectedTool === "image" ? "bg-primary/10 text-primary" : "hover:bg-secondary/60"
+                  "hover:bg-secondary/60"
                 )}
               >
                 <ImagePlus className="size-3.5" />
-                Image generation
+                <span className="flex-1">Image generation</span>
+                {selectedTool === "image" && <Check className="size-3.5 text-[#000000] dark:text-white" />}
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const next = selectedTool === "video" ? null : "video";
-                  setSelectedTool(next);
-                  if (next === "video") setVideoOptions(defaultVideoOptions());
-                  setToolsOpen(false);
-                }}
-                className={cn(
-                  "w-full flex items-center gap-2 px-3 py-2 text-left text-xs font-medium",
-                  selectedTool === "video" ? "bg-primary/10 text-primary" : "hover:bg-secondary/60"
+              <div className="relative group/video">
+                <button
+                  type="button"
+                  disabled={!videoEnabled}
+                  onClick={() => {
+                    if (!videoEnabled) return;
+                    const next = selectedTool === "video" ? null : "video";
+                    setSelectedTool(next);
+                    if (next === "video") setVideoOptions(defaultVideoOptions());
+                    setToolsOpen(false);
+                  }}
+                  className={cn(
+                    "w-full flex items-center gap-2 px-3 py-2 text-left text-xs font-medium",
+                    !videoEnabled
+                      ? "opacity-40 cursor-not-allowed"
+                      : "hover:bg-secondary/60"
+                  )}
+                >
+                  <Video className="size-3.5" />
+                  <span className="flex-1">Video generation</span>
+                  {videoEnabled && selectedTool === "video" && <Check className="size-3.5 text-[#000000] dark:text-white" />}
+                </button>
+                {!videoEnabled && (
+                  <div className="absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 rounded-md bg-foreground text-background text-[10px] font-medium whitespace-nowrap opacity-0 group-hover/video:opacity-100 pointer-events-none transition-opacity z-50">
+                    Upgrade your Plan to use this Feature
+                  </div>
                 )}
-              >
-                <Video className="size-3.5" />
-                Video generation
-              </button>
+              </div>
               <button
                 type="button"
                 onClick={() => {
@@ -2161,15 +2208,68 @@ ${bodyRows}
                 }}
                 className={cn(
                   "w-full flex items-center gap-2 px-3 py-2 text-left text-xs font-medium",
-                  selectedTool === "email" ? "bg-primary/10 text-primary" : "hover:bg-secondary/60"
+                  "hover:bg-secondary/60"
                 )}
               >
                 <Mail className="size-3.5" />
-                Email marketing
+                <span className="flex-1">Email marketing</span>
+                {selectedTool === "email" && <Check className="size-3.5 text-[#000000] dark:text-white" />}
               </button>
             </div>
           )}
         </div>
+        {showBrandPicker && (
+          <div className="relative shrink-0" ref={brandPickerRef}>
+            <button
+              type="button"
+              onClick={() => { setBrandPickerOpen((v) => !v); setToolsOpen(false); setOptionsOpen(false); }}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer shrink-0 text-[#000000] dark:text-white hover:text-foreground"
+            >
+              <Palette className="size-3.5" />
+              {brandPickerOpen ? <span className="text-gradient-brand">Brand</span> : "Brand"}
+              <ChevronDown className="size-3.5" />
+            </button>
+            {brandPickerOpen && (
+              <div className="absolute bottom-full left-0 mb-1 w-[200px] rounded-xl border border-border bg-card shadow-lg z-50 py-1">
+                {(allProjects ?? []).map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => {
+                      if (p.id === activeProject.id) {
+                        setBrandPickerOpen(false);
+                        return;
+                      }
+                      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+                      saveCreativeStudioChatToSupabase(workspaceId, projectId, stateRef.current);
+                      setHydrated(false);
+                      setMessages([]);
+                      setPrompt("");
+                      setSelectedTool(null);
+                      setContinuationPrompts([]);
+                      setImageSlidePrompts([]);
+                      setImageOptions(defaultImageOptions());
+                      setVideoOptions(defaultVideoOptions());
+                      setEmailOptions(defaultEmailOptions());
+                      setLikedSnippets([]);
+                      setDislikedSnippets([]);
+                      setSelectedEmailTemplateId(null);
+                      setActiveProject(p);
+                      setBrandPickerOpen(false);
+                    }}
+                    className={cn(
+                      "w-full flex items-center gap-2 px-3 py-2 text-left text-xs font-medium",
+                      "hover:bg-secondary/60"
+                    )}
+                  >
+                    <span className="truncate flex-1">{p.name}</span>
+                    {p.id === activeProject.id && <Check className="size-3.5 shrink-0 text-[#000000] dark:text-white" />}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
       <button
         type="button"
@@ -2329,7 +2429,7 @@ ${bodyRows}
                 className={cn(
                   "rounded-2xl text-sm w-full",
                   msg.role === "user"
-                    ? "px-4 py-3 bg-primary/10"
+                    ? "px-4 py-3 bg-primary/10 dark:bg-card"
                     : (() => {
                         const hasImage = msg.tool === "image" && (msg.imageUrls?.length ?? 0) > 0;
                         const hasVideo = !!msg.videoUrl;
@@ -2664,7 +2764,7 @@ ${bodyRows}
                       <button
                         type="button"
                         onClick={() => handleGoodResponse(i)}
-                        className="size-8 rounded-full flex items-center justify-center text-muted-foreground hover:bg-secondary/60 hover:text-foreground transition-colors cursor-pointer"
+                        className="size-8 rounded-full flex items-center justify-center text-[#000000] dark:text-white hover:bg-secondary/60 hover:text-foreground transition-colors cursor-pointer"
                         aria-label="Good response"
                       >
                         <ThumbsUp className="size-4" />
@@ -2677,7 +2777,7 @@ ${bodyRows}
                       <button
                         type="button"
                         onClick={() => handleBadResponse(i)}
-                        className="size-8 rounded-full flex items-center justify-center text-muted-foreground hover:bg-secondary/60 hover:text-foreground transition-colors cursor-pointer"
+                        className="size-8 rounded-full flex items-center justify-center text-[#000000] dark:text-white hover:bg-secondary/60 hover:text-foreground transition-colors cursor-pointer"
                         aria-label="Bad response"
                       >
                         <ThumbsDown className="size-4" />
@@ -2691,7 +2791,7 @@ ${bodyRows}
                         type="button"
                         onClick={() => handleRedoResponse(i)}
                         disabled={generating}
-                        className="size-8 rounded-full flex items-center justify-center text-muted-foreground hover:bg-secondary/60 hover:text-foreground transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none"
+                        className="size-8 rounded-full flex items-center justify-center text-[#000000] dark:text-white hover:bg-secondary/60 hover:text-foreground transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none"
                         aria-label="Redo"
                       >
                         <RotateCw className="size-4" />
@@ -2704,7 +2804,7 @@ ${bodyRows}
                       <button
                         type="button"
                         onClick={() => handleCopyResponse(i)}
-                        className="size-8 rounded-full flex items-center justify-center text-muted-foreground hover:bg-secondary/60 hover:text-foreground transition-colors cursor-pointer"
+                        className="size-8 rounded-full flex items-center justify-center text-[#000000] dark:text-white hover:bg-secondary/60 hover:text-foreground transition-colors cursor-pointer"
                         aria-label={msg.tool === "email" && msg.emailPayload ? "Copy HTML" : "Copy response"}
                       >
                         <Copy className="size-4" />
@@ -2717,7 +2817,7 @@ ${bodyRows}
                       <button
                         type="button"
                         onClick={() => handleReplyToMessage(i)}
-                        className="size-8 rounded-full flex items-center justify-center text-muted-foreground hover:bg-secondary/60 hover:text-foreground transition-colors cursor-pointer"
+                        className="size-8 rounded-full flex items-center justify-center text-[#000000] dark:text-white hover:bg-secondary/60 hover:text-foreground transition-colors cursor-pointer"
                         aria-label="Reply to this response"
                       >
                         <Reply className="size-4" />
@@ -2735,8 +2835,8 @@ ${bodyRows}
       </div>
 
       {/* Input bar at bottom — sticky so it stays visible while scrolling */}
-      <div className="sticky bottom-0 z-10 shrink-0 px-4 pb-4 pt-2 bg-[#f5f5f5] dark:bg-background">
-        <div className="w-full max-w-2xl mx-auto">
+      <div className="sticky bottom-0 z-10 shrink-0 pt-2 pb-4 w-full max-w-2xl mx-auto">
+        <div className="w-full">
           <div className="relative overflow-visible flex flex-col rounded-2xl border border-border bg-card shadow-none">
             <div className="absolute inset-0 rounded-[inherit] z-10 pointer-events-none">
               <BorderBeam size={80} duration={8} />
