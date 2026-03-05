@@ -2136,7 +2136,7 @@ ${bodyRows}
             onClick={() => { setOptionsOpen((v) => !v); setToolsOpen(false); setBrandPickerOpen(false); }}
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer text-[#000000] dark:text-white hover:text-foreground"
           >
-            <SlidersHorizontal className={cn("size-3.5", optionsOpen && "icon-gradient-brand")} />
+            <SlidersHorizontal className={cn("size-3.5", optionsOpen && "icon-active-creative")} />
             {optionsOpen ? <span className="text-gradient-brand">Options</span> : "Options"}
           </button>
           {optionsOpen && (
@@ -2151,9 +2151,9 @@ ${bodyRows}
             onClick={() => { setToolsOpen((v) => !v); setOptionsOpen(false); setBrandPickerOpen(false); }}
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer shrink-0 text-[#000000] dark:text-white hover:text-foreground"
           >
-            <Hammer className={cn("size-3.5", (toolsOpen || selectedTool) && "icon-gradient-brand")} />
+            <Hammer className={cn("size-3.5", (toolsOpen || selectedTool) && "icon-active-creative")} />
             {toolsOpen || selectedTool ? <span className="text-gradient-brand">Tools</span> : "Tools"}
-            <ChevronDown className={cn("size-3.5", (toolsOpen || selectedTool) && "icon-gradient-brand")} />
+            <ChevronDown className={cn("size-3.5", (toolsOpen || selectedTool) && "icon-active-creative")} />
           </button>
           {toolsOpen && (
             <div className="absolute bottom-full left-0 mb-1 w-[200px] rounded-xl border border-border bg-card shadow-lg z-50 py-1">
@@ -2225,9 +2225,9 @@ ${bodyRows}
               onClick={() => { setBrandPickerOpen((v) => !v); setToolsOpen(false); setOptionsOpen(false); }}
               className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer shrink-0 text-[#000000] dark:text-white hover:text-foreground"
             >
-              <Palette className={cn("size-3.5", brandPickerOpen && "icon-gradient-brand")} />
+              <Palette className={cn("size-3.5", brandPickerOpen && "icon-active-creative")} />
               {brandPickerOpen ? <span className="text-gradient-brand">Brand</span> : "Brand"}
-              <ChevronDown className={cn("size-3.5", brandPickerOpen && "icon-gradient-brand")} />
+              <ChevronDown className={cn("size-3.5", brandPickerOpen && "icon-active-creative")} />
             </button>
             {brandPickerOpen && (
               <div className="absolute bottom-full left-0 mb-1 w-[200px] rounded-xl border border-border bg-card shadow-lg z-50 py-1">

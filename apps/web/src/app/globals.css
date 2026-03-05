@@ -299,6 +299,14 @@
     stroke: url(#brandGradient);
   }
 
+  /* Creative studio bar: icons black/white when active; words stay gradient */
+  .icon-active-creative {
+    stroke: #000;
+  }
+  .dark .icon-active-creative {
+    stroke: #fff;
+  }
+
   .icon-gradient-brand-landing {
     stroke: url(#brandGradientLanding);
   }
