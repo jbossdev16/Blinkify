@@ -294,13 +294,9 @@
     );
   }
 
-  /* Gradient brand color for Lucide (stroke-based) SVG icons */
+  /* Gradient brand color for Lucide (stroke-based) SVG icons – same in light and dark */
   .icon-gradient-brand {
     stroke: url(#brandGradient);
-  }
-
-  .dark .icon-gradient-brand {
-    stroke: white;
   }
 
   .icon-gradient-brand-landing {

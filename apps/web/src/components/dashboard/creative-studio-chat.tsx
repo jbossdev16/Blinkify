@@ -2259,11 +2259,11 @@ ${bodyRows}
                     }}
                     className={cn(
                       "w-full flex items-center gap-2 px-3 py-2 text-left text-xs font-medium",
-                      p.id === activeProject.id ? "bg-primary/10 text-primary" : "hover:bg-secondary/60"
+                      "hover:bg-secondary/60"
                     )}
                   >
                     <span className="truncate flex-1">{p.name}</span>
-                    {p.id === activeProject.id && <Check className="size-3 shrink-0" />}
+                    {p.id === activeProject.id && <Check className="size-3 shrink-0 text-[#000000] dark:text-white" />}
                   </button>
                 ))}
               </div>

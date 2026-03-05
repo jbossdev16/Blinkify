@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import NextImage from "next/image";
 import { cn } from "@/lib/utils";
 
@@ -22,29 +23,31 @@ export function BlinkifyLogo({
   href,
   priority = false,
 }: BlinkifyLogoProps) {
+  const [dark, setDark] = useState(false);
+  useEffect(() => {
+    const el = document.documentElement;
+    const update = () => setDark(el.classList.contains("dark"));
+    update();
+    const obs = new MutationObserver(update);
+    obs.observe(el, { attributes: true, attributeFilter: ["class"] });
+    return () => obs.disconnect();
+  }, []);
+
   const isFull = variant === "full";
   const lightSrc = isFull ? "/logo/blinkify-logo-color.svg" : "/logo/blinkify-icon-color.svg";
   const darkSrc = isFull ? "/logo/blinkify-icon-color-logo-white.svg" : "/logo/blinkify-icon-color.svg";
   const w = isFull ? Math.round(height * 3.2) : height;
+  const src = dark ? darkSrc : lightSrc;
+
   const img = (
-    <>
-      <NextImage
-        src={lightSrc}
-        alt="Blinkify"
-        width={w}
-        height={height}
-        className={cn("object-contain dark:hidden", className)}
-        priority={priority}
-      />
-      <NextImage
-        src={darkSrc}
-        alt="Blinkify"
-        width={w}
-        height={height}
-        className={cn("object-contain hidden dark:block", className)}
-        priority={priority}
-      />
-    </>
+    <NextImage
+      src={src}
+      alt="Blinkify"
+      width={w}
+      height={height}
+      className={cn("object-contain flex items-center", className)}
+      priority={priority}
+    />
   );
 
   if (href) {
