@@ -7,6 +7,7 @@ import { apiFetch, type Project, type BrandFont, type FontStyles } from "@/lib/a
 export interface CreateProjectPayload {
   name: string;
   description: string;
+  target_audience?: string | null;
   brand_colors: string[];
   brand_fonts: BrandFont[];
   brand_logo: string | null;
@@ -27,8 +28,8 @@ export async function createProject(
     }
   );
 
-  revalidatePath("/dashboard");
-  revalidatePath("/dashboard/brand");
+  revalidatePath("/creative-studio");
+  revalidatePath("/brand");
   return project;
 }
 
@@ -45,10 +46,10 @@ export async function updateProject(
     }
   );
 
-  revalidatePath("/dashboard");
-  revalidatePath("/dashboard/brand");
-  revalidatePath(`/dashboard/projects/${projectId}`);
-  revalidatePath(`/dashboard/projects/${projectId}/settings`);
+  revalidatePath("/creative-studio");
+  revalidatePath("/brand");
+  revalidatePath(`/projects/${projectId}`);
+  revalidatePath(`/projects/${projectId}/settings`);
   return project;
 }
 
@@ -60,7 +61,7 @@ export async function deleteProject(
     method: "DELETE",
   });
 
-  revalidatePath("/dashboard");
+  revalidatePath("/creative-studio");
 }
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4001";
@@ -86,9 +87,9 @@ export async function uploadProjectLogo(
   );
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error ?? `Upload failed: ${res.status}`);
-  revalidatePath("/dashboard");
-  revalidatePath("/dashboard/brand");
-  revalidatePath(`/dashboard/projects/${projectId}`);
+  revalidatePath("/creative-studio");
+  revalidatePath("/brand");
+  revalidatePath(`/projects/${projectId}`);
   return data;
 }
 
@@ -113,7 +114,7 @@ export async function uploadProjectAssets(
   );
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error ?? `Upload failed: ${res.status}`);
-  revalidatePath(`/dashboard/projects/${projectId}`);
+  revalidatePath(`/projects/${projectId}`);
   return data;
 }
 
@@ -162,9 +163,9 @@ export async function setProjectLogoFromUrl(
   );
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error((data as { error?: string }).error ?? `Failed to set logo: ${res.status}`);
-  revalidatePath("/dashboard");
-  revalidatePath("/dashboard/brand");
-  revalidatePath(`/dashboard/projects/${projectId}`);
+  revalidatePath("/creative-studio");
+  revalidatePath("/brand");
+  revalidatePath(`/projects/${projectId}`);
   return data as { brand_logo: string };
 }
 

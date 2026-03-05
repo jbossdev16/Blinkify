@@ -12,7 +12,7 @@ export default async function AdminLayout({
   } = await supabase.auth.getUser();
 
   if (!user) {
-    redirect("/signin?returnTo=/dashboard");
+    redirect("/signin?returnTo=/creative-studio");
   }
 
   const adminEmails = (process.env.BLINKIFY_ADMIN_EMAILS ?? "")
@@ -23,7 +23,7 @@ export default async function AdminLayout({
   const isAdmin = user.email && adminEmails.includes(user.email.toLowerCase());
 
   if (!isAdmin) {
-    redirect("/dashboard");
+    redirect("/creative-studio");
   }
 
   return <>{children}</>;

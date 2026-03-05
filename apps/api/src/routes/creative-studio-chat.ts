@@ -7,10 +7,9 @@ import { isUuid } from "../lib/validation.js";
 
 const router = Router();
 
-const CHAT_CREDIT_COST = 1;
-
 /* ─── POST /:workspaceId/projects/:projectId/creative-studio-chat ────────
-   Text-only chat when no tool is selected. Costs 1 credit per message. */
+   Text chat / intent detection. Free — credits are only charged when the
+   frontend calls a generation endpoint (image, video, email). */
 
 router.post(
   "/:workspaceId/projects/:projectId/creative-studio-chat",
@@ -68,19 +67,6 @@ router.post(
         return;
       }
 
-      const { data: workspace } = await supabase
-        .from("workspaces")
-        .select("credits")
-        .eq("id", workspaceId)
-        .single();
-
-      if (!workspace || (workspace.credits ?? 0) < CHAT_CREDIT_COST) {
-        res.status(402).json({
-          error: `Insufficient credits. Chat costs ${CHAT_CREDIT_COST} credit per message.`,
-        });
-        return;
-      }
-
       const { data: project } = await supabase
         .from("projects")
         .select("name, description, target_audience, brand_guidelines")
@@ -95,17 +81,6 @@ router.post(
         { likedSnippets, dislikedSnippets },
         replyTo
       );
-
-      const newBalance = Math.max(0, (workspace.credits ?? 0) - CHAT_CREDIT_COST);
-      await supabase.from("workspaces").update({ credits: newBalance }).eq("id", workspaceId);
-      await supabase.from("credit_transactions").insert({
-        workspace_id: workspaceId,
-        user_id: user.id,
-        type: "chat",
-        amount: -CHAT_CREDIT_COST,
-        balance_after: newBalance,
-        description: "Creative Studio chat (no tool)",
-      });
 
       res.json({ content, intent });
     } catch (err: unknown) {

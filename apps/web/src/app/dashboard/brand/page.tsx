@@ -2,10 +2,16 @@ import { getWorkspaces, apiFetch, getProjectLogoUrl, type Project } from "@/lib/
 import { redirect } from "next/navigation";
 import { CreateProjectFlow } from "@/components/dashboard/create-project-flow";
 import { ProjectSettings } from "@/components/dashboard/project-settings";
+import { getPlanFeatures } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
 
-export default async function BrandPage() {
+interface BrandPageProps {
+  searchParams: Promise<{ project?: string; new?: string }>;
+}
+
+export default async function BrandPage({ searchParams }: BrandPageProps) {
+  const params = await searchParams;
   const { workspaces } = await getWorkspaces();
   const workspace = workspaces?.[0];
 
@@ -21,10 +27,12 @@ export default async function BrandPage() {
     );
     projects = res.projects ?? [];
   } catch {
-    // Show create flow on error so user can retry
+    // fallback
   }
 
-  // No brand yet: show create flow (same as "New project")
+  const planFeatures = getPlanFeatures(workspace.plan);
+
+  // First brand ever — show the onboarding flow
   if (projects.length === 0) {
     return (
       <CreateProjectFlow
@@ -34,15 +42,41 @@ export default async function BrandPage() {
     );
   }
 
-  // One brand: show edit Brand page (use first project)
-  const project = projects[0];
-  const logoUrl = project.brand_logo
-    ? await getProjectLogoUrl(workspace.id, project.id)
+  // New brand slot requested — auto-create a blank project and redirect to it
+  if (params.new === "1" && projects.length < planFeatures.maxBrands) {
+    try {
+      const { project: newProject } = await apiFetch<{ project: Project }>(
+        `/workspaces/${workspace.id}/projects`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            name: `Brand ${projects.length + 1}`,
+            description: "New brand",
+            brand_colors: [],
+            brand_fonts: [],
+            brand_logo: null,
+            brand_guidelines: null,
+          }),
+        }
+      );
+      redirect(`/dashboard/brand?project=${newProject.id}`);
+    } catch (err: unknown) {
+      if ((err as { digest?: string })?.digest?.startsWith("NEXT_REDIRECT")) throw err;
+      // fall through to show first project
+    }
+  }
+
+  const selectedProject = params.project
+    ? projects.find((p) => p.id === params.project) ?? projects[0]
+    : projects[0];
+
+  const logoUrl = selectedProject.brand_logo
+    ? await getProjectLogoUrl(workspace.id, selectedProject.id)
     : null;
 
   return (
     <ProjectSettings
-      project={project}
+      project={selectedProject}
       workspaceId={workspace.id}
       logoUrl={logoUrl}
       brandMode

@@ -58,28 +58,33 @@ export function extractGeminiErrorMessage(err: unknown, fallback: string): strin
 }
 
 /**
- * Nano Banana 3 Pro — primary image generation model.
- * Supports: aspectRatio, imageSize (1K/4K), up to 14 input images.
+ * Nano Banana 2 (Gemini 3.1 Flash Image) — new primary image generation model.
+ * Fast, high-quality, supports 512px/1K/2K/4K, up to 14 input images.
+ * @see https://ai.google.dev/gemini-api/docs/image-generation
  */
-export const IMAGE_MODEL = "gemini-3-pro-image-preview";
+export const IMAGE_MODEL = "gemini-3.1-flash-image-preview";
 
 /**
- * Fallback when primary is busy or fails (503, timeout, etc.).
- * Flash: up to 1K, aspectRatio only (no imageSize in config).
+ * Nano Banana Pro (Gemini 3 Pro Image) — first fallback.
+ * Pro-quality output, supports 1K/2K/4K, up to 14 input images.
  */
-export const IMAGE_MODEL_FALLBACK = "gemini-2.0-flash-exp-image-generation";
+export const IMAGE_MODEL_FALLBACK = "gemini-3-pro-image-preview";
 
 /**
- * Vertex AI image model: GA, supports Priority PayGo, available in global and regional endpoints.
- * Gemini 3 Pro Image (gemini-3-pro-image-preview) is preview and does not support Priority PayGo.
- * @see https://docs.cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/2-5-flash-image
+ * Vertex AI image model (Gemini 2.5 Flash Image) — last-resort fallback.
+ * GA, supports Priority PayGo, available in global and regional endpoints.
  */
 export const VERTEX_IMAGE_MODEL = "gemini-2.5-flash-image";
 
-/** Supported aspect ratios the API accepts. */
+/** Supported aspect ratios. NB2 adds 1:4, 4:1, 1:8, 8:1 and more. */
 export const ASPECT_RATIOS = [
   "1:1",
+  "2:3",
+  "3:2",
+  "3:4",
+  "4:3",
   "4:5",
+  "5:4",
   "9:16",
   "16:9",
   "21:9",
@@ -87,7 +92,7 @@ export const ASPECT_RATIOS = [
 
 export type AspectRatio = (typeof ASPECT_RATIOS)[number];
 
-/** Supported output resolutions (1K and 4K only). */
+/** Supported output resolutions. */
 export const IMAGE_SIZES = ["1K", "4K"] as const;
 
 export type ImageSize = (typeof IMAGE_SIZES)[number];
@@ -126,9 +131,9 @@ export interface GenerateProImageParams {
   aspectRatio: AspectRatio;
   imageSize: ImageSize;
   temperature?: number;
-  /** Vertex model ID. Default: VERTEX_IMAGE_MODEL (2.5 Flash). Use IMAGE_MODEL for Gemini 3 Pro Image. */
+  /** Vertex model ID. Default: VERTEX_IMAGE_MODEL (2.5 Flash). */
   vertexModel?: string;
-  /** Use Priority PayGo headers (only supported for gemini-2.5-flash-image). Ignored for preview models. */
+  /** Use Priority PayGo headers (only supported for VERTEX_IMAGE_MODEL). */
   usePriorityPayGo?: boolean;
 }
 
@@ -139,9 +144,8 @@ export interface GenerateProImageResult {
 }
 
 /**
- * Generate an image on Vertex AI. Default: Gemini 2.5 Flash Image (GA).
- * Use vertexModel=IMAGE_MODEL for Gemini 3 Pro Image (preview, global only).
- * Priority PayGo is only supported for VERTEX_IMAGE_MODEL; use usePriorityPayGo for that model when needed.
+ * Generate an image on Vertex AI. Used as last-resort fallback.
+ * Priority PayGo only supported for VERTEX_IMAGE_MODEL.
  */
 export async function generateProImage(params: GenerateProImageParams): Promise<GenerateProImageResult> {
   const {
@@ -319,11 +323,15 @@ export function buildProjectInstructions(project: {
   brand_guidelines?: string | null;
   brand_logo?: string | null;
   font_styles?: FontStyles | null;
+  website_url?: string | null;
 }): string {
   const parts: string[] = [];
 
   if (project.name) {
     parts.push(`Project: ${project.name}`);
+  }
+  if (project.website_url && typeof project.website_url === "string" && project.website_url.trim()) {
+    parts.push(`Website URL (use for CTA and link buttons in marketing emails): ${project.website_url.trim()}`);
   }
   if (project.brand_logo) {
     parts.push(
@@ -341,12 +349,8 @@ export function buildProjectInstructions(project: {
     const roles: string[] = [];
     if (c[0]) roles.push(`Primary: ${c[0]}`);
     if (c[1]) roles.push(`Secondary: ${c[1]}`);
-    if (c[2]) roles.push(`Accent: ${c[2]}`);
-    if (c[3]) roles.push(`CTA/Button: ${c[3]} (use for buttons and CTAs)`);
-    if (c[4]) roles.push(`Background: ${c[4]} (use for ad background)`);
-    if (c[5]) roles.push(`Headline: ${c[5]} (use for headline text when not overridden by font_styles)`);
     if (roles.length > 0) {
-      parts.push(`Use these colors in ad creatives:\n${roles.join("\n")}`);
+      parts.push(`Brand colors (use Primary for CTA/buttons and headlines; Secondary for supporting elements):\n${roles.join("\n")}\nBackground: always use white (#FFFFFF)\nAccent: always use white (#FFFFFF)`);
     }
   }
   if (project.brand_fonts && project.brand_fonts.length > 0) {
@@ -399,60 +403,78 @@ function isRetryableGeminiError(err: unknown): boolean {
   return false;
 }
 
-const PROMPT_ENHANCE_SYSTEM = `You are Blinkify's prompt enhancement assistant specialized in ad creatives and marketing visuals. You turn a user's rough idea into a detailed, conversion-oriented creative brief for an AI image model — the kind of brief that produces thumb-stopping, campaign-ready assets.
+const PROMPT_ENHANCE_SYSTEM = `You are Blinkify's expert prompt engineer for AI image generation (Gemini Nano Banana 2). Your job: take ANY user idea — even a few words — and produce a single, rich, image-generation-ready prompt that yields a professional, high-converting visual.
 
-PRIORITY:
-- User's prompt is primary: any explicit subject, colors, style, layout, platform, or copy must be followed exactly.
-- Project settings (name, description, brand colors, fonts, font_styles, brand guidelines) are fallback when the user omits details. User says it → use it. User omits it → use project when available, else sensible ad defaults.
+═══ DECISION HIERARCHY ═══
+1. User's explicit words override everything — subject, style, color, copy, layout.
+2. Project settings (brand name, description, target audience, colors, fonts, guidelines) fill gaps the user left open.
+3. When both are silent, apply best-practice defaults for commercial ad creatives.
 
-MARKETING CONTEXT TO CONSIDER (weave into the brief when relevant):
-- Platform & format: Where will this run? (e.g. Meta/Instagram feed, Stories, TikTok, display banner, LinkedIn, Pinterest.) Format dictates aspect ratio, safe zones, and how much text is readable at small size. Stories/vertical need strong top-third hook; feed needs a clear focal point that works at scroll speed.
-- Audience & intent: Who is it for and what action do we want? (awareness, consideration, conversion, retargeting.) Conversion ads need a clear CTA and value clarity; awareness can be more emotional or abstract.
-- Value prop / USP: What single idea or benefit should the creative communicate? Emphasize that in composition and copy placement.
-- Emotional hook: Trust, urgency, aspiration, FOMO, belonging — suggest a tone that fits the offer and audience.
-- Thumb-stopping: In feed, what makes this stop the scroll? (contrast, face, product close-up, bold headline, unexpected color.) Call this out in the brief so the image has a clear "hero" element.
-- Legal / compliance: If the user or project hints at disclaimers, asterisks, or "terms apply," note reserved space (e.g. lower 10% for fine print) without inventing legal text.
+═══ UNDERSTAND WHAT THE USER IS MAKING ═══
+Before writing the prompt, classify intent:
+• PRODUCT AD — hero product shot, packshot, ecommerce listing, product-on-scene.
+• LIFESTYLE / BRAND — aspirational scene showing the product in use or brand world.
+• STATIC AD — social media feed post, story, banner, display ad with headline + CTA.
+• CONTENT / GENERAL — blog hero, social content, mood board, texture, background.
 
-PROJECT SETTINGS YOU MAY RECEIVE:
-- Project name, description — brand context.
-- Target audience — who the brand is for (demographics, interests, pain points). Use this to tailor messaging, imagery, and tone so creatives resonate with the right people.
-- Semantic brand colors: Primary, Secondary, Accent, CTA/Button, Background, Headline (each with hex). Use CTA/Button for buttons and CTAs; Background for ad background; Headline for headline text when not overridden by font_styles. Weave these into the brief so the image model applies them correctly.
-- Brand tone and Industry — use for VALUE & MOOD and SCENE / STYLE so creatives match voice and category.
-- Brand fonts and font_styles (headline, CTA, description: weight, color, size) — MUST be reflected in the TEXT/TYPOGRAPHY section when present so the image model can render text correctly.
-- Brand guidelines — visual rules, do's and don'ts.
+This classification shapes every decision below. A product packshot needs razor-sharp studio lighting and clean background; a lifestyle ad needs environment, models, and emotion; a static ad needs text-safe composition and scroll-stopping contrast.
 
-TEXT IN AD CREATIVES — CRITICAL:
-- Default to including text overlays (headline, CTA, tagline) unless the user says "no text," "product only," "lifestyle only," or similar.
-- When project has font_styles, the enhanced prompt MUST specify those in TEXT/TYPOGRAPHY (exact weights, colors, sizes) so the image model renders text correctly.
-- Use project brand_fonts for typeface when available. If the user gives exact headline or CTA copy, include it verbatim; otherwise suggest a clear CTA (e.g. SHOP NOW, LEARN MORE) and headline placement.
+═══ PRODUCT-SPECIFIC LOGIC ═══
+If the user mentions or implies a specific product:
+- Describe the product in photographic detail: material, finish, color, shape, size, packaging. The image model must render it unmistakably.
+- Choose a scene that sells: studio on seamless paper, marble surface, lifestyle flat lay, in-hand, on-body, in-environment. Match the product category — cosmetics get soft glow, tech gets clean minimal, food gets warm overhead, fashion gets editorial.
+- Angle & crop: 45° hero for most products, flat lay for collections, macro for texture/detail, eye-level for wearables.
+- If the user provided reference images, instruct the model to preserve those products' exact appearance, shape, and branding with high fidelity.
 
-OUTPUT STRUCTURE — Use this structure for high-converting, platform-aware ad creatives. Be thorough; a longer, specific brief yields better images.
+If NO specific product is mentioned:
+- Infer from project name, description, industry, and target audience what kind of visual would serve the brand.
+- Build a scene that communicates the brand's value proposition and resonates with the target audience.
 
-PLATFORM & FORMAT (when inferrable or stated):
-- Where the asset will run and any format constraints (e.g. feed 1:1, story 9:16, safe zones, text legibility at small size).
+═══ COMPOSITION FOR ADS ═══
+- Clear visual hierarchy: one dominant focal element (product or hero subject), supporting elements secondary.
+- Reserve negative space for text unless user said "no text": upper ~25% for headline, lower ~15-20% for CTA. Text area should be a clean, contrasting zone — not cluttered.
+- Thumb-stopping principle: what makes someone stop scrolling? Bold contrast, unexpected color pop, human face with eye contact, extreme close-up detail, or a striking product angle. Call it out.
+- Rule of thirds: place the hero subject at an intersection point. Background supports, never competes.
 
-PRODUCT / SUBJECT:
-- What is being advertised: product type, key design details, materials, quantity. Specific enough that the product is unmistakable. If it's a person or lifestyle shot, describe who and what they're doing.
+═══ TEXT & TYPOGRAPHY IN THE IMAGE ═══
+Default: INCLUDE text (headline + CTA) unless user says "no text", "clean", "product only", or "lifestyle only".
+- If project has font_styles → specify exact weight, color, size for headline, CTA, description text in the prompt.
+- If user gives exact copy → use it verbatim. Otherwise suggest a short, punchy headline and a CTA (SHOP NOW, GET YOURS, LEARN MORE, etc.).
+- Text must be legible: high contrast against background, clean rendering, no small print in the image.
 
-VALUE & MOOD:
-- One clear takeaway or emotional hook. Tone: premium, urgent, playful, trustworthy, etc. Align with audience and intent.
+═══ LIGHTING & PHOTOGRAPHY ═══
+Match lighting to intent:
+- Studio product: three-point soft box, clean white/gradient background, diffused highlights, no harsh shadows.
+- Lifestyle: golden hour for warmth, overcast for soft editorial, dramatic side light for luxury.
+- Flat lay: even overhead lighting, minimal shadows, organized grid layout.
+- All: specify depth of field (shallow for hero focus, deep for scene context), color temperature, and grade.
 
-SCENE / STYLE:
-- Environment (studio, lifestyle, urban, etc.), aesthetic (commercial, editorial, minimal, UGC-style), lighting (studio soft, golden hour, dramatic, flat lay), depth of field, focus, overall mood. Use project brand colors when user omits color.
+═══ BRAND INTEGRATION ═══
+When project settings are available:
+- Brand colors → weave into background, accents, props, lighting gel, clothing, NOT just "use these colors".
+- Brand tone → shapes adjective choices: "premium" = clean/minimal/high-key; "playful" = saturated/bold/dynamic; "trustworthy" = warm/natural/grounded.
+- Target audience → influences model choice (age, ethnicity diversity, styling), environment, and emotional register.
+- Industry → determines visual conventions: beauty = dewy/soft, tech = sleek/dark, food = warm/textured, fashion = editorial/dramatic.
 
-COMPOSITION & HIERARCHY:
-- Focal point and framing. Where is the eye meant to go first? Negative space: upper ~25% for headline, lower ~20% for CTA + optional tagline — reserve unless user asked for no text. Background: uncluttered, on-brand. Any "thumb-stopping" element to call out.
+═══ REFERENCE IMAGES ═══
+If the user is providing reference images (product photos, brand assets, previous creatives):
+- Instruct the model to preserve the referenced product's exact appearance with high fidelity — shape, color, logos, labels, packaging must match.
+- Describe how the reference should be used: "place this exact product in...", "maintain this product's design and place it on...", "use this as the hero product, preserving all details".
 
-TEXT / TYPOGRAPHY:
-- Headline (exact copy or placeholder + placement), CTA (exact copy or e.g. SHOP NOW), optional tagline/description. Use project font_styles and brand_fonts when available. Specify placement and legibility (sharp, high contrast). Omit only if user explicitly requested no text.
+═══ OUTPUT FORMAT ═══
+Write a single, flowing prompt — NOT a sectioned template. Weave all details into a natural, descriptive paragraph that an image model can directly consume. Structure it roughly as:
 
-QUALITY & TECHNICAL:
-- Photorealistic / commercial campaign quality, high detail, crisp textures, ad-ready lighting. No watermarks or unintended branding.
+[What the image shows — subject, product, scene] → [How it looks — style, lighting, camera angle, depth of field] → [Mood and brand feel] → [Text overlays if applicable — exact copy, placement, font style] → [Technical quality notes]
 
-WHAT NOT TO DO:
-- Do not add watermarks, logos, or branding the user didn't mention. Do not change the core idea or introduce new subjects. No copyrighted characters or trademarks. No preamble, meta-commentary, or markdown — only the enhanced prompt.
+RULES:
+- Maximum 4000 characters. No preamble, no markdown, no section headers, no bullet points — just the prompt.
+- Never add watermarks, logos, or elements the user didn't mention.
+- Never change the user's core idea or introduce new subjects.
+- Never use copyrighted characters or trademarks.
+- Be specific and vivid — generic prompts produce generic images. Every adjective should help the model.
+- Photorealistic commercial quality by default unless user requests illustration/graphic style.
 
-OUTPUT: Use the sections above. Include every section that applies; omit only TEXT/TYPOGRAPHY when user asked for no text. Be detailed and specific so the image model has everything it needs. Maximum 4000 characters. No preamble. Output ONLY the enhanced prompt.`;
+OUTPUT: The enhanced prompt only. Nothing else.`;
 
 const PROMPT_ENHANCE_TIMEOUT_MS = 15_000;
 
@@ -601,7 +623,7 @@ RULES BY FIELD:
 - introCopy: LONGER section before the hero image. Write 2–4 short paragraphs (or 5–10 sentences total). Include: a hook that speaks to the reader's situation, 1–2 concrete benefits or outcomes, and a smooth lead-in to the visual. Make it worth reading—substance over fluff. Use line breaks (\\n) between paragraphs.
 - closingCopy: LONGER section after the hero image. Write 2–4 sentences (or a short paragraph). Reinforce the main idea, add a gentle nudge or social proof if it fits the brand, and lead naturally into the CTA. Not repetitive—add something that moves the reader toward action.
 - ctaText: One clear, low-friction action (e.g. "Try it free", "See how it works", "Get started"). Action-oriented but not aggressive.
-- ctaUrl: URL for the CTA. Use "#" if none provided, or a placeholder like "https://example.com" when the user does not give one.
+- ctaUrl: URL for the CTA. When the project context includes a "Website URL", use that exact URL for ctaUrl so email buttons link to the brand's site. Use "#" only if no website URL is in the context and the user does not specify a link. Do not use placeholders like https://example.com when a real website URL is provided in the context.
 
 Use the project context (brand name, description, tone, guidelines) and the user's campaign prompt. Match brand voice. Output only valid JSON on a single line. Escape quotes and newlines inside strings (use \\n for line breaks).`;
 
@@ -666,52 +688,62 @@ export async function generateEmailCopy(
   const raw = result.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
   if (!raw) return DEFAULT_EMAIL_COPY;
 
-  const firstLine = raw.split("\n")[0]?.trim() ?? "";
-  try {
-    const parsed = JSON.parse(firstLine) as Record<string, unknown>;
-    return {
-      subjectLine: sanitizeEmailCopyField(parsed.subjectLine, 200) || DEFAULT_EMAIL_COPY.subjectLine,
-      headline: sanitizeEmailCopyField(parsed.headline, 300) || DEFAULT_EMAIL_COPY.headline,
-      introCopy: sanitizeEmailCopyField(parsed.introCopy, 2800) || DEFAULT_EMAIL_COPY.introCopy,
-      closingCopy: sanitizeEmailCopyField(parsed.closingCopy, 1200) || DEFAULT_EMAIL_COPY.closingCopy,
-      ctaText: sanitizeEmailCopyField(parsed.ctaText, 80) || DEFAULT_EMAIL_COPY.ctaText,
-      ctaUrl:
-        parsed.ctaUrl != null && typeof parsed.ctaUrl === "string" && parsed.ctaUrl.trim()
-          ? parsed.ctaUrl.trim().slice(0, 2048)
-          : null,
-    };
-  } catch {
-    return DEFAULT_EMAIL_COPY;
+  let parsed: Record<string, unknown> | null = null;
+  // Try full response first (LLM may return multiline JSON), then first line only
+  for (const candidate of [raw, raw.split("\n")[0]?.trim() ?? ""]) {
+    if (!candidate) continue;
+    // Strip markdown code fences if present
+    const cleaned = candidate.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "").trim();
+    try { parsed = JSON.parse(cleaned) as Record<string, unknown>; break; } catch { /* try next */ }
   }
+  if (!parsed) return DEFAULT_EMAIL_COPY;
+
+  return {
+    subjectLine: sanitizeEmailCopyField(parsed.subjectLine, 200) || DEFAULT_EMAIL_COPY.subjectLine,
+    headline: sanitizeEmailCopyField(parsed.headline, 300) || DEFAULT_EMAIL_COPY.headline,
+    introCopy: sanitizeEmailCopyField(parsed.introCopy, 2800) || DEFAULT_EMAIL_COPY.introCopy,
+    closingCopy: sanitizeEmailCopyField(parsed.closingCopy, 1200) || DEFAULT_EMAIL_COPY.closingCopy,
+    ctaText: sanitizeEmailCopyField(parsed.ctaText, 80) || DEFAULT_EMAIL_COPY.ctaText,
+    ctaUrl:
+      parsed.ctaUrl != null && typeof parsed.ctaUrl === "string" && parsed.ctaUrl.trim()
+        ? parsed.ctaUrl.trim().slice(0, 2048)
+        : null,
+  };
 }
 
 /* ─── Creative Studio chat (text-only, no tool) ─────────────────────────── */
 
-const CREATIVE_STUDIO_CHAT_SYSTEM = `You are Blinkify's Creative Studio assistant. You ONLY help with brand, marketing, advertising, and creative work.
+const CREATIVE_STUDIO_CHAT_SYSTEM = `You are Blinkify's Creative Studio assistant — an expert in brand strategy, marketing, advertising, and creative work.
 
-SCOPE — You must ONLY answer when the user's message is clearly about:
-- Their brand, project, or business (e.g. brand voice, guidelines, positioning).
-- Marketing, ads, or campaigns (e.g. ad copy, headlines, CTAs, audience, channels).
-- Creative work: prompts for images/videos, ideas for creatives, visual direction, email marketing, social content.
-- How to use Blinkify or improve their creatives (e.g. "how do I get better ad images?", "what prompt works for product shots?").
+SCOPE — Answer anything related to:
+- Brand strategy, positioning, voice, guidelines, identity, storytelling.
+- Marketing in general: concepts, strategies, channels, best practices, trends, frameworks, terminology, history, comparisons.
+- Ads and campaigns: ad copy, headlines, CTAs, audience targeting, budgeting, performance, A/B testing.
+- Creative work: prompts for images/videos, visual direction, email marketing, social content, design principles.
+- How to use Blinkify or improve creatives.
+- Business and entrepreneurship questions that relate to marketing, growth, or branding.
 
-OFF-TOPIC — If the user asks about anything else (general knowledge, coding, homework, recipes, weather, jokes, poems, unrelated trivia, personal advice, etc.), do NOT answer. Set content to a short, polite refusal and intent to null. Example: "I'm here to help with your brand and marketing only — things like ad copy, creative prompts, and campaign ideas. Ask me about your project or creatives and I'll help!"
+You SHOULD answer general marketing knowledge questions (e.g. "what is marketing", "explain SEO", "tell me about social media marketing", "what are the 4 Ps"). These are fully in scope. Be thorough and helpful.
 
-First decide what the user wants: a TEXT reply, to GENERATE an image, or to GENERATE a video. Respond with a single line of JSON only: {"content":"...","intent":"image"|"video"|null}
+OFF-TOPIC — Only refuse if the question has zero connection to marketing, branding, advertising, business, or creative work (e.g. coding, homework, recipes, weather, math, personal advice). Set content to a short polite refusal and intent to null. Example: "I'm here to help with marketing, branding, and creative work. Ask me anything in that space!"
+
+First decide what the user wants: a TEXT reply, to GENERATE an image, to GENERATE a video, or to CREATE an email. Respond with a single line of JSON only: {"content":"...","intent":"image"|"video"|"email"|null}
 
 INTENT = null (text only) when the user wants:
-- A written prompt, copy, or idea (e.g. "give me a prompt for ad creative", "what prompt should I use", "I need a prompt for…", "write me a prompt", "suggest a prompt", "ideas for an ad").
-- Advice, suggestions, questions, feedback, or discussion (e.g. "how do I…", "what's best for…", "can you help with…") — but ONLY if it is about brand/marketing/creatives; otherwise refuse as above.
-- Anything that is not clearly "create/generate/make an image or video right now".
-For intent null: set content to your full helpful reply (under 300 words), or to the short refusal if off-topic. You may use *asterisks* for emphasis (shown as bold). If they asked for a prompt, put the actual prompt or prompt options in content — do not use a placeholder.
+- A written prompt, copy, or idea.
+- Advice, suggestions, questions, feedback, discussion, or knowledge about marketing/branding/creative topics.
+- Anything that is not clearly "create/generate/make an image, video, or email right now".
+For intent null: set content to your full helpful reply. Be thorough — use up to 800 words when the question deserves a detailed answer. Use shorter replies for simple questions. You may use *asterisks* for emphasis (shown as bold) and \\n for line breaks. Always give complete answers — never cut off mid-sentence or mid-list.
 
 INTENT = "image" only when the user clearly wants to CREATE/GENERATE an image now (e.g. "create an ad", "make an image of X", "generate a photo of Y"). Set content to a single short phrase like "Creating your ad creative…" (no explanation).
 
 INTENT = "video" only when the user clearly wants to CREATE/GENERATE a video now (e.g. "make a video", "create a video ad"). Set content to "Creating your video…".
 
-Output exactly one line: valid JSON with "content" (string) and "intent" ("image" | "video" | null). No other text. Use \\n for line breaks inside content so the JSON stays on one line.`;
+INTENT = "email" when the user wants to CREATE/GENERATE a marketing email, email campaign, email creative, or newsletter (e.g. "create a marketing email", "make an email that converts", "generate an email campaign", "email for our product launch"). Set content to "Creating your email creative…" (no explanation).
 
-export type CreativeStudioChatResult = { content: string; intent: "image" | "video" | null };
+Output exactly one line: valid JSON with "content" (string) and "intent" ("image" | "video" | "email" | null). No other text. Use \\n for line breaks inside content so the JSON stays on one line.`;
+
+export type CreativeStudioChatResult = { content: string; intent: "image" | "video" | "email" | null };
 
 /** When the user is replying to a specific message (e.g. to adjust an image or ask about a video). */
 export type ReplyToContext = {
@@ -786,36 +818,39 @@ export async function chatForCreativeStudio(
     contents: [{ text: userContent }],
     config: {
       systemInstruction: CREATIVE_STUDIO_CHAT_SYSTEM,
-      temperature: 0.3,
-      maxOutputTokens: 4096,
-      httpOptions: { timeout: 30_000 },
+      temperature: 0.4,
+      maxOutputTokens: 8192,
+      httpOptions: { timeout: 45_000 },
     },
   });
 
   const raw = result.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
   if (!raw) return { content: "I couldn't generate a response. Please try again.", intent: null };
 
-  const firstLine = raw.split("\n")[0]?.trim() ?? "";
-  try {
-    const parsed = JSON.parse(firstLine) as { content?: string; intent?: string };
+  let parsed: { content?: string; intent?: string } | null = null;
+  for (const candidate of [raw, raw.split("\n")[0]?.trim() ?? ""]) {
+    if (!candidate) continue;
+    const cleaned = candidate.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "").trim();
+    try { parsed = JSON.parse(cleaned) as { content?: string; intent?: string }; break; } catch { /* try next */ }
+  }
+  if (parsed) {
     const content = typeof parsed.content === "string" ? parsed.content : raw;
     const intent =
-      parsed.intent === "image" || parsed.intent === "video" ? parsed.intent : null;
+      parsed.intent === "image" || parsed.intent === "video" || parsed.intent === "email" ? parsed.intent : null;
     return { content, intent };
-  } catch {
-    const extracted = extractContentFromCreativeStudioRaw(raw);
-    return { content: extracted.content, intent: extracted.intent };
   }
+  const extracted = extractContentFromCreativeStudioRaw(raw);
+  return { content: extracted.content, intent: extracted.intent };
 }
 
 /** When JSON parse fails (e.g. truncated response), extract content so we never show raw JSON. */
 function extractContentFromCreativeStudioRaw(raw: string): {
   content: string;
-  intent: "image" | "video" | null;
+  intent: "image" | "video" | "email" | null;
 } {
-  let intent: "image" | "video" | null = null;
-  const intentMatch = raw.match(/"intent"\s*:\s*"(image|video)"/);
-  if (intentMatch) intent = intentMatch[1] as "image" | "video";
+  let intent: "image" | "video" | "email" | null = null;
+  const intentMatch = raw.match(/"intent"\s*:\s*"(image|video|email)"/);
+  if (intentMatch) intent = intentMatch[1] as "image" | "video" | "email";
 
   const contentPrefix = '"content"';
   const startIdx = raw.indexOf(contentPrefix);
@@ -1069,9 +1104,9 @@ export async function extractColorsFromLogoImage(logoUrl: string): Promise<strin
 
 Step 1: Scan the image and identify the colors in it. What are the main colors you see? (e.g. one blue, one red, black, white—whatever is actually in the logo.)
 
-Step 2: Decide how those colors should be used for brand roles. Output exactly 6 hex codes in this order: [primary, secondary, accent, cta/button, background, headline]. Use only colors you see in the logo; you choose which color goes to which role. If the logo has fewer than 6 colors, repeat some and use #000000 or #ffffff only where it makes sense (e.g. background or headline).
+Step 2: Decide how those colors should be used for brand roles. Output exactly 3 hex codes in this order: [primary, secondary, accent]. Use only colors you see in the logo; you choose which color goes to which role. If the logo has fewer than 3 distinct colors, repeat some. Background and accent are always white (#FFFFFF) in the final output — so focus on picking strong primary and secondary colors.
 
-Return a JSON object with one key: "suggestedColors", an array of exactly 6 hex codes. Output only the JSON object, one line, no other text.`;
+Return a JSON object with one key: "suggestedColors", an array of exactly 3 hex codes. Output only the JSON object, one line, no other text.`;
 
   const contents = [createPartFromText(prompt), createPartFromBase64(base64, mime)];
   const genConfig = { temperature: 0.2, maxOutputTokens: 256, httpOptions: { timeout: LOGO_COLORS_TIMEOUT_MS } };

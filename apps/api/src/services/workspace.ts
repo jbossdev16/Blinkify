@@ -1,17 +1,6 @@
 import { supabase } from "../lib/supabase.js";
+import { PLAN_CONFIG } from "../lib/plan-config.js";
 import crypto from "crypto";
-
-// ─── Plan limits ─────────────────────────────────────────────────────────────
-// Defines max workspaces per plan. Update here as plans change.
-// The API checks this before allowing workspace creation.
-
-const PLAN_MAX_WORKSPACES: Record<string, number> = {
-  trial: 1,
-  standard: 1,
-  pro: 3,
-  agency: 5,
-  enterprise: 10,
-};
 
 const TRIAL_DURATION_DAYS = 7;
 const TRIAL_CREDITS = 150;
@@ -125,7 +114,7 @@ export async function ensureWorkspace(params: EnsureWorkspaceParams) {
   const trialEndsAt = new Date();
   trialEndsAt.setDate(trialEndsAt.getDate() + TRIAL_DURATION_DAYS);
 
-  const maxWorkspaces = PLAN_MAX_WORKSPACES["trial"] ?? 1;
+  const maxWorkspaces = PLAN_CONFIG["trial"]?.maxWorkspaces ?? 1;
 
   const { data: workspace, error: wsError } = await supabase
     .from("workspaces")

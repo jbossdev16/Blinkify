@@ -20,7 +20,7 @@ export default async function AssetCollectionPage() {
       <NoProjectEmptyState
         title="Asset Collection"
         description="No workspace found. Try refreshing the page or go to the dashboard."
-        ctaHref="/dashboard"
+        ctaHref="/creative-studio"
         ctaLabel="Go to Dashboard"
         icon={Bookmark}
       />

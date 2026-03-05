@@ -41,6 +41,12 @@ export default async function DashboardLayout({
     // API unreachable or other error — continue with null; pages show fallback
   }
 
+  const adminEmails = (process.env.BLINKIFY_ADMIN_EMAILS ?? "")
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+  const isAdmin = !!(user.email && adminEmails.includes(user.email.toLowerCase()));
+
   return (
     <DashboardTheme>
       <DashboardShell
@@ -51,6 +57,7 @@ export default async function DashboardLayout({
         }}
         plan={workspace?.plan ?? null}
         credits={workspace?.credits ?? null}
+        isAdmin={isAdmin}
       >
         {children}
       </DashboardShell>

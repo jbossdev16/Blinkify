@@ -39,7 +39,6 @@ Next.js embeds `NEXT_PUBLIC_*` at **build time**. Set these in the environment w
 | `NEXT_PUBLIC_SUPABASE_URL` | **Yes** | Same production Supabase project URL as the API. |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | **Yes** | Same production Supabase anon key. |
 | `NEXT_PUBLIC_APP_URL` | No | Public site URL for sitemap, robots, canonicals, and metadata. Use `https://blinkify.ai` for the **marketing site** (indexed). Use `https://app.blinkify.ai` for the **webapp** (noindex, not in sitemap). Defaults to `https://blinkify.ai` if unset. |
-| `NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION` | No | Google Search Console verification meta tag content. When set, adds `<meta name="google-site-verification" content="…">` for faster indexing. See `docs/SEO_AND_INDEXING.md`. |
 | `BLINKIFY_ADMIN_EMAILS` | No | Comma-separated emails for admin-only routes (e.g. `/dashboard/admin`). Server-only; do not use `NEXT_PUBLIC_` so admin list is not exposed to the client. |
 
 **Checklist**

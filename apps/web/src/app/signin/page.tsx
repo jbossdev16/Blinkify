@@ -1,8 +1,7 @@
 "use client";
 
-import * as React from "react";
 import { useState, useEffect, Suspense } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -14,9 +13,9 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4001";
 
 /** Allow only relative app paths to prevent open redirects. */
 function safeReturnTo(value: string | null): string {
-  if (!value || typeof value !== "string") return "/dashboard";
+  if (!value || typeof value !== "string") return "/creative-studio";
   const path = value.trim();
-  if (!path.startsWith("/") || path.includes("//") || path.includes(":")) return "/dashboard";
+  if (!path.startsWith("/") || path.includes("//") || path.includes(":")) return "/creative-studio";
   return path;
 }
 
@@ -137,39 +136,20 @@ type FormErrors = { email?: string; password?: string; form?: string };
 
 type ForgotErrors = { email?: string; form?: string };
 
-type SearchParams = Promise<Record<string, string | string[] | undefined>>;
-
-function getSearchParam(
-  params: Record<string, string | string[] | undefined> | null,
-  key: string
-): string | null {
-  if (!params || !(key in params)) return null;
-  const v = params[key];
-  return Array.isArray(v) ? (v[0] ?? null) : (v ?? null);
-}
-
-export default function SigninPage({
-  searchParams,
-}: {
-  searchParams?: SearchParams;
-}) {
-  const resolved = React.use(searchParams ?? Promise.resolve({}));
+export default function SigninPage() {
   return (
     <Suspense>
-      <SigninContent searchParams={resolved} />
+      <SigninContent />
     </Suspense>
   );
 }
 
-function SigninContent({
-  searchParams,
-}: {
-  searchParams: Record<string, string | string[] | undefined> | null;
-}) {
+function SigninContent() {
   const marqueeImages = useShuffledImages();
   const router = useRouter();
-  const returnTo = safeReturnTo(getSearchParam(searchParams, "returnTo"));
-  const verified = getSearchParam(searchParams, "verified") === "true";
+  const searchParams = useSearchParams();
+  const returnTo = safeReturnTo(searchParams.get("returnTo"));
+  const verified = searchParams.get("verified") === "true";
   const supabase = createSupabaseBrowserClient();
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [email, setEmail] = useState("");

@@ -3,10 +3,12 @@ import { notFound, redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
-export default async function ProjectPage(props: {
+export default async function ProjectPage({
+  params,
+}: {
   params: Promise<{ id: string }>;
 }) {
-  const { id } = await props.params;
+  const { id } = await params;
 
   const { workspaces } = await getWorkspaces();
   const workspace = workspaces?.[0];
@@ -20,5 +22,5 @@ export default async function ProjectPage(props: {
     return notFound();
   }
 
-  redirect(`/dashboard/creative-studio?project=${id}`);
+  redirect(`/creative-studio?project=${id}`);
 }

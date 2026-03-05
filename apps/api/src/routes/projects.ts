@@ -7,6 +7,7 @@ import { ensureCurrentUser } from "../middleware/currentUser.js";
 import { supabase } from "../lib/supabase.js";
 import { isUuid, isAllowedWebsiteUrl } from "../lib/validation.js";
 import { SIGNED_URL_EXPIRY_SECONDS } from "../lib/storage-constants.js";
+import { getPlanConfig } from "../lib/plan-config.js";
 import { fetchAndParseWebsite, styleValueToHex } from "../lib/fetch-website.js";
 import { suggestBrandFromWebsite, extractColorsFromLogoImage, isMostlyGrayscale, translateToEnglish, extractGeminiErrorMessage } from "../lib/gemini.js";
 
@@ -144,6 +145,27 @@ router.post(
 
       if (!membership) {
         res.status(403).json({ error: "Not a workspace member" });
+        return;
+      }
+
+      const { data: workspace } = await supabase
+        .from("workspaces")
+        .select("plan")
+        .eq("id", workspaceId)
+        .single();
+
+      const planConfig = getPlanConfig(workspace?.plan ?? "trial");
+
+      const { count: existingProjects } = await supabase
+        .from("projects")
+        .select("id", { count: "exact", head: true })
+        .eq("workspace_id", workspaceId)
+        .is("deleted_at", null);
+
+      if ((existingProjects ?? 0) >= planConfig.maxBrands) {
+        res.status(403).json({
+          error: `Brand limit reached. Your ${workspace?.plan ?? "trial"} plan allows up to ${planConfig.maxBrands} brand${planConfig.maxBrands > 1 ? "s" : ""}. Upgrade to add more.`,
+        });
         return;
       }
 
@@ -384,6 +406,13 @@ router.put(
         brandUpdates.website_url = raw.length > 0 ? raw.slice(0, 2048) : null;
       }
 
+      if (req.body?.target_audience !== undefined) {
+        updates.target_audience =
+          typeof req.body.target_audience === "string"
+            ? req.body.target_audience.trim().slice(0, 500) || null
+            : null;
+      }
+
       // Try with brand fields; fall back to base-only if columns don't exist yet
       let project;
       let error;
@@ -582,9 +611,9 @@ router.post(
 
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), LOGO_FETCH_TIMEOUT_MS);
-      let imageRes: globalThis.Response;
+      let fetchRes: globalThis.Response;
       try {
-        imageRes = await fetch(url, {
+        fetchRes = await fetch(url, {
           signal: controller.signal,
           headers: {
             "User-Agent": "Mozilla/5.0 (compatible; BlinkifyBrandBot/1.0)",
@@ -595,16 +624,20 @@ router.post(
         clearTimeout(timeout);
       }
 
-      if (!imageRes.ok) {
+      if (!fetchRes.ok) {
         res.status(400).json({ error: "Could not download image from URL" });
         return;
       }
-      const contentType = imageRes.headers.get("content-type") ?? "";
+      const contentType = fetchRes.headers.get("content-type") ?? "";
       if (!contentType.toLowerCase().startsWith("image/")) {
         res.status(400).json({ error: "URL did not return an image" });
         return;
       }
-      const buf = Buffer.from(await imageRes.arrayBuffer());
+      if (contentType.toLowerCase().includes("svg")) {
+        res.status(400).json({ error: "SVG logos are not supported. Please use a PNG, JPEG, or WebP image." });
+        return;
+      }
+      const buf = Buffer.from(await fetchRes.arrayBuffer());
       if (buf.length > LOGO_MAX_BYTES) {
         res.status(400).json({ error: "Image too large (max 5MB)" });
         return;
@@ -713,32 +746,28 @@ router.post(
       const themeHex = extract.themeColor?.trim();
       const hasValidTheme = themeHex && /^#[0-9a-fA-F]{6}$/.test(themeHex);
       if (hasValidTheme) {
-        suggestions.suggestedColors = [themeHex, ...suggestions.suggestedColors].slice(0, 6);
+        suggestions.suggestedColors = [themeHex, ...suggestions.suggestedColors].slice(0, 3);
       } else {
-        const logoUrlForColors = extract.logoUrlForColors ?? extract.suggestedLogoUrl ?? "";
-        let logoColors = await extractColorsFromLogoImage(logoUrlForColors);
-        if (logoColors.length > 0 && isMostlyGrayscale(logoColors)) {
-          const fallbackUrl = extract.suggestedLogoUrl?.trim();
-          if (fallbackUrl && fallbackUrl !== logoUrlForColors) {
-            const fallbackColors = await extractColorsFromLogoImage(fallbackUrl);
-            if (fallbackColors.length > 0 && !isMostlyGrayscale(fallbackColors)) logoColors = fallbackColors;
+        try {
+          const logoUrlForColors = extract.logoUrlForColors ?? extract.suggestedLogoUrl ?? "";
+          let logoColors = await extractColorsFromLogoImage(logoUrlForColors);
+          if (logoColors.length > 0 && isMostlyGrayscale(logoColors)) {
+            const fallbackUrl = extract.suggestedLogoUrl?.trim();
+            if (fallbackUrl && fallbackUrl !== logoUrlForColors) {
+              const fallbackColors = await extractColorsFromLogoImage(fallbackUrl);
+              if (fallbackColors.length > 0 && !isMostlyGrayscale(fallbackColors)) logoColors = fallbackColors;
+            }
           }
+          if (logoColors.length > 0) suggestions.suggestedColors = logoColors.slice(0, 3);
+        } catch (colorErr) {
+          console.warn("extractColorsFromLogoImage failed, using defaults:", (colorErr as Error).message);
         }
-        if (logoColors.length > 0) suggestions.suggestedColors = logoColors;
       }
-      const defaults = ["#1a1a1a", "#666666", "#007AFF", "#2563eb", "#ffffff", "#1a1a1a"];
+      const defaults = ["#000000", "#666666", "#FFFFFF"];
       const colors = [...suggestions.suggestedColors];
-      while (colors.length < 6) colors.push("#ffffff");
+      while (colors.length < 3) colors.push(defaults[colors.length] ?? "#000000");
       const hex6 = /^#[0-9a-fA-F]{6}$/;
-      if (extract.backgroundColor) {
-        const bg = styleValueToHex(extract.backgroundColor);
-        if (bg && hex6.test(bg)) colors[4] = bg;
-      }
-      if (extract.ctaColor) {
-        const cta = styleValueToHex(extract.ctaColor);
-        if (cta && hex6.test(cta)) colors[3] = cta;
-      }
-      suggestions.suggestedColors = colors.slice(0, 6).map((c, i) => {
+      suggestions.suggestedColors = colors.slice(0, 3).map((c, i) => {
         const hex = typeof c === "string" ? styleValueToHex(c) : null;
         return hex && hex6.test(hex) ? hex : defaults[i]!;
       });

@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { updateProject, deleteProject, uploadProjectLogo, setProjectLogoFromUrl, analyzeWebsite } from "@/app/dashboard/actions";
+import { updateProject, deleteProject, uploadProjectLogo, setProjectLogoFromUrl, analyzeWebsite } from "@/app/(app)/actions";
 import type { Project, BrandFont, FontStyles, FontStyleElement } from "@/lib/api";
 
 /* ─── Constants ───────────────────────────────────────────────────────── */
@@ -132,7 +132,7 @@ const GRADIENT_LINE_STARTS = /^GRADIENT:/i;
 
 type ColorSlotGradient = { angle: number; colors: string[] };
 
-const COLOR_SLOT_COUNT = 6;
+const COLOR_SLOT_COUNT = 3;
 
 function parseSlotGradientsFromGuidelines(guidelines: string): { slotGradients: ColorSlotGradient[]; rest: string } {
   const lines = guidelines.split(/\n/);
@@ -217,22 +217,20 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteInput, setDeleteInput] = useState("");
   const [error, setError] = useState("");
-  const [newColor, setNewColor] = useState("#007AFF");
+  const [newColor, setNewColor] = useState("#FFFFFF");
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   /** Logo URL we just applied from "Apply Brand" — shown without router.refresh() so other fields (colors, etc.) are not reverted. */
   const [appliedLogoUrl, setAppliedLogoUrl] = useState<string | null>(null);
 
   const [name, setName] = useState(project.name);
   const [description, setDescription] = useState(project.description ?? "");
+  const [targetAudience, setTargetAudience] = useState(project.target_audience ?? "");
   const [brandColors, setBrandColors] = useState<string[]>(() => {
     const c = project.brand_colors ?? [];
     return [
       c[0] ?? "#000000",
       c[1] ?? "#666666",
-      c[2] ?? "#007AFF",
-      c[3] ?? "#2563eb",
-      c[4] ?? "#ffffff",
-      c[5] ?? "#1a1a1a",
+      c[2] ?? "#FFFFFF",
     ];
   });
   const [brandFonts, setBrandFonts] = useState<BrandFont[]>(project.brand_fonts ?? []);
@@ -274,10 +272,7 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
         ? [
             c[0] ?? "#000000",
             c[1] ?? "#666666",
-            c[2] ?? "#007AFF",
-            c[3] ?? "#2563eb",
-            c[4] ?? "#ffffff",
-            c[5] ?? "#1a1a1a",
+            c[2] ?? "#FFFFFF",
           ]
         : c
     );
@@ -354,6 +349,7 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
       const updatedProject = await updateProject(workspaceId, project.id, {
         name: trimmedName,
         description: description.trim(),
+        target_audience: targetAudience.trim() || null,
         brand_colors: brandColorsForSave,
         brand_fonts: brandFonts,
         font_styles: Object.keys(fontStyles).length > 0 ? fontStyles : null,
@@ -363,16 +359,14 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
       lastSaveAtRef.current = Date.now();
       setName(updatedProject.name);
       setDescription(updatedProject.description ?? "");
+      setTargetAudience(updatedProject.target_audience ?? "");
       const c = updatedProject.brand_colors ?? [];
       setBrandColors(
         brandMode
           ? [
               c[0] ?? "#000000",
               c[1] ?? "#666666",
-              c[2] ?? "#007AFF",
-              c[3] ?? "#2563eb",
-              c[4] ?? "#ffffff",
-              c[5] ?? "#1a1a1a",
+              c[2] ?? "#FFFFFF",
             ]
           : c
       );
@@ -408,7 +402,7 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
     try {
       await deleteProject(workspaceId, project.id);
       toast.success("Project deleted.");
-      router.push("/dashboard");
+      router.push("/creative-studio");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to delete");
       setDeleting(false);
@@ -436,22 +430,13 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
   /* ── Brand helpers ── */
 
   function setPrimaryColor(hex: string) {
-    setBrandColors([hex, brandColors[1] ?? "#666666", brandColors[2] ?? "#007AFF", brandColors[3] ?? "#2563eb", brandColors[4] ?? "#ffffff", brandColors[5] ?? "#1a1a1a"]);
+    setBrandColors([hex, brandColors[1] ?? "#666666", brandColors[2] ?? "#FFFFFF"]);
   }
   function setSecondaryColor(hex: string) {
-    setBrandColors([brandColors[0] ?? "#000000", hex, brandColors[2] ?? "#007AFF", brandColors[3] ?? "#2563eb", brandColors[4] ?? "#ffffff", brandColors[5] ?? "#1a1a1a"]);
+    setBrandColors([brandColors[0] ?? "#000000", hex, brandColors[2] ?? "#FFFFFF"]);
   }
   function setAccentColor(hex: string) {
-    setBrandColors([brandColors[0] ?? "#000000", brandColors[1] ?? "#666666", hex, brandColors[3] ?? "#2563eb", brandColors[4] ?? "#ffffff", brandColors[5] ?? "#1a1a1a"]);
-  }
-  function setCtaColor(hex: string) {
-    setBrandColors([brandColors[0] ?? "#000000", brandColors[1] ?? "#666666", brandColors[2] ?? "#007AFF", hex, brandColors[4] ?? "#ffffff", brandColors[5] ?? "#1a1a1a"]);
-  }
-  function setBackgroundColor(hex: string) {
-    setBrandColors([brandColors[0] ?? "#000000", brandColors[1] ?? "#666666", brandColors[2] ?? "#007AFF", brandColors[3] ?? "#2563eb", hex, brandColors[5] ?? "#1a1a1a"]);
-  }
-  function setHeadlineColor(hex: string) {
-    setBrandColors([brandColors[0] ?? "#000000", brandColors[1] ?? "#666666", brandColors[2] ?? "#007AFF", brandColors[3] ?? "#2563eb", brandColors[4] ?? "#ffffff", hex]);
+    setBrandColors([brandColors[0] ?? "#000000", brandColors[1] ?? "#666666", hex]);
   }
 
   function setSlotMode(slotIndex: number, mode: "solid" | "gradient") {
@@ -549,9 +534,9 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
       if (typeof primaryFont === "string" && primaryFont.trim()) {
         setBrandFonts([{ name: primaryFont.trim(), type: "preset" }]);
       }
-      const neutrals = ["#1a1a1a", "#666666", "#ffffff", "#f5f5f5", "#e5e5e5", "#d4d4d4"];
-      const colors = suggestions.suggestedColors.filter((c) => typeof c === "string" && /^#[0-9a-fA-F]{6}$/.test(c)).slice(0, 6);
-      const padded = colors.length >= 6 ? colors : [...colors, ...neutrals].slice(0, 6);
+      const neutrals = ["#000000", "#666666", "#FFFFFF"];
+      const colors = suggestions.suggestedColors.filter((c) => typeof c === "string" && /^#[0-9a-fA-F]{6}$/.test(c)).slice(0, 3);
+      const padded = colors.length >= 3 ? colors : [...colors, ...neutrals].slice(0, 3);
       setBrandColors(padded);
       setColorSlotModes(Array.from({ length: COLOR_SLOT_COUNT }, () => "solid"));
       setColorSlotGradients(Array.from({ length: COLOR_SLOT_COUNT }, (_, i) => ({ angle: 90, colors: padded[i] ? [padded[i]] : [] })));
@@ -698,32 +683,41 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
               <p className="text-sm text-muted-foreground mt-2">{name.length}/100</p>
             </BrandCard>
 
-            {/* Row 1-5: Colors (cols 5-6) — right column, no overlap with Guidelines */}
-            <BrandCard label="Colors" className="col-start-5 col-end-7 row-start-1 row-span-4 min-h-[20rem]">
+            {/* Row 4: Website link for email CTAs (cols 3-5) */}
+            <BrandCard label="Website link" className="col-start-3 col-end-5 row-start-4" footerRight="For email CTAs">
+              <input
+                type="url"
+                value={websiteUrl}
+                onChange={(e) => setWebsiteUrl(e.target.value)}
+                placeholder="https://yourstore.com"
+                className="w-full bg-transparent text-sm placeholder:text-muted-foreground focus:outline-none py-1 border-b border-transparent hover:border-border focus:border-primary/50 transition-colors"
+              />
+              <p className="text-xs text-muted-foreground mt-2">Used for link and CTA buttons in marketing emails. Save changes to apply.</p>
+            </BrandCard>
+
+            {/* Row 1-2: Colors (cols 5-6) */}
+            <BrandCard label="Colors" className="col-start-5 col-end-7 row-start-1 row-span-2">
               <div className="flex flex-col gap-6 overflow-y-auto min-h-0 flex-1 pr-1">
                 {[
                   { label: "Primary", color: brandColors[0] ?? "#000000", setColor: setPrimaryColor, slotIndex: 0 },
                   { label: "Secondary", color: brandColors[1] ?? "#666666", setColor: setSecondaryColor, slotIndex: 1 },
-                  { label: "Accent", color: brandColors[2] ?? "#007AFF", setColor: setAccentColor, slotIndex: 2 },
-                  { label: "CTA / Button", color: brandColors[3] ?? "#2563eb", setColor: setCtaColor, slotIndex: 3 },
-                  { label: "Background", color: brandColors[4] ?? "#ffffff", setColor: setBackgroundColor, slotIndex: 4 },
-                  { label: "Headline", color: brandColors[5] ?? "#1a1a1a", setColor: setHeadlineColor, slotIndex: 5 },
+                  { label: "Accent", color: brandColors[2] ?? "#FFFFFF", setColor: setAccentColor, slotIndex: 2 },
                 ].map(({ label, color, setColor, slotIndex }) => (
                   <div key={slotIndex} className="shrink-0 space-y-3">
                     <div className="flex items-center justify-between gap-3">
-                      <span className="text-xs font-medium text-muted-foreground shrink-0">{label}</span>
+                      <span className="text-xs font-medium text-muted-foreground dark:text-white shrink-0">{label}</span>
                       <div className="flex gap-1.5 shrink-0">
                         <button
                           type="button"
                           onClick={() => setSlotMode(slotIndex, "solid")}
-                          className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${colorSlotModes[slotIndex] === "solid" ? "bg-primary text-primary-foreground" : "bg-muted/60 text-muted-foreground hover:bg-muted"}`}
+                          className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${colorSlotModes[slotIndex] === "solid" ? "bg-primary text-primary-foreground" : "bg-muted/60 text-muted-foreground dark:text-white hover:bg-muted"}`}
                         >
                           Solid
                         </button>
                         <button
                           type="button"
                           onClick={() => setSlotMode(slotIndex, "gradient")}
-                          className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${colorSlotModes[slotIndex] === "gradient" ? "bg-primary text-primary-foreground" : "bg-muted/60 text-muted-foreground hover:bg-muted"}`}
+                          className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${colorSlotModes[slotIndex] === "gradient" ? "bg-primary text-primary-foreground" : "bg-muted/60 text-muted-foreground dark:text-white hover:bg-muted"}`}
                         >
                           Gradient
                         </button>
@@ -806,6 +800,18 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
               </div>
             </BrandCard>
 
+            {/* Row 3: Target Audience (cols 5-6) */}
+            <BrandCard label="Target Audience" className="col-start-5 col-end-7 row-start-3" footerRight={`${targetAudience.length}/200`}>
+              <textarea
+                value={targetAudience}
+                onChange={(e) => setTargetAudience(e.target.value)}
+                maxLength={200}
+                rows={2}
+                className="flex-1 w-full bg-transparent text-sm placeholder:text-muted-foreground focus:outline-none resize-none py-1"
+                placeholder="e.g. Young professionals aged 25-35 interested in sustainable fashion"
+              />
+            </BrandCard>
+
             {/* Row 4: Typography (cols 3-4) — same height as Brand Name */}
             <BrandCard
               label="Typography"
@@ -856,19 +862,33 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
               </div>
             </BrandCard>
 
-            {/* Row 5-6: Description (cols 1-2) | Brand tone (cols 3-4) | Brand Guidelines (cols 5-6) */}
-            <BrandCard label="Description" className="col-start-1 col-end-3 row-start-5 row-span-2 min-h-[12rem]" footerRight={`${description.length}/500`}>
+            {/* Row 4-5: Brand Guidelines (cols 5-6) — long, next to Typography */}
+            <BrandCard label="Brand Guidelines" className="col-start-5 col-end-7 row-start-4 row-span-2 min-h-[12rem]" footerRight={`${brandGuidelines.length}/500`}>
               <div className="flex flex-col flex-1 min-h-[10rem]">
+                <textarea
+                  placeholder="e.g. Always use uppercase headlines. Keep visuals minimal…"
+                  value={brandGuidelines}
+                  onChange={(e) => setBrandGuidelines(e.target.value)}
+                  maxLength={500}
+                  className="flex-1 min-h-[10rem] w-full bg-transparent text-sm placeholder:text-muted-foreground focus:outline-none resize-y py-1"
+                />
+              </div>
+            </BrandCard>
+
+            {/* Row 5: Description (cols 1-2) | Brand tone (cols 3-4) — single row, shorter */}
+            <BrandCard label="Description" className="col-start-1 col-end-3 row-start-5" footerRight={`${description.length}/500`}>
+              <div className="flex flex-col flex-1 min-h-0">
                 <textarea
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   maxLength={500}
-                  className="flex-1 min-h-[10rem] w-full bg-transparent text-sm placeholder:text-muted-foreground focus:outline-none resize-y py-1"
+                  rows={3}
+                  className="flex-1 w-full bg-transparent text-sm placeholder:text-muted-foreground focus:outline-none resize-y py-1 min-h-0"
                   placeholder="What your brand does and who it’s for…"
                 />
               </div>
             </BrandCard>
-            <BrandCard label="Brand tone / industry" className="col-start-3 col-end-5 row-start-5 row-span-2 min-h-[12rem]">
+            <BrandCard label="Brand tone / industry" className="col-start-3 col-end-5 row-start-5">
               <p className="text-xs text-muted-foreground mb-4">Helps AI match voice and style to your brand.</p>
               <div className="space-y-4">
                 <div>
@@ -891,17 +911,6 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
                     className="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                 </div>
-              </div>
-            </BrandCard>
-            <BrandCard label="Brand Guidelines" className="col-start-5 col-end-7 row-start-5 row-span-2 min-h-[12rem]" footerRight={`${brandGuidelines.length}/500`}>
-              <div className="flex flex-col flex-1 min-h-[10rem]">
-                <textarea
-                  placeholder="e.g. Always use uppercase headlines. Keep visuals minimal…"
-                  value={brandGuidelines}
-                  onChange={(e) => setBrandGuidelines(e.target.value)}
-                  maxLength={500}
-                  className="flex-1 min-h-[10rem] w-full bg-transparent text-sm placeholder:text-muted-foreground focus:outline-none resize-y py-1"
-                />
               </div>
             </BrandCard>
 
@@ -1388,7 +1397,7 @@ function BrandCard({
       <div className="flex-1 p-5 min-h-0 flex flex-col">{children}</div>
       <div className="flex items-center justify-between px-5 pb-4 pt-1 border-t border-border/50">
         <p className="text-sm font-medium text-foreground">{label}</p>
-        {footerRight != null ? <span className="text-sm text-muted-foreground text-right">{footerRight}</span> : null}
+        {footerRight != null ? <span className="text-sm text-muted-foreground dark:text-white/70 text-right">{footerRight}</span> : null}
       </div>
     </div>
   );

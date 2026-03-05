@@ -40,7 +40,7 @@ export function SettingsContent({ onClose }: SettingsContentProps) {
       <div className="w-48 shrink-0 border-r border-border bg-secondary/20 py-4 flex flex-col">
         {!onClose && (
           <Link
-            href="/dashboard"
+            href="/creative-studio"
             className="flex items-center gap-2 px-3 py-2 mb-3 ml-3 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary/60 rounded-lg transition-colors w-fit"
           >
             <ArrowLeft className="size-4" />

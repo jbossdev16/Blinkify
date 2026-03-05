@@ -13,7 +13,7 @@ import {
   ArrowLeft,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { createProject, uploadProjectLogo, type CreateProjectPayload } from "@/app/dashboard/actions";
+import { createProject, uploadProjectLogo, type CreateProjectPayload } from "@/app/(app)/actions";
 import type { BrandFont } from "@/lib/api";
 import Link from "next/link";
 
@@ -164,7 +164,7 @@ export function CreateProjectFlow({ workspaceId, redirectToAfterCreate }: Props)
       <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-md border-b border-border">
         <div className="max-w-2xl mx-auto flex items-center justify-between px-6 py-3">
           <Link
-            href="/dashboard"
+            href="/creative-studio"
             className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
             <ArrowLeft className="size-4" />

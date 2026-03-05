@@ -73,7 +73,7 @@ export function ProjectSwitcherBar({
         </button>
       )}
       <Link
-        href="/dashboard/brand"
+        href="/brand"
         className="size-8 flex items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary/50 hover:text-foreground transition-colors shrink-0"
         title="Brand"
       >

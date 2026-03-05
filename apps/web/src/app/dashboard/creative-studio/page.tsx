@@ -52,7 +52,7 @@ export default async function CreativeStudioPage() {
   return (
     <div className="flex flex-col flex-1 min-h-0 h-full min-h-screen">
       <Suspense fallback={<div className="flex items-center justify-center min-h-[50vh]">Loading…</div>}>
-        <CreativeStudioView workspaceId={workspace.id} projects={projects} />
+        <CreativeStudioView workspaceId={workspace.id} projects={projects} plan={workspace.plan} />
       </Suspense>
     </div>
   );

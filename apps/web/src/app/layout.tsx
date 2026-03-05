@@ -24,17 +24,6 @@ const jsonLd = !isAppDomain
       "@graph": [
         { "@type": "Organization", "@id": `${baseUrl}/#organization`, name: siteName, url: "https://blinkify.ai" },
         { "@type": "WebSite", "@id": `${baseUrl}/#website`, url: baseUrl, name: siteName, description, publisher: { "@id": `${baseUrl}/#organization` } },
-        {
-          "@type": "SoftwareApplication",
-          "@id": `${baseUrl}/#app`,
-          name: siteName,
-          applicationCategory: "BusinessApplication",
-          operatingSystem: "Web",
-          description,
-          url: baseUrl,
-          publisher: { "@id": `${baseUrl}/#organization` },
-          offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
-        },
       ],
     })
   : "";
@@ -45,19 +34,10 @@ export const metadata: Metadata = {
   description,
   keywords: [
     "AI image generation",
-    "AI product photo generator",
-    "product image generator",
     "product photos",
     "ad creatives",
-    "ad creative generator",
-    "eCommerce product photography",
     "eCommerce",
     "product photography",
-    "AI product photography",
-    "generate product images",
-    "product photo AI",
-    "social media ad creatives",
-    "small business product photos",
     "AI ads",
     "Blinkify",
   ],
@@ -70,7 +50,6 @@ export const metadata: Metadata = {
     title,
     description,
     url: baseUrl,
-    images: [{ url: "/og.png", width: 1200, height: 630, alt: "Blinkify – AI product images & ad creatives" }],
   },
   twitter: {
     card: "summary_large_image",
@@ -91,16 +70,13 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <link rel="preload" href="/blinkify-demo.webm" as="video" type="video/webm" />
-        {process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION ? (
-          <meta name="google-site-verification" content={process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION} />
-        ) : null}
+        <link rel="preload" href="/Sunglasses.webp" as="image" />
         {!isAppDomain && jsonLd ? (
           <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd }} />
         ) : null}
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var p=window.location.pathname;if(p.startsWith("/dashboard")&&localStorage.getItem("theme")==="dark")document.documentElement.classList.add("dark");else document.documentElement.classList.remove("dark")}catch(e){}})()`,
+            __html: `(function(){try{var p=window.location.pathname;if((p.startsWith("/creative-studio")||p.startsWith("/brand")||p.startsWith("/billing")||p.startsWith("/asset-collection")||p.startsWith("/admin")||p.startsWith("/settings"))&&localStorage.getItem("theme")==="dark")document.documentElement.classList.add("dark");else document.documentElement.classList.remove("dark")}catch(e){}})()`,
           }}
         />
       </head>

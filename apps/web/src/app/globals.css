@@ -120,26 +120,25 @@
     --ring: 211 100% 50%;
     --radius: 0.5rem;
   }
-  /* Figma-style dark mode: #2c2c2e bg, #3a3a3c surfaces, #8e8e93 muted, #38383a borders */
   .dark {
-    --background: 240 2% 17%; /* #2c2c2e */
+    --background: 0 0% 0%; /* #000000 */
     --foreground: 0 0% 100%;
-    --card: 240 2% 23%; /* #3a3a3c */
+    --card: 0 0% 7%; /* #121212 */
     --card-foreground: 0 0% 100%;
-    --popover: 240 2% 23%;
+    --popover: 0 0% 7%;
     --popover-foreground: 0 0% 100%;
-    --primary: 211 100% 51%; /* #0a84ff Figma blue */
+    --primary: 211 100% 51%; /* #0a84ff */
     --primary-foreground: 0 0% 100%;
-    --secondary: 240 2% 23%;
+    --secondary: 0 0% 12%;
     --secondary-foreground: 0 0% 100%;
-    --muted: 240 2% 23%;
-    --muted-foreground: 240 2% 56%; /* #8e8e93 */
-    --accent: 240 2% 23%;
+    --muted: 0 0% 12%;
+    --muted-foreground: 0 0% 60%; /* #999 */
+    --accent: 0 0% 12%;
     --accent-foreground: 0 0% 100%;
     --destructive: 0 62% 50%;
     --destructive-foreground: 0 0% 100%;
-    --border: 240 3% 21%; /* #38383a */
-    --input: 240 3% 21%;
+    --border: 0 0% 15%; /* #262626 */
+    --input: 0 0% 15%;
     --ring: 211 100% 51%;
   }
   .theme {

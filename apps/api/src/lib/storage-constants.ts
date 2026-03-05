@@ -18,6 +18,15 @@ export function getEmailAssetsStoragePath(resultUrl: string): string {
   return resultUrl.slice(EMAIL_ASSETS_PREFIX.length);
 }
 
+/** Ensure the email-assets bucket exists (idempotent). */
+export async function ensureEmailAssetsBucket(): Promise<void> {
+  const { supabase } = await import("./supabase.js");
+  const { error } = await supabase.storage.createBucket(EMAIL_ASSETS_BUCKET, { public: true });
+  if (error && !error.message?.includes("already exists")) {
+    throw error;
+  }
+}
+
 /** Returns public URL for email-assets, signed URL for generated-images. */
 export async function resolveGenerationImageUrl(
   storage: { from: (b: string) => { getPublicUrl: (p: string) => { data: { publicUrl: string } }; createSignedUrl: (p: string, e: number) => Promise<{ data: { signedUrl: string } | null }> } },

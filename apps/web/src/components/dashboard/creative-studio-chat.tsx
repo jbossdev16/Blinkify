@@ -19,6 +19,9 @@ import {
   Copy,
   Reply,
   X,
+  Palette,
+  Check,
+  Hammer,
 } from "lucide-react";
 import { BlinkifyLogo } from "@/components/blinkify-logo";
 import { cn } from "@/lib/utils";
@@ -28,6 +31,7 @@ import type { Project } from "@/lib/api";
 import { apiClientFetch } from "@/lib/api-client";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { renderContentWithBold } from "@/lib/render-content-with-bold";
+import { getPlanFeatures } from "@/lib/constants";
 import { toast } from "sonner";
 import { isEmailTemplateId, type EmailTemplateId } from "@/lib/email-templates";
 
@@ -35,7 +39,7 @@ import { isEmailTemplateId, type EmailTemplateId } from "@/lib/email-templates";
 
 type CreativeTool = "image" | "video" | "email" | null;
 
-type ImageAspectRatio = "1:1" | "4:5" | "9:16" | "16:9" | "21:9";
+type ImageAspectRatio = "1:1" | "2:3" | "3:2" | "3:4" | "4:3" | "4:5" | "5:4" | "9:16" | "16:9" | "21:9";
 type ImageResolution = "1K" | "4K";
 
 interface ImageOptions {
@@ -104,20 +108,27 @@ interface CreativeMessage {
   emailPayload?: EmailPayload;
   /** Brand snapshot for Copy HTML (not persisted; logo URL expires) */
   emailBrandSnapshot?: EmailBrandSnapshot;
+  /** Long-lived signed URLs for email images (used in Copy HTML). */
+  signedImageUrls?: string[];
   /** Data URLs of images attached to this user message (not persisted). */
   attachedImageUrls?: string[];
 }
 
 const IMAGE_ASPECT_RATIOS: { value: ImageAspectRatio; label: string }[] = [
-  { value: "1:1", label: "Square Post (1:1)" },
+  { value: "1:1", label: "Square (1:1)" },
   { value: "4:5", label: "Instagram Feed (4:5)" },
-  { value: "9:16", label: "Instagram Story (9:16)" },
+  { value: "5:4", label: "Landscape Photo (5:4)" },
+  { value: "3:4", label: "Portrait (3:4)" },
+  { value: "4:3", label: "Presentation (4:3)" },
+  { value: "2:3", label: "Tall Portrait (2:3)" },
+  { value: "3:2", label: "Photo Print (3:2)" },
+  { value: "9:16", label: "Story / Reel (9:16)" },
   { value: "16:9", label: "Landscape Ad (16:9)" },
   { value: "21:9", label: "Banner (21:9)" },
 ];
 
 const IMAGE_RESOLUTIONS: { value: ImageResolution; label: string }[] = [
-  { value: "1K", label: "Standard" },
+  { value: "1K", label: "Standard (1K)" },
   { value: "4K", label: "Ultra (4K)" },
 ];
 
@@ -179,7 +190,7 @@ function fileToDataUrl(file: File): Promise<string> {
   });
 }
 
-/** Stored message shape (no imageUrls/videoUrl — they expire). */
+/** Stored message shape (no imageUrls/videoUrl — they expire). signedImageUrls are kept (1-year expiry). */
 interface StoredCreativeMessage {
   role: "user" | "assistant";
   content: string;
@@ -190,6 +201,7 @@ interface StoredCreativeMessage {
   generationIds?: string[];
   hasImage?: boolean;
   emailPayload?: EmailPayload;
+  signedImageUrls?: string[];
 }
 
 function defaultImageOptions(): ImageOptions {
@@ -224,7 +236,7 @@ function continuationSlotsForDuration(seconds: number): number {
 
 const PREFERENCE_SNIPPETS_MAX = 10;
 
-async function loadCreativeStudioChatFromSupabase(workspaceId: string): Promise<{
+async function loadCreativeStudioChatFromSupabase(workspaceId: string, projectId: string): Promise<{
   messages: CreativeMessage[];
   prompt: string;
   selectedTool: CreativeTool;
@@ -241,7 +253,7 @@ async function loadCreativeStudioChatFromSupabase(workspaceId: string): Promise<
   const { data, error } = await supabase
     .from("creative_studio_chats")
     .select("data")
-    .eq("workspace_id", workspaceId)
+    .eq("project_id", projectId)
     .maybeSingle();
 
   if (error || !data?.data) {
@@ -284,6 +296,7 @@ async function loadCreativeStudioChatFromSupabase(workspaceId: string): Promise<
     generationIds: m.generationIds,
     hasImage: m.hasImage,
     emailPayload: m.emailPayload,
+    signedImageUrls: m.signedImageUrls,
   }));
   const selectedEmailTemplateId = isEmailTemplateId(d.selectedEmailTemplateId) ? d.selectedEmailTemplateId : null;
   return {
@@ -303,6 +316,7 @@ async function loadCreativeStudioChatFromSupabase(workspaceId: string): Promise<
 
 async function saveCreativeStudioChatToSupabase(
   workspaceId: string,
+  projectId: string,
   state: {
     messages: CreativeMessage[];
     prompt: string;
@@ -328,10 +342,12 @@ async function saveCreativeStudioChatToSupabase(
     ...(m.generationIds?.length && { generationIds: m.generationIds }),
     ...(m.imageUrls?.length && { hasImage: true }),
     ...(m.emailPayload && { emailPayload: m.emailPayload }),
+    ...(m.signedImageUrls?.length && { signedImageUrls: m.signedImageUrls }),
   }));
   await supabase.from("creative_studio_chats").upsert(
     {
       workspace_id: workspaceId,
+      project_id: projectId,
       data: {
         messages: storedMessages,
         prompt: state.prompt,
@@ -346,7 +362,7 @@ async function saveCreativeStudioChatToSupabase(
         selectedEmailTemplateId: state.selectedEmailTemplateId ?? null,
       },
     },
-    { onConflict: "workspace_id" }
+    { onConflict: "project_id" }
   );
 }
 
@@ -354,11 +370,19 @@ async function saveCreativeStudioChatToSupabase(
 
 interface CreativeStudioChatProps {
   project: Project;
+  allProjects?: Project[];
   workspaceId: string;
+  plan: string;
 }
 
-export function CreativeStudioChat({ project, workspaceId }: CreativeStudioChatProps) {
-  const projectId = project.id;
+export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: CreativeStudioChatProps) {
+  const [activeProject, setActiveProject] = useState<Project>(project);
+  const projectId = activeProject.id;
+  const planFeatures = getPlanFeatures(plan);
+  const videoEnabled = planFeatures.videoEnabled;
+  const showBrandPicker = planFeatures.maxBrands > 1 && (allProjects?.length ?? 0) > 0;
+  const [brandPickerOpen, setBrandPickerOpen] = useState(false);
+  const brandPickerRef = useRef<HTMLDivElement>(null);
   const [selectedTool, setSelectedTool] = useState<CreativeTool>(null);
   const [imageOptions, setImageOptions] = useState<ImageOptions>(defaultImageOptions);
   const [videoOptions, setVideoOptions] = useState<VideoOptions>(defaultVideoOptions);
@@ -373,7 +397,6 @@ export function CreativeStudioChat({ project, workspaceId }: CreativeStudioChatP
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
   const [generating, setGenerating] = useState(false);
-  const [enhancing, setEnhancing] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   /** Object URLs for pending image previews; synced from pendingFiles and revoked on cleanup. */
   const [pendingPreviewUrls, setPendingPreviewUrls] = useState<string[]>([]);
@@ -390,6 +413,7 @@ export function CreativeStudioChat({ project, workspaceId }: CreativeStudioChatP
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const pollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const generationAbortRef = useRef<AbortController | null>(null);
   /** Tracks current load context so image/video URL fetches only apply when still relevant (avoids hydration lost to effect cleanup). */
   const hydrationContextRef = useRef<{ workspaceId: string; projectId: string } | null>(null);
   const stateRef = useRef({
@@ -486,7 +510,7 @@ export function CreativeStudioChat({ project, workspaceId }: CreativeStudioChatP
 
   useEffect(() => {
     let cancelled = false;
-    loadCreativeStudioChatFromSupabase(workspaceId).then((loaded) => {
+    loadCreativeStudioChatFromSupabase(workspaceId, projectId).then((loaded) => {
       if (cancelled) return;
       setSelectedTool(null);
       setImageOptions(loaded.imageOptions);
@@ -653,7 +677,7 @@ export function CreativeStudioChat({ project, workspaceId }: CreativeStudioChatP
     if (!hydrated) return;
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     saveTimeoutRef.current = setTimeout(() => {
-      saveCreativeStudioChatToSupabase(workspaceId, {
+      saveCreativeStudioChatToSupabase(workspaceId, projectId, {
         messages,
         prompt,
         selectedTool,
@@ -673,6 +697,7 @@ export function CreativeStudioChat({ project, workspaceId }: CreativeStudioChatP
   }, [
     hydrated,
     workspaceId,
+    projectId,
     messages,
     prompt,
     selectedTool,
@@ -770,8 +795,9 @@ export function CreativeStudioChat({ project, workspaceId }: CreativeStudioChatP
       const target = e.target as Node;
       if (optionsRef.current && !optionsRef.current.contains(target)) setOptionsOpen(false);
       if (toolsRef.current && !toolsRef.current.contains(target)) setToolsOpen(false);
+      if (brandPickerRef.current && !brandPickerRef.current.contains(target)) setBrandPickerOpen(false);
     }
-    if (optionsOpen || toolsOpen) {
+    if (optionsOpen || toolsOpen || brandPickerOpen) {
       document.addEventListener("mousedown", handleClick);
       return () => document.removeEventListener("mousedown", handleClick);
     }
@@ -786,27 +812,6 @@ export function CreativeStudioChat({ project, workspaceId }: CreativeStudioChatP
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [imagePreviewUrl]);
 
-  async function handleEnhancePrompt() {
-    const text = prompt.trim();
-    if (!text || enhancing || generating) return;
-    if (selectedTool !== "image" && selectedTool !== "video") return;
-    setEnhancing(true);
-    try {
-      const endpoint =
-        selectedTool === "video"
-          ? `/workspaces/${workspaceId}/projects/${projectId}/enhance-prompt-video`
-          : `/workspaces/${workspaceId}/projects/${projectId}/enhance-prompt`;
-      const res = await apiClientFetch<{ enhancedPrompt: string }>(endpoint, {
-        method: "POST",
-        body: JSON.stringify({ prompt: text }),
-      });
-      if (res.enhancedPrompt) setPrompt(res.enhancedPrompt);
-    } catch {
-      // keep original
-    } finally {
-      setEnhancing(false);
-    }
-  }
 
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
@@ -852,7 +857,7 @@ export function CreativeStudioChat({ project, workspaceId }: CreativeStudioChatP
     const snippet = getSnippetForMessage(msg, msgIndex);
     const nextLiked = [...likedSnippets, snippet].slice(-PREFERENCE_SNIPPETS_MAX);
     setLikedSnippets(nextLiked);
-    saveCreativeStudioChatToSupabase(workspaceId, { ...stateRef.current, likedSnippets: nextLiked });
+    saveCreativeStudioChatToSupabase(workspaceId, projectId, { ...stateRef.current, likedSnippets: nextLiked });
     toast.success("Thanks — we'll favor responses like this.");
   }
 
@@ -862,13 +867,93 @@ export function CreativeStudioChat({ project, workspaceId }: CreativeStudioChatP
     const snippet = getSnippetForMessage(msg, msgIndex);
     const nextDisliked = [...dislikedSnippets, snippet].slice(-PREFERENCE_SNIPPETS_MAX);
     setDislikedSnippets(nextDisliked);
-    saveCreativeStudioChatToSupabase(workspaceId, { ...stateRef.current, dislikedSnippets: nextDisliked });
+    saveCreativeStudioChatToSupabase(workspaceId, projectId, { ...stateRef.current, dislikedSnippets: nextDisliked });
     toast.success("Got it — we'll avoid responses like this.");
+  }
+
+  function getEmailHtmlFromMessage(msg: CreativeMessage): string | null {
+    if (msg.tool !== "email" || !msg.emailPayload) return null;
+    const p = msg.emailPayload;
+    const esc = (s: string) =>
+      String(s ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    const n = Math.min(3, Math.max(1, p.numberOfImages ?? msg.imageUrls?.length ?? 1)) as 1 | 2 | 3;
+    const htmlImageUrls = (msg.signedImageUrls?.length ? msg.signedImageUrls : msg.imageUrls) ?? [];
+    const urls = htmlImageUrls.slice(0, n).map((u) => u.replace(/&/g, "&amp;").replace(/"/g, "&quot;"));
+    const brand = msg.emailBrandSnapshot;
+    const websiteUrl = (brand?.website_url?.trim() || "").replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+    const ctaUrlRaw = p.ctaUrl?.trim() && p.ctaUrl !== "#" ? p.ctaUrl : (brand?.website_url?.trim() || "#");
+    const ctaUrl = ctaUrlRaw.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+    const ctaText = esc(p.ctaText || "Shop Now");
+    const headline = esc(p.headline || "");
+    const introCopy = esc(p.introCopy || "").replace(/\n/g, "<br />");
+    const closingCopy = esc(p.closingCopy || "").replace(/\n/g, "<br />");
+    const fontFamily = (brand?.font_styles as { fontFamily?: string } | null)?.fontFamily ?? "Arial,sans-serif";
+    const primaryColor = (Array.isArray(brand?.brand_colors) && brand.brand_colors[0]) ? String(brand.brand_colors[0]).trim() : "#000000";
+    const ctaBg = /^#[0-9a-fA-F]{3,6}$/.test(primaryColor) ? (primaryColor.length === 4 ? `#${primaryColor[1]}${primaryColor[1]}${primaryColor[2]}${primaryColor[2]}${primaryColor[3]}${primaryColor[3]}` : primaryColor) : "#000000";
+    const bodyBg = "#f5f5f5";
+    const logoUrl = brand?.brand_logo_url?.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+    const imageLinkUrl = websiteUrl || (ctaUrl !== "#" ? ctaUrl : "");
+    const logoBlock = logoUrl ? `<tr><td align="center" style="padding:20px 25px 10px;"><img src="${logoUrl}" alt="Logo" width="160" style="border:none;display:inline-block;height:auto;max-height:60px;" border="0" /></td></tr>` : "";
+    const headlineBlock = headline ? `<tr><td align="left" style="padding:0 25px 10px;font-family:${fontFamily};font-size:22px;font-weight:bold;line-height:1.3;color:#000;"><p style="margin:0;">${headline}</p></td></tr>` : "";
+    const introBlock = introCopy ? `<tr><td align="left" style="padding:0 25px 15px;font-family:${fontFamily};font-size:16px;line-height:1.5;color:#333;"><p style="margin:0 0 10px;">${introCopy}</p></td></tr>` : "";
+    const closingBlock = closingCopy ? `<tr><td align="left" style="padding:0 25px 15px;font-family:${fontFamily};font-size:16px;line-height:1.5;color:#333;"><p style="margin:0;">${closingCopy}</p></td></tr>` : "";
+    const makeImageBlock = (imgUrl: string, alt: string, linkToWebsite: boolean) => {
+      if (!imgUrl) return "";
+      const imgTag = `<img src="${imgUrl}" alt="${esc(alt)}" width="600" style="border:none;display:block;outline:none;text-decoration:none;height:auto;width:100%;" border="0" />`;
+      const wrapped = linkToWebsite && imageLinkUrl ? `<a href="${imageLinkUrl}" target="_blank" style="display:block;">${imgTag}</a>` : imgTag;
+      return `<tr><td style="font-size:0;padding:0 0 20px;"><table role="presentation" cellpadding="0" cellspacing="0" width="100%"><tr><td style="width:600px;">${wrapped}</td></tr></table></td></tr>`;
+    };
+    const ctaBlock = ctaUrl !== "#" ? `<tr><td align="center" style="padding:20px 25px;"><table role="presentation" cellpadding="0" cellspacing="0" align="center"><tr><td align="center" style="border-radius:6px;background:${ctaBg};"><a href="${ctaUrl}" target="_blank" style="display:inline-block;padding:14px 28px;background:${ctaBg};color:#fff!important;text-decoration:none;border-radius:6px;font-weight:600;font-size:16px;font-family:${fontFamily};">${ctaText}</a></td></tr></table></td></tr>` : "";
+    const linkImages = !!imageLinkUrl;
+    let bodyRows: string;
+    if (n === 1) bodyRows = [logoBlock, headlineBlock, introBlock, makeImageBlock(urls[0], "Email hero", linkImages), closingBlock, ctaBlock].filter(Boolean).join("\n");
+    else if (n === 2) {
+      const img1 = makeImageBlock(urls[0], "Email image 1", linkImages);
+      const img2 = makeImageBlock(urls[1], "Email image 2", linkImages);
+      const textCta = (closingCopy ? closingBlock : "") + ctaBlock;
+      bodyRows = [logoBlock, headlineBlock, introBlock, img1, textCta, img2, textCta].filter(Boolean).join("\n");
+    } else {
+      const img1 = makeImageBlock(urls[0], "Email image 1", linkImages);
+      const img2 = makeImageBlock(urls[1], "Email image 2", linkImages);
+      const img3 = makeImageBlock(urls[2], "Email image 3", linkImages);
+      bodyRows = [logoBlock, headlineBlock, introBlock, img1, ctaBlock, img2, closingBlock, img3, ctaBlock].filter(Boolean).join("\n");
+    }
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<title>${esc(p.subjectLine || "Email")}</title>
+<style type="text/css">body{margin:0;padding:0;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;}table,td{border-collapse:collapse;}img{border:0;height:auto;line-height:100%;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;}</style>
+</head>
+<body style="margin:0;padding:0;font-family:${fontFamily};background:${bodyBg};">
+<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:${bodyBg};">
+<tr><td align="center" style="padding:20px;">
+<table role="presentation" cellpadding="0" cellspacing="0" width="600" style="max-width:600px;background:#fff;border-radius:8px;">
+<tbody>
+${bodyRows}
+</tbody>
+</table>
+</td></tr>
+</table>
+</body>
+</html>`;
   }
 
   async function handleCopyResponse(msgIndex: number) {
     const msg = messages[msgIndex];
     if (!msg || msg.role !== "assistant") return;
+    const emailHtml = getEmailHtmlFromMessage(msg);
+    if (emailHtml) {
+      await navigator.clipboard.writeText(emailHtml).catch(() => {});
+      toast.success("HTML copied — paste into Mailchimp, Klaviyo, or use Insert HTML extension for Gmail");
+      return;
+    }
     const text = msg.content?.trim() || (msgIndex > 0 ? messages[msgIndex - 1]?.content : "") || "";
     await navigator.clipboard.writeText(text).catch(() => {});
     toast.success("Copied to clipboard.");
@@ -898,8 +983,9 @@ export function CreativeStudioChat({ project, workspaceId }: CreativeStudioChatP
     queueMicrotask(() => flushSave(next));
     setGenerating(true);
     let isVideo = false;
+    let isEmail = false;
     try {
-      const res = await apiClientFetch<{ content: string; intent?: "image" | "video" | null }>(
+      const res = await apiClientFetch<{ content: string; intent?: "image" | "video" | "email" | null }>(
         `/workspaces/${workspaceId}/projects/${projectId}/creative-studio-chat`,
         {
           method: "POST",
@@ -923,6 +1009,10 @@ export function CreativeStudioChat({ project, workspaceId }: CreativeStudioChatP
       if (intent === "video") {
         setSelectedTool("video");
         isVideo = true;
+      }
+      if (intent === "email") {
+        setSelectedTool("email");
+        isEmail = true;
       }
       if (intent === "image") {
         const imageFiles = pendingFiles.filter((f) => f.type.startsWith("image/")).slice(0, MAX_INPUT_IMAGES);
@@ -984,6 +1074,17 @@ export function CreativeStudioChat({ project, workspaceId }: CreativeStudioChatP
           return n;
         });
       } else if (intent === "video") {
+        if (!videoEnabled) {
+          setMessages((prev) => {
+            const n = [...prev];
+            const m = n[placeholderIndex];
+            if (m && m.role === "assistant") {
+              n[placeholderIndex] = { ...m, content: "Video generation is not available on your current plan. Upgrade to use this feature.", generating: false };
+            }
+            queueMicrotask(() => flushSave(n));
+            return n;
+          });
+        } else {
         const body: Record<string, unknown> = {
           prompt: userContent,
           model: videoOptions.model,
@@ -1009,6 +1110,65 @@ export function CreativeStudioChat({ project, workspaceId }: CreativeStudioChatP
           () => pollVideoStatus(genRes.generationId, placeholderIndex),
           POLL_INTERVAL_MS
         );
+        }
+      } else if (intent === "email") {
+        const abortCtrl = new AbortController();
+        generationAbortRef.current = abortCtrl;
+        const emailRes = await apiClientFetch<{
+          generation: { id: string };
+          generationIds?: string[];
+          imageUrls: string[];
+          signedImageUrls?: string[];
+          numberOfImages: 1 | 2 | 3;
+          subjectLine: string;
+          headline: string;
+          introCopy: string;
+          closingCopy: string;
+          ctaText: string;
+          ctaUrl: string | null;
+          brandSnapshot?: EmailBrandSnapshot;
+        }>(`/workspaces/${workspaceId}/projects/${projectId}/generate-email`, {
+          method: "POST",
+          body: JSON.stringify({
+            prompt: userContent,
+            aspectRatio: "1:1",
+            numberOfImages: 1,
+            imageSize: "1K",
+          }),
+          signal: abortCtrl.signal,
+          timeoutMs: 180_000,
+        });
+        const emailUrls = Array.isArray(emailRes.imageUrls) ? emailRes.imageUrls : [];
+        const emailNumImages = emailRes.numberOfImages ?? 1;
+        const emailGenIds = Array.isArray(emailRes.generationIds) ? emailRes.generationIds : (emailRes.generation?.id ? [emailRes.generation.id] : []);
+        setMessages((prev) => {
+          const n = [...prev];
+          const m = n[placeholderIndex];
+          if (m && m.role === "assistant") {
+            n[placeholderIndex] = {
+              ...m,
+              content: "",
+              emailPayload: {
+                subjectLine: emailRes.subjectLine,
+                headline: emailRes.headline,
+                introCopy: emailRes.introCopy,
+                closingCopy: emailRes.closingCopy,
+                ctaText: emailRes.ctaText,
+                ctaUrl: emailRes.ctaUrl,
+                numberOfImages: emailNumImages,
+              },
+              imageUrls: emailUrls,
+              signedImageUrls: Array.isArray(emailRes.signedImageUrls) ? emailRes.signedImageUrls : undefined,
+              emailBrandSnapshot: emailRes.brandSnapshot,
+              generationId: emailRes.generation?.id,
+              generationIds: emailGenIds.length ? emailGenIds : undefined,
+              generating: false,
+            };
+          }
+          queueMicrotask(() => flushSave(n));
+          return n;
+        });
+        setGenerating(false);
       } else {
         setMessages((prev) => {
           const n = [...prev];
@@ -1021,16 +1181,19 @@ export function CreativeStudioChat({ project, workspaceId }: CreativeStudioChatP
       }
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : "Request failed";
+      const wasCancelled = errMsg === "Generation cancelled.";
       setMessages((prev) => {
         const n = [...prev];
         const m = n[placeholderIndex];
         if (m && m.role === "assistant") {
-          n[placeholderIndex] = { ...m, content: `Error: ${errMsg}`, generating: false };
+          n[placeholderIndex] = { ...m, content: wasCancelled ? "Generation cancelled." : `Error: ${errMsg}`, generating: false };
         }
         return n;
       });
+      if (isEmail) setGenerating(false);
     } finally {
-      if (!isVideo) setGenerating(false);
+      generationAbortRef.current = null;
+      if (!isVideo && !isEmail) setGenerating(false);
     }
   }
 
@@ -1047,16 +1210,20 @@ export function CreativeStudioChat({ project, workspaceId }: CreativeStudioChatP
 
   const flushSave = useCallback(
     (nextMessages: CreativeMessage[]) => {
-      saveCreativeStudioChatToSupabase(workspaceId, {
+      saveCreativeStudioChatToSupabase(workspaceId, projectId, {
         ...stateRef.current,
         messages: nextMessages,
       });
     },
-    [workspaceId]
+    [workspaceId, projectId]
   );
 
   const cancelGeneration = useCallback(
     (msgIndex?: number) => {
+      if (generationAbortRef.current) {
+        generationAbortRef.current.abort();
+        generationAbortRef.current = null;
+      }
       if (pollTimeoutRef.current) {
         clearTimeout(pollTimeoutRef.current);
         pollTimeoutRef.current = null;
@@ -1067,7 +1234,8 @@ export function CreativeStudioChat({ project, workspaceId }: CreativeStudioChatP
             return m;
           const hasFinalOutput =
             (m.tool === "image" && (m.imageUrls?.length ?? 0) > 0) ||
-            (m.tool === "video" && !!m.videoUrl);
+            (m.tool === "video" && !!m.videoUrl) ||
+            (m.tool === "email" && !!m.emailPayload);
           if (hasFinalOutput) return m;
           return { ...m, content: "Generation cancelled.", generating: false };
         });
@@ -1215,9 +1383,9 @@ export function CreativeStudioChat({ project, workspaceId }: CreativeStudioChatP
       setPendingFiles([]);
       setGenerating(true);
       const msgIndex = messages.length + 1;
-      let detectedIntent: "image" | "video" | null = null;
+      let detectedIntent: "image" | "video" | "email" | null = null;
       try {
-        const res = await apiClientFetch<{ content: string; intent?: "image" | "video" | null }>(
+        const res = await apiClientFetch<{ content: string; intent?: "image" | "video" | "email" | null }>(
           `/workspaces/${workspaceId}/projects/${projectId}/creative-studio-chat`,
           {
             method: "POST",
@@ -1246,6 +1414,7 @@ export function CreativeStudioChat({ project, workspaceId }: CreativeStudioChatP
         });
         if (doImageEdit) setSelectedTool("image");
         else if (intent === "video") setSelectedTool("video");
+        else if (intent === "email") setSelectedTool("email");
 
         if (doImageEdit) {
           const imageFiles = pendingFiles
@@ -1316,6 +1485,17 @@ export function CreativeStudioChat({ project, workspaceId }: CreativeStudioChatP
           });
           setPendingFiles([]);
         } else if (intent === "video") {
+          if (!videoEnabled) {
+            setMessages((prev) => {
+              const next = [...prev];
+              const m = next[msgIndex];
+              if (m && m.role === "assistant") {
+                next[msgIndex] = { ...m, content: "Video generation is not available on your current plan. Upgrade to use this feature.", generating: false };
+              }
+              queueMicrotask(() => flushSave(next));
+              return next;
+            });
+          } else {
           const body: Record<string, unknown> = {
             prompt: text,
             model: videoOptions.model,
@@ -1341,6 +1521,64 @@ export function CreativeStudioChat({ project, workspaceId }: CreativeStudioChatP
             () => pollVideoStatus(genRes.generationId, msgIndex),
             POLL_INTERVAL_MS
           );
+          }
+        } else if (intent === "email") {
+          const abortCtrl = new AbortController();
+          generationAbortRef.current = abortCtrl;
+          const emailRes = await apiClientFetch<{
+            generation: { id: string };
+            generationIds?: string[];
+            imageUrls: string[];
+            signedImageUrls?: string[];
+            numberOfImages: 1 | 2 | 3;
+            subjectLine: string;
+            headline: string;
+            introCopy: string;
+            closingCopy: string;
+            ctaText: string;
+            ctaUrl: string | null;
+            brandSnapshot?: EmailBrandSnapshot;
+          }>(`/workspaces/${workspaceId}/projects/${projectId}/generate-email`, {
+            method: "POST",
+            body: JSON.stringify({
+              prompt: text,
+              aspectRatio: "1:1",
+              numberOfImages: 1,
+              imageSize: "1K",
+            }),
+            signal: abortCtrl.signal,
+            timeoutMs: 180_000,
+          });
+          const emailUrls = Array.isArray(emailRes.imageUrls) ? emailRes.imageUrls : [];
+          const emailNumImages = emailRes.numberOfImages ?? 1;
+          const emailGenIds = Array.isArray(emailRes.generationIds) ? emailRes.generationIds : (emailRes.generation?.id ? [emailRes.generation.id] : []);
+          setMessages((prev) => {
+            const next = [...prev];
+            const m = next[msgIndex];
+            if (m && m.role === "assistant") {
+              next[msgIndex] = {
+                ...m,
+                content: "",
+                emailPayload: {
+                  subjectLine: emailRes.subjectLine,
+                  headline: emailRes.headline,
+                  introCopy: emailRes.introCopy,
+                  closingCopy: emailRes.closingCopy,
+                  ctaText: emailRes.ctaText,
+                  ctaUrl: emailRes.ctaUrl,
+                  numberOfImages: emailNumImages,
+                },
+                imageUrls: emailUrls,
+                signedImageUrls: Array.isArray(emailRes.signedImageUrls) ? emailRes.signedImageUrls : undefined,
+                emailBrandSnapshot: emailRes.brandSnapshot,
+                generationId: emailRes.generation?.id,
+                generationIds: emailGenIds.length ? emailGenIds : undefined,
+                generating: false,
+              };
+            }
+            queueMicrotask(() => flushSave(next));
+            return next;
+          });
         } else {
           setMessages((prev) => {
             const next = [...prev];
@@ -1353,15 +1591,17 @@ export function CreativeStudioChat({ project, workspaceId }: CreativeStudioChatP
         }
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : "Request failed";
+        const wasCancelled = errMsg === "Generation cancelled.";
         setMessages((prev) => {
           const next = [...prev];
           const m = next[msgIndex];
           if (m && m.role === "assistant") {
-            next[msgIndex] = { ...m, content: `Error: ${errMsg}`, generating: false };
+            next[msgIndex] = { ...m, content: wasCancelled ? "Generation cancelled." : `Error: ${errMsg}`, generating: false };
           }
           return next;
         });
       } finally {
+        generationAbortRef.current = null;
         if (detectedIntent !== "video") setGenerating(false);
       }
       return;
@@ -1409,6 +1649,8 @@ export function CreativeStudioChat({ project, workspaceId }: CreativeStudioChatP
     setPendingFiles([]);
     setGenerating(true);
     const msgIndex = messages.length + 1;
+    const abortCtrl = new AbortController();
+    generationAbortRef.current = abortCtrl;
 
     try {
       if (selectedTool === "image") {
@@ -1448,6 +1690,7 @@ export function CreativeStudioChat({ project, workspaceId }: CreativeStudioChatP
         }>(`/workspaces/${workspaceId}/projects/${projectId}/generate`, {
           method: "POST",
           body: JSON.stringify(body),
+          signal: abortCtrl.signal,
         });
 
         const urls =
@@ -1519,6 +1762,7 @@ export function CreativeStudioChat({ project, workspaceId }: CreativeStudioChatP
           generation: { id: string };
           generationIds?: string[];
           imageUrls: string[];
+          signedImageUrls?: string[];
           numberOfImages: 1 | 2 | 3;
           subjectLine: string;
           headline: string;
@@ -1536,6 +1780,8 @@ export function CreativeStudioChat({ project, workspaceId }: CreativeStudioChatP
             imageSize: emailOptions.imageQuality,
             ...(selectedEmailTemplateId && { templateId: selectedEmailTemplateId }),
           }),
+          signal: abortCtrl.signal,
+          timeoutMs: 180_000,
         });
 
         const urls = Array.isArray(res.imageUrls) ? res.imageUrls : [];
@@ -1558,6 +1804,7 @@ export function CreativeStudioChat({ project, workspaceId }: CreativeStudioChatP
                 numberOfImages: numImages,
               },
               imageUrls: urls,
+              signedImageUrls: Array.isArray(res.signedImageUrls) ? res.signedImageUrls : undefined,
               emailBrandSnapshot: res.brandSnapshot,
               generationId: res.generation?.id,
               generationIds: genIds.length ? genIds : undefined,
@@ -1570,19 +1817,21 @@ export function CreativeStudioChat({ project, workspaceId }: CreativeStudioChatP
       }
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : "Request failed";
+      const wasCancelled = errMsg === "Generation cancelled.";
       setMessages((prev) => {
         const next = [...prev];
         const m = next[msgIndex];
-        if (m && m.role === "assistant") {
+        if (m && m.role === "assistant" && m.generating) {
           next[msgIndex] = {
             ...m,
-            content: `Error: ${errMsg}`,
+            content: wasCancelled ? "Generation cancelled." : `Error: ${errMsg}`,
             generating: false,
           };
         }
         return next;
       });
     } finally {
+      generationAbortRef.current = null;
       if (selectedTool === "image" || selectedTool === "email") setGenerating(false);
     }
   }
@@ -1603,7 +1852,6 @@ export function CreativeStudioChat({ project, workspaceId }: CreativeStudioChatP
               continuationSlots === 0 ||
               continuationPrompts.slice(0, continuationSlots).every((p) => p.trim().length > 0)))
       : true);
-  const enhancerDisabled = !hasCreateTool || selectedTool === "email";
 
   const hasMessages = messages.length > 0;
 
@@ -1864,7 +2112,7 @@ export function CreativeStudioChat({ project, workspaceId }: CreativeStudioChatP
               </div>
             );
 
-  /* ─── Shared input card (textarea first, then row: Plus, Options, Tools, Enhancer, Send) ─── */
+  /* ─── Shared input card (textarea first, then row: Plus, Options, Tools, Send) ─── */
 
   const inputActionRow = (
     <div className="flex items-center justify-between gap-2 flex-wrap pt-2 shrink-0">
@@ -1872,7 +2120,12 @@ export function CreativeStudioChat({ project, workspaceId }: CreativeStudioChatP
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
-          className="flex items-center justify-center size-8 rounded-lg text-muted-foreground hover:bg-secondary/60 hover:text-foreground transition-colors shrink-0"
+          className={cn(
+            "flex items-center justify-center size-8 rounded-lg transition-colors shrink-0",
+            pendingFiles.length > 0
+              ? "icon-gradient-brand"
+              : "text-[#000000] dark:text-white hover:text-foreground"
+          )}
           title="Add images"
         >
           <Plus className="size-4" />
@@ -1880,16 +2133,11 @@ export function CreativeStudioChat({ project, workspaceId }: CreativeStudioChatP
         <div className="relative shrink-0" ref={optionsRef}>
           <button
             type="button"
-            onClick={() => setOptionsOpen((v) => !v)}
-            className={cn(
-              "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer",
-              optionsOpen
-                ? "bg-primary/10 text-primary"
-                : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
-            )}
+            onClick={() => { setOptionsOpen((v) => !v); setToolsOpen(false); setBrandPickerOpen(false); }}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer text-[#000000] dark:text-white hover:text-foreground"
           >
-            <SlidersHorizontal className="size-3.5" />
-            Options
+            <SlidersHorizontal className={cn("size-3.5", optionsOpen && "icon-gradient-brand")} />
+            {optionsOpen ? <span className="text-gradient-brand">Options</span> : "Options"}
           </button>
           {optionsOpen && (
             <div className="absolute bottom-full left-0 mb-1 w-[280px] max-h-[70vh] overflow-y-auto rounded-xl border border-border bg-card shadow-lg z-50">
@@ -1900,18 +2148,12 @@ export function CreativeStudioChat({ project, workspaceId }: CreativeStudioChatP
         <div className="relative shrink-0" ref={toolsRef}>
           <button
             type="button"
-            onClick={() => setToolsOpen((v) => !v)}
-            className={cn(
-              "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer shrink-0",
-              toolsOpen
-                ? "bg-primary/10 text-primary"
-                : selectedTool
-                  ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
-            )}
+            onClick={() => { setToolsOpen((v) => !v); setOptionsOpen(false); setBrandPickerOpen(false); }}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer shrink-0 text-[#000000] dark:text-white hover:text-foreground"
           >
-            Tools
-            <ChevronDown className="size-3.5" />
+            <Hammer className={cn("size-3.5", (toolsOpen || selectedTool) && "icon-gradient-brand")} />
+            {toolsOpen || selectedTool ? <span className="text-gradient-brand">Tools</span> : "Tools"}
+            <ChevronDown className={cn("size-3.5", (toolsOpen || selectedTool) && "icon-gradient-brand")} />
           </button>
           {toolsOpen && (
             <div className="absolute bottom-full left-0 mb-1 w-[200px] rounded-xl border border-border bg-card shadow-lg z-50 py-1">
@@ -1923,28 +2165,41 @@ export function CreativeStudioChat({ project, workspaceId }: CreativeStudioChatP
                 }}
                 className={cn(
                   "w-full flex items-center gap-2 px-3 py-2 text-left text-xs font-medium",
-                  selectedTool === "image" ? "bg-primary/10 text-primary" : "hover:bg-secondary/60"
+                  "hover:bg-secondary/60"
                 )}
               >
                 <ImagePlus className="size-3.5" />
-                Image generation
+                <span className="flex-1">Image generation</span>
+                {selectedTool === "image" && <Check className="size-3.5 text-[#000000] dark:text-white" />}
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const next = selectedTool === "video" ? null : "video";
-                  setSelectedTool(next);
-                  if (next === "video") setVideoOptions(defaultVideoOptions());
-                  setToolsOpen(false);
-                }}
-                className={cn(
-                  "w-full flex items-center gap-2 px-3 py-2 text-left text-xs font-medium",
-                  selectedTool === "video" ? "bg-primary/10 text-primary" : "hover:bg-secondary/60"
+              <div className="relative group/video">
+                <button
+                  type="button"
+                  disabled={!videoEnabled}
+                  onClick={() => {
+                    if (!videoEnabled) return;
+                    const next = selectedTool === "video" ? null : "video";
+                    setSelectedTool(next);
+                    if (next === "video") setVideoOptions(defaultVideoOptions());
+                    setToolsOpen(false);
+                  }}
+                  className={cn(
+                    "w-full flex items-center gap-2 px-3 py-2 text-left text-xs font-medium",
+                    !videoEnabled
+                      ? "opacity-40 cursor-not-allowed"
+                      : "hover:bg-secondary/60"
+                  )}
+                >
+                  <Video className="size-3.5" />
+                  <span className="flex-1">Video generation</span>
+                  {videoEnabled && selectedTool === "video" && <Check className="size-3.5 text-[#000000] dark:text-white" />}
+                </button>
+                {!videoEnabled && (
+                  <div className="absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 rounded-md bg-foreground text-background text-[10px] font-medium whitespace-nowrap opacity-0 group-hover/video:opacity-100 pointer-events-none transition-opacity z-50">
+                    Upgrade your Plan to use this Feature
+                  </div>
                 )}
-              >
-                <Video className="size-3.5" />
-                Video generation
-              </button>
+              </div>
               <button
                 type="button"
                 onClick={() => {
@@ -1953,36 +2208,68 @@ export function CreativeStudioChat({ project, workspaceId }: CreativeStudioChatP
                 }}
                 className={cn(
                   "w-full flex items-center gap-2 px-3 py-2 text-left text-xs font-medium",
-                  selectedTool === "email" ? "bg-primary/10 text-primary" : "hover:bg-secondary/60"
+                  "hover:bg-secondary/60"
                 )}
               >
                 <Mail className="size-3.5" />
-                Email marketing
+                <span className="flex-1">Email marketing</span>
+                {selectedTool === "email" && <Check className="size-3.5 text-[#000000] dark:text-white" />}
               </button>
             </div>
           )}
         </div>
-        <button
-          type="button"
-          onClick={handleEnhancePrompt}
-          disabled={enhancerDisabled || !prompt.trim() || enhancing || generating}
-          title="Blinkify AI Prompt Enhancer"
-          className={cn(
-            "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium shrink-0",
-            enhancerDisabled
-              ? "text-muted-foreground/50 cursor-not-allowed opacity-60"
-              : prompt.trim() && !enhancing && !generating
-                ? "text-primary hover:bg-primary/10"
-                : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
-          )}
-        >
-          <BlinkifyLogo variant="icon" height={16} className="shrink-0" />
-          {enhancing ? (
-            <span className="text-muted-foreground">Enhancing…</span>
-          ) : (
-            <span>Enhance</span>
-          )}
-        </button>
+        {showBrandPicker && (
+          <div className="relative shrink-0" ref={brandPickerRef}>
+            <button
+              type="button"
+              onClick={() => { setBrandPickerOpen((v) => !v); setToolsOpen(false); setOptionsOpen(false); }}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer shrink-0 text-[#000000] dark:text-white hover:text-foreground"
+            >
+              <Palette className={cn("size-3.5", brandPickerOpen && "icon-gradient-brand")} />
+              {brandPickerOpen ? <span className="text-gradient-brand">Brand</span> : "Brand"}
+              <ChevronDown className={cn("size-3.5", brandPickerOpen && "icon-gradient-brand")} />
+            </button>
+            {brandPickerOpen && (
+              <div className="absolute bottom-full left-0 mb-1 w-[200px] rounded-xl border border-border bg-card shadow-lg z-50 py-1">
+                {(allProjects ?? []).map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => {
+                      if (p.id === activeProject.id) {
+                        setBrandPickerOpen(false);
+                        return;
+                      }
+                      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+                      saveCreativeStudioChatToSupabase(workspaceId, projectId, stateRef.current);
+                      setHydrated(false);
+                      setMessages([]);
+                      setPrompt("");
+                      setSelectedTool(null);
+                      setContinuationPrompts([]);
+                      setImageSlidePrompts([]);
+                      setImageOptions(defaultImageOptions());
+                      setVideoOptions(defaultVideoOptions());
+                      setEmailOptions(defaultEmailOptions());
+                      setLikedSnippets([]);
+                      setDislikedSnippets([]);
+                      setSelectedEmailTemplateId(null);
+                      setActiveProject(p);
+                      setBrandPickerOpen(false);
+                    }}
+                    className={cn(
+                      "w-full flex items-center gap-2 px-3 py-2 text-left text-xs font-medium",
+                      p.id === activeProject.id ? "bg-primary/10 text-primary" : "hover:bg-secondary/60"
+                    )}
+                  >
+                    <span className="truncate flex-1">{p.name}</span>
+                    {p.id === activeProject.id && <Check className="size-3 shrink-0" />}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
       <button
         type="button"
@@ -2140,10 +2427,16 @@ export function CreativeStudioChat({ project, workspaceId }: CreativeStudioChatP
               )}
               <div
                 className={cn(
-                  "rounded-2xl px-4 py-3 text-sm w-full",
+                  "rounded-2xl text-sm w-full",
                   msg.role === "user"
-                    ? "bg-primary/10"
-                    : "bg-card border border-border"
+                    ? "px-4 py-3 bg-primary/10 dark:bg-card"
+                    : (() => {
+                        const hasImage = msg.tool === "image" && (msg.imageUrls?.length ?? 0) > 0;
+                        const hasVideo = !!msg.videoUrl;
+                        const hasEmail = msg.tool === "email" && !!msg.emailPayload;
+                        const isMediaOnly = hasImage || hasVideo || hasEmail;
+                        return isMediaOnly ? "" : "px-4 py-3 bg-card border border-border";
+                      })()
                 )}
               >
                 {msg.role === "assistant" && msg.stages && msg.stages.length > 0 && (
@@ -2174,11 +2467,20 @@ export function CreativeStudioChat({ project, workspaceId }: CreativeStudioChatP
                 ) : (
                   <>
                     {msg.generating && !msg.content && !msg.imageUrls?.length && !msg.videoUrl && (
-                      <div className="flex items-center gap-2 text-muted-foreground">
-                        <Spinner className="size-4" />
-                        <span className="text-xs">
-                          {msg.tool === "email" ? "Creating your email creative…" : "Thinking…"}
-                        </span>
+                      <div className="flex items-center justify-between gap-2 w-full">
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <Spinner className="size-4" />
+                          <span className="text-xs">
+                            {msg.tool === "email" ? "Creating your email creative…" : "Thinking…"}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => cancelGeneration(i)}
+                          className="shrink-0 text-xs font-medium text-muted-foreground hover:text-foreground"
+                        >
+                          Cancel
+                        </button>
                       </div>
                     )}
                     {(() => {
@@ -2188,7 +2490,8 @@ export function CreativeStudioChat({ project, workspaceId }: CreativeStudioChatP
                         const urls = (msg.imageUrls ?? []).slice(0, n);
                         const brand = msg.emailBrandSnapshot;
                         const fontFamily = (brand?.font_styles as { fontFamily?: string } | null)?.fontFamily ?? "Arial, sans-serif";
-                        const ctaBg = (Array.isArray(brand?.brand_colors) && brand.brand_colors[0]) ? String(brand.brand_colors[0]).trim() : "#000";
+                        const primaryColor = (Array.isArray(brand?.brand_colors) && brand.brand_colors[0]) ? String(brand.brand_colors[0]).trim() : "#000000";
+                        const ctaBg = /^#[0-9a-fA-F]{3,6}$/.test(primaryColor) ? (primaryColor.length === 4 ? `#${primaryColor[1]}${primaryColor[1]}${primaryColor[2]}${primaryColor[2]}${primaryColor[3]}${primaryColor[3]}` : primaryColor) : "#000000";
                         const logoUrl = brand?.brand_logo_url ?? null;
 
                         const genIdForSlot = (i: number) => msg.generationIds?.[i] ?? (i === 0 ? msg.generationId : undefined);
@@ -2229,7 +2532,6 @@ export function CreativeStudioChat({ project, workspaceId }: CreativeStudioChatP
 
                         return (
                           <div className="w-full max-w-[600px]">
-                            <div className="rounded-xl border border-border bg-muted/20 p-3">
                               <div className="flex items-center gap-2 flex-wrap mb-3">
                                 <span className="text-xs text-muted-foreground">Subject:</span>
                                 <span className="text-sm font-medium">{p.subjectLine}</span>
@@ -2237,7 +2539,7 @@ export function CreativeStudioChat({ project, workspaceId }: CreativeStudioChatP
                                   <Copy className="size-3.5" />
                                 </button>
                               </div>
-                              <div className="rounded-lg border border-border bg-background overflow-hidden" style={{ fontFamily }}>
+                              <div className="rounded-xl border border-border bg-background overflow-hidden shadow-sm" style={{ fontFamily }}>
                                 <div className="p-5 pb-4 text-center">
                                   {logoUrl && <img src={logoUrl} alt="Logo" className="h-10 w-auto max-w-[160px] mx-auto object-contain" />}
                                 </div>
@@ -2272,109 +2574,6 @@ export function CreativeStudioChat({ project, workspaceId }: CreativeStudioChatP
                                   </>
                                 )}
                               </div>
-                              <div className="flex items-center gap-2 pt-3">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const p = msg.emailPayload!;
-                              const esc = (s: string) =>
-                                String(s ?? "")
-                                  .replace(/&/g, "&amp;")
-                                  .replace(/</g, "&lt;")
-                                  .replace(/>/g, "&gt;")
-                                  .replace(/"/g, "&quot;");
-                              const n = Math.min(3, Math.max(1, p.numberOfImages ?? msg.imageUrls?.length ?? 1)) as 1 | 2 | 3;
-                              const urls = (msg.imageUrls ?? []).slice(0, n).map((u) => u.replace(/&/g, "&amp;").replace(/"/g, "&quot;"));
-                              const brand = msg.emailBrandSnapshot;
-                              const websiteUrl = (brand?.website_url?.trim() || "").replace(/&/g, "&amp;").replace(/"/g, "&quot;");
-                              const ctaUrlRaw = p.ctaUrl?.trim() && p.ctaUrl !== "#" ? p.ctaUrl : (brand?.website_url?.trim() || "#");
-                              const ctaUrl = ctaUrlRaw.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
-                              const ctaText = esc(p.ctaText || "Shop Now");
-                              const headline = esc(p.headline || "");
-                              const introCopy = esc(p.introCopy || "").replace(/\n/g, "<br />");
-                              const closingCopy = esc(p.closingCopy || "").replace(/\n/g, "<br />");
-
-                              const fontFamily = (brand?.font_styles as { fontFamily?: string } | null)?.fontFamily ?? "Arial,sans-serif";
-                              const ctaBg = (Array.isArray(brand?.brand_colors) && brand.brand_colors[0]) ? String(brand.brand_colors[0]).trim() : "#000";
-                              const bodyBg = "#f5f5f5";
-                              const logoUrl = brand?.brand_logo_url?.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
-                              const imageLinkUrl = websiteUrl || (ctaUrl !== "#" ? ctaUrl : "");
-
-                              const logoBlock =
-                                logoUrl
-                                  ? `<tr><td align="center" style="padding:20px 25px 10px;"><img src="${logoUrl}" alt="Logo" width="160" style="border:none;display:inline-block;height:auto;max-height:60px;" border="0" /></td></tr>`
-                                  : "";
-
-                              const headlineBlock = headline
-                                ? `<tr><td align="left" style="padding:0 25px 10px;font-family:${fontFamily};font-size:22px;font-weight:bold;line-height:1.3;color:#000;"><p style="margin:0;">${headline}</p></td></tr>`
-                                : "";
-                              const introBlock = introCopy
-                                ? `<tr><td align="left" style="padding:0 25px 15px;font-family:${fontFamily};font-size:16px;line-height:1.5;color:#333;"><p style="margin:0 0 10px;">${introCopy}</p></td></tr>`
-                                : "";
-                              const closingBlock = closingCopy
-                                ? `<tr><td align="left" style="padding:0 25px 15px;font-family:${fontFamily};font-size:16px;line-height:1.5;color:#333;"><p style="margin:0;">${closingCopy}</p></td></tr>`
-                                : "";
-
-                              const makeImageBlock = (imgUrl: string, alt: string, linkToWebsite: boolean) => {
-                                if (!imgUrl) return "";
-                                const imgTag = `<img src="${imgUrl}" alt="${esc(alt)}" width="600" style="border:none;display:block;outline:none;text-decoration:none;height:auto;width:100%;" border="0" />`;
-                                const wrapped = linkToWebsite && imageLinkUrl ? `<a href="${imageLinkUrl}" target="_blank" style="display:block;">${imgTag}</a>` : imgTag;
-                                return `<tr><td style="font-size:0;padding:0 0 20px;"><table role="presentation" cellpadding="0" cellspacing="0" width="100%"><tr><td style="width:600px;">${wrapped}</td></tr></table></td></tr>`;
-                              };
-
-                              const ctaBlock =
-                                ctaUrl !== "#"
-                                  ? `<tr><td align="center" style="padding:20px 25px;"><table role="presentation" cellpadding="0" cellspacing="0" align="center"><tr><td align="center" style="border-radius:6px;background:${ctaBg};"><a href="${ctaUrl}" target="_blank" style="display:inline-block;padding:14px 28px;background:${ctaBg};color:#fff!important;text-decoration:none;border-radius:6px;font-weight:600;font-size:16px;font-family:${fontFamily};">${ctaText}</a></td></tr></table></td></tr>`
-                                  : "";
-
-                              const linkImages = !!imageLinkUrl;
-                              let bodyRows: string;
-                              if (n === 1) {
-                                bodyRows = [logoBlock, headlineBlock, introBlock, makeImageBlock(urls[0], "Email hero", linkImages), closingBlock, ctaBlock].filter(Boolean).join("\n");
-                              } else if (n === 2) {
-                                const img1 = makeImageBlock(urls[0], "Email image 1", linkImages);
-                                const img2 = makeImageBlock(urls[1], "Email image 2", linkImages);
-                                const textCta = (closingCopy ? closingBlock : "") + ctaBlock;
-                                bodyRows = [logoBlock, headlineBlock, introBlock, img1, textCta, img2, textCta].filter(Boolean).join("\n");
-                              } else {
-                                const img1 = makeImageBlock(urls[0], "Email image 1", linkImages);
-                                const img2 = makeImageBlock(urls[1], "Email image 2", linkImages);
-                                const img3 = makeImageBlock(urls[2], "Email image 3", linkImages);
-                                bodyRows = [logoBlock, headlineBlock, introBlock, img1, ctaBlock, img2, closingBlock, img3, ctaBlock].filter(Boolean).join("\n");
-                              }
-
-                              const html = `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-<title>${esc(p.subjectLine || "Email")}</title>
-<style type="text/css">body{margin:0;padding:0;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;}table,td{border-collapse:collapse;}img{border:0;height:auto;line-height:100%;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;}</style>
-</head>
-<body style="margin:0;padding:0;font-family:${fontFamily};background:${bodyBg};">
-<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:${bodyBg};">
-<tr><td align="center" style="padding:20px;">
-<table role="presentation" cellpadding="0" cellspacing="0" width="600" style="max-width:600px;background:#fff;border-radius:8px;">
-<tbody>
-${bodyRows}
-</tbody>
-</table>
-</td></tr>
-</table>
-</body>
-</html>`;
-                              navigator.clipboard.writeText(html);
-                              toast.success("HTML copied — paste into Mailchimp, Klaviyo, or use Insert HTML extension for Gmail");
-                            }}
-                            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-secondary/60 hover:text-foreground border border-border"
-                            title="Copy HTML — image and button both clickable. Use Mailchimp, Klaviyo, or Insert HTML extension for Gmail."
-                          >
-                            <Copy className="size-3.5" />
-                            Copy HTML
-                          </button>
-                              </div>
-                            </div>
                           </div>
                           );
                         }
@@ -2391,7 +2590,9 @@ ${bodyRows}
                             ? !(msg.imageUrls?.length)
                             : msg.tool === "video"
                               ? !msg.videoUrl
-                              : false);
+                              : msg.tool === "email"
+                                ? !msg.emailPayload
+                                : false);
                         return stillWaitingForOutput ? (
                           <div className="flex items-center justify-between gap-2 w-full">
                             <p className="whitespace-pre-wrap min-w-0">
@@ -2414,16 +2615,16 @@ ${bodyRows}
                         return null;
                       })()}
                     {msg.imageUrls && msg.imageUrls.length > 0 && !(msg.tool === "email" && msg.emailPayload) && (
-                      <div className="flex flex-col gap-2 mt-2 w-full">
+                      <div className="flex flex-col gap-2 w-full">
                         {msg.imageUrls.map((url, j) => {
                           const isExpired = failedMediaUrls.includes(url);
                           return (
                           <div
                             key={j}
-                            className="relative group/img rounded-lg overflow-hidden border border-border w-full"
+                            className="relative group/img rounded-2xl overflow-hidden w-full"
                           >
                             {isExpired ? (
-                              <div className="flex flex-col items-center justify-center gap-2 min-h-[200px] p-4 text-center text-sm text-muted-foreground bg-muted/30 rounded-lg">
+                              <div className="flex flex-col items-center justify-center gap-2 min-h-[200px] p-4 text-center text-sm text-muted-foreground bg-muted/30 rounded-2xl border border-border">
                                 <span>Link expired</span>
                                 <button
                                   type="button"
@@ -2443,7 +2644,7 @@ ${bodyRows}
                               <img
                                 src={url}
                                 alt=""
-                                className="w-full h-auto max-h-[70vh] object-contain"
+                                className="w-full h-auto object-cover rounded-2xl"
                                 onError={() => setFailedMediaUrls((prev) => (prev.includes(url) ? prev : [...prev, url]))}
                               />
                             </button>
@@ -2494,9 +2695,9 @@ ${bodyRows}
                       </div>
                     )}
                     {msg.videoUrl && (
-                      <div className="mt-2 rounded-lg overflow-hidden border border-border relative group/vid">
+                      <div className="rounded-2xl overflow-hidden relative group/vid">
                         {failedMediaUrls.includes(msg.videoUrl) ? (
-                          <div className="flex flex-col items-center justify-center gap-2 min-h-[200px] p-4 text-center text-sm text-muted-foreground bg-muted/30">
+                          <div className="flex flex-col items-center justify-center gap-2 min-h-[200px] p-4 text-center text-sm text-muted-foreground bg-muted/30 rounded-2xl border border-border">
                             <span>Link expired</span>
                             <button
                               type="button"
@@ -2511,7 +2712,7 @@ ${bodyRows}
                         <video
                           src={msg.videoUrl}
                           controls
-                          className="w-full max-h-80"
+                          className="w-full rounded-2xl"
                           playsInline
                           onError={() => setFailedMediaUrls((prev) => (prev.includes(msg.videoUrl!) ? prev : [...prev, msg.videoUrl!]))}
                         />
@@ -2563,7 +2764,7 @@ ${bodyRows}
                       <button
                         type="button"
                         onClick={() => handleGoodResponse(i)}
-                        className="size-8 rounded-full flex items-center justify-center text-muted-foreground hover:bg-secondary/60 hover:text-foreground transition-colors cursor-pointer"
+                        className="size-8 rounded-full flex items-center justify-center text-[#000000] dark:text-white hover:bg-secondary/60 hover:text-foreground transition-colors cursor-pointer"
                         aria-label="Good response"
                       >
                         <ThumbsUp className="size-4" />
@@ -2576,7 +2777,7 @@ ${bodyRows}
                       <button
                         type="button"
                         onClick={() => handleBadResponse(i)}
-                        className="size-8 rounded-full flex items-center justify-center text-muted-foreground hover:bg-secondary/60 hover:text-foreground transition-colors cursor-pointer"
+                        className="size-8 rounded-full flex items-center justify-center text-[#000000] dark:text-white hover:bg-secondary/60 hover:text-foreground transition-colors cursor-pointer"
                         aria-label="Bad response"
                       >
                         <ThumbsDown className="size-4" />
@@ -2590,7 +2791,7 @@ ${bodyRows}
                         type="button"
                         onClick={() => handleRedoResponse(i)}
                         disabled={generating}
-                        className="size-8 rounded-full flex items-center justify-center text-muted-foreground hover:bg-secondary/60 hover:text-foreground transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none"
+                        className="size-8 rounded-full flex items-center justify-center text-[#000000] dark:text-white hover:bg-secondary/60 hover:text-foreground transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none"
                         aria-label="Redo"
                       >
                         <RotateCw className="size-4" />
@@ -2603,20 +2804,20 @@ ${bodyRows}
                       <button
                         type="button"
                         onClick={() => handleCopyResponse(i)}
-                        className="size-8 rounded-full flex items-center justify-center text-muted-foreground hover:bg-secondary/60 hover:text-foreground transition-colors cursor-pointer"
-                        aria-label="Copy response"
+                        className="size-8 rounded-full flex items-center justify-center text-[#000000] dark:text-white hover:bg-secondary/60 hover:text-foreground transition-colors cursor-pointer"
+                        aria-label={msg.tool === "email" && msg.emailPayload ? "Copy HTML" : "Copy response"}
                       >
                         <Copy className="size-4" />
                       </button>
                       <span className="absolute left-1/2 -translate-x-1/2 top-full mt-1.5 px-2.5 py-1 rounded-md bg-neutral-800 dark:bg-neutral-700 text-white text-xs font-medium whitespace-nowrap opacity-0 pointer-events-none group-hover/action:opacity-100 transition-opacity z-10">
-                        Copy response
+                        {msg.tool === "email" && msg.emailPayload ? "Copy HTML" : "Copy response"}
                       </span>
                     </div>
                     <div className="relative group/action">
                       <button
                         type="button"
                         onClick={() => handleReplyToMessage(i)}
-                        className="size-8 rounded-full flex items-center justify-center text-muted-foreground hover:bg-secondary/60 hover:text-foreground transition-colors cursor-pointer"
+                        className="size-8 rounded-full flex items-center justify-center text-[#000000] dark:text-white hover:bg-secondary/60 hover:text-foreground transition-colors cursor-pointer"
                         aria-label="Reply to this response"
                       >
                         <Reply className="size-4" />
@@ -2634,8 +2835,8 @@ ${bodyRows}
       </div>
 
       {/* Input bar at bottom — sticky so it stays visible while scrolling */}
-      <div className="sticky bottom-0 z-10 shrink-0 px-4 pb-4 pt-2 bg-[#f5f5f5] dark:bg-background">
-        <div className="w-full max-w-2xl mx-auto">
+      <div className="sticky bottom-0 z-10 shrink-0 pt-2 pb-4 w-full max-w-2xl mx-auto">
+        <div className="w-full">
           <div className="relative overflow-visible flex flex-col rounded-2xl border border-border bg-card shadow-none">
             <div className="absolute inset-0 rounded-[inherit] z-10 pointer-events-none">
               <BorderBeam size={80} duration={8} />

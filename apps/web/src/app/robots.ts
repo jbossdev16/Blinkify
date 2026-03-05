@@ -10,16 +10,14 @@ export default function robots(): MetadataRoute.Robots {
       rules: [{ userAgent: "*", disallow: ["/"] }],
     };
   }
-  const origin = new URL(baseUrl).host;
   return {
     rules: [
       {
         userAgent: "*",
         allow: "/",
-        disallow: ["/dashboard/", "/signin", "/signup", "/reset-password"],
+        disallow: ["/creative-studio", "/brand", "/billing", "/asset-collection", "/admin", "/settings", "/projects", "/signin", "/signup", "/reset-password"],
       },
     ],
     sitemap: `${baseUrl}/sitemap.xml`,
-    host: origin,
   };
 }

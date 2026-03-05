@@ -19,9 +19,14 @@ import { cn } from "@/lib/utils";
 
 /* Match creative studio labels */
 const IMAGE_ASPECT_RATIOS = [
-  { value: "1:1", label: "Square Post (1:1)" },
+  { value: "1:1", label: "Square (1:1)" },
   { value: "4:5", label: "Instagram Feed (4:5)" },
-  { value: "9:16", label: "Instagram Story (9:16)" },
+  { value: "5:4", label: "Landscape Photo (5:4)" },
+  { value: "3:4", label: "Portrait (3:4)" },
+  { value: "4:3", label: "Presentation (4:3)" },
+  { value: "2:3", label: "Tall Portrait (2:3)" },
+  { value: "3:2", label: "Photo Print (3:2)" },
+  { value: "9:16", label: "Story / Reel (9:16)" },
   { value: "16:9", label: "Landscape Ad (16:9)" },
   { value: "21:9", label: "Banner (21:9)" },
 ];
@@ -190,7 +195,7 @@ export function AssetCollectionView({ workspaceId, embedded }: AssetCollectionVi
   if (loading) {
     return (
       <div className={cn(containerClass, "flex items-center justify-center", minHeightClass)}>
-        <p className="text-muted-foreground">Loading…</p>
+        <p className="text-[#000000] dark:text-white">Loading…</p>
       </div>
     );
   }
@@ -346,8 +351,8 @@ export function AssetCollectionView({ workspaceId, embedded }: AssetCollectionVi
         <div className="rounded-2xl border border-black/5 dark:border-border bg-white dark:bg-card shadow-none overflow-hidden p-5 lg:p-6 space-y-4">
           <div className="flex items-center justify-between gap-2 mb-2">
             <div className="flex items-center gap-2">
-              <LayoutGrid className="size-3.5 text-muted-foreground" />
-              <span className="text-xs font-normal">Filters</span>
+              <LayoutGrid className="size-3.5 text-muted-foreground dark:text-white" />
+              <span className="text-xs font-normal dark:text-white">Filters</span>
             </div>
             <button
               type="button"
@@ -361,7 +366,7 @@ export function AssetCollectionView({ workspaceId, embedded }: AssetCollectionVi
           </div>
           <div className="space-y-4">
             <div>
-              <p className="text-xs font-normal text-muted-foreground mb-1.5">Type</p>
+              <p className="text-xs font-normal text-muted-foreground dark:text-white/70 mb-1.5">Type</p>
               <div className="flex flex-wrap gap-1.5">
                 {(["all", "image", "video"] as const).map((t) => (
                   <button
@@ -372,7 +377,7 @@ export function AssetCollectionView({ workspaceId, embedded }: AssetCollectionVi
                       "px-2.5 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer",
                       typeFilter === t
                         ? "bg-primary text-white"
-                        : "bg-secondary/60 text-muted-foreground hover:text-foreground"
+                        : "bg-secondary/60 text-muted-foreground dark:text-white/80 hover:text-foreground"
                     )}
                   >
                     {t === "all" ? "All" : t === "image" ? "Images" : "Videos"}
@@ -382,14 +387,14 @@ export function AssetCollectionView({ workspaceId, embedded }: AssetCollectionVi
             </div>
             {typeFilter !== "video" && (
               <div>
-                <p className="text-xs font-normal text-muted-foreground mb-1.5">Image aspect ratio</p>
+                <p className="text-xs font-normal text-muted-foreground dark:text-white/70 mb-1.5">Image aspect ratio</p>
                 <div className="flex flex-wrap gap-1.5">
                   <button
                     type="button"
                     onClick={() => setImageAspectFilter("")}
                     className={cn(
                       "px-2.5 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer",
-                      !imageAspectFilter ? "bg-primary text-white" : "bg-secondary/60 text-muted-foreground hover:text-foreground"
+                      !imageAspectFilter ? "bg-primary text-white" : "bg-secondary/60 text-muted-foreground dark:text-white/80 hover:text-foreground"
                     )}
                   >
                     Any
@@ -403,7 +408,7 @@ export function AssetCollectionView({ workspaceId, embedded }: AssetCollectionVi
                         "px-2.5 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer",
                         imageAspectFilter === r.value
                           ? "bg-primary text-white"
-                          : "bg-secondary/60 text-muted-foreground hover:text-foreground"
+                          : "bg-secondary/60 text-muted-foreground dark:text-white/80 hover:text-foreground"
                       )}
                     >
                       {r.label}
@@ -415,14 +420,14 @@ export function AssetCollectionView({ workspaceId, embedded }: AssetCollectionVi
             {typeFilter !== "image" && (
               <>
                 <div>
-                  <p className="text-xs font-normal text-muted-foreground mb-1.5">Video aspect ratio</p>
+                  <p className="text-xs font-normal text-muted-foreground dark:text-white/70 mb-1.5">Video aspect ratio</p>
                   <div className="flex flex-wrap gap-1.5">
                     <button
                       type="button"
                       onClick={() => setVideoAspectFilter("")}
                       className={cn(
                         "px-2.5 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer",
-                        !videoAspectFilter ? "bg-primary text-white" : "bg-secondary/60 text-muted-foreground hover:text-foreground"
+                        !videoAspectFilter ? "bg-primary text-white" : "bg-secondary/60 text-muted-foreground dark:text-white/80 hover:text-foreground"
                       )}
                     >
                       Any
@@ -436,7 +441,7 @@ export function AssetCollectionView({ workspaceId, embedded }: AssetCollectionVi
                           "px-2.5 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer",
                           videoAspectFilter === r.value
                             ? "bg-primary text-white"
-                            : "bg-secondary/60 text-muted-foreground hover:text-foreground"
+                            : "bg-secondary/60 text-muted-foreground dark:text-white/80 hover:text-foreground"
                         )}
                       >
                         {r.label}
@@ -445,14 +450,14 @@ export function AssetCollectionView({ workspaceId, embedded }: AssetCollectionVi
                   </div>
                 </div>
                 <div>
-                  <p className="text-xs font-normal text-muted-foreground mb-1.5">Video resolution</p>
+                  <p className="text-xs font-normal text-muted-foreground dark:text-white/70 mb-1.5">Video resolution</p>
                   <div className="flex flex-wrap gap-1.5">
                     <button
                       type="button"
                       onClick={() => setVideoResolutionFilter("")}
                       className={cn(
                         "px-2.5 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer",
-                        !videoResolutionFilter ? "bg-primary text-white" : "bg-secondary/60 text-muted-foreground hover:text-foreground"
+                        !videoResolutionFilter ? "bg-primary text-white" : "bg-secondary/60 text-muted-foreground dark:text-white/80 hover:text-foreground"
                       )}
                     >
                       Any
@@ -466,7 +471,7 @@ export function AssetCollectionView({ workspaceId, embedded }: AssetCollectionVi
                           "px-2.5 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer",
                           videoResolutionFilter === r.value
                             ? "bg-primary text-white"
-                            : "bg-secondary/60 text-muted-foreground hover:text-foreground"
+                            : "bg-secondary/60 text-muted-foreground dark:text-white/80 hover:text-foreground"
                         )}
                       >
                         {r.label}
