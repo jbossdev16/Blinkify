@@ -6,7 +6,7 @@ export interface PlanLimits {
 }
 
 export const PLAN_CONFIG: Record<string, PlanLimits> = {
-  trial:      { maxCredits: 150,   maxWorkspaces: 1,  videoEnabled: true,  maxBrands: 1 },
+  trial:      { maxCredits: 250,   maxWorkspaces: 1,  videoEnabled: true,  maxBrands: 1 },
   standard:   { maxCredits: 400,   maxWorkspaces: 1,  videoEnabled: false, maxBrands: 1 },
   pro:        { maxCredits: 1500,  maxWorkspaces: 3,  videoEnabled: true,  maxBrands: 3 },
   agency:     { maxCredits: 5000,  maxWorkspaces: 5,  videoEnabled: true,  maxBrands: 10 },

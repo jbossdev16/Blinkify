@@ -1,15 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import type { LucideIcon } from "lucide-react";
+import { Sparkles, Bookmark } from "lucide-react";
 import { Button } from "@/components/ui/button";
+
+const ICONS = { Sparkles, Bookmark } as const;
+export type NoProjectEmptyStateIconName = keyof typeof ICONS;
 
 interface NoProjectEmptyStateProps {
   title: string;
   description: string;
   ctaHref: string;
   ctaLabel: string;
-  icon: LucideIcon;
+  iconName: NoProjectEmptyStateIconName;
 }
 
 export function NoProjectEmptyState({
@@ -17,8 +20,9 @@ export function NoProjectEmptyState({
   description,
   ctaHref,
   ctaLabel,
-  icon: Icon,
+  iconName,
 }: NoProjectEmptyStateProps) {
+  const Icon = ICONS[iconName];
   return (
     <div className="flex flex-col items-center justify-center min-h-[calc(100vh-3.5rem)] lg:min-h-[100vh] p-6 text-center">
       <div className="rounded-2xl border border-border px-8 py-12 max-w-md">

@@ -14,6 +14,7 @@ import assetCollectionRoutes from "./routes/asset-collection";
 import creativeStudioChatRoutes from "./routes/creative-studio-chat";
 import cleanupFailedGenerationsRoutes from "./routes/cleanup-failed-generations";
 import adminRoutes from "./routes/admin";
+import checkoutRoutes from "./routes/checkout";
 import waitlistRoutes from "./routes/waitlist";
 import { runCleanupFailedGenerations } from "./lib/cleanup-failed-generations";
 import { runCleanupUnsavedGenerations } from "./lib/cleanup-unsaved-generations";
@@ -48,6 +49,7 @@ app.get("/health", (_req, res) => {
 
 app.use("/auth", authRoutes);
 app.use("/waitlist", waitlistRoutes);
+app.use("/checkout", checkoutRoutes);
 
 // ─── Protected routes ────────────────────────────────────────────────────────
 

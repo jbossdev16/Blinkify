@@ -2,7 +2,6 @@ import { Suspense } from "react";
 import { getWorkspaces } from "@/lib/api";
 import { NoProjectEmptyState } from "@/components/dashboard/no-project-empty-state";
 import { AssetCollectionView } from "@/components/dashboard/asset-collection-view";
-import { Bookmark } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +21,7 @@ export default async function AssetCollectionPage() {
         description="No workspace found. Try refreshing the page or go to the dashboard."
         ctaHref="/creative-studio"
         ctaLabel="Go to Dashboard"
-        icon={Bookmark}
+        iconName="Bookmark"
       />
     );
   }

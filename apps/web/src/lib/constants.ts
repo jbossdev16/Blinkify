@@ -3,7 +3,7 @@
  * Keys match API plan values and landing names (lowercase): trial, starter/standard, professional/pro, ultra/agency.
  */
 export const PLAN_MAX_CREDITS: Record<string, number> = {
-  trial: 150,
+  trial: 250,
   standard: 400,
   starter: 400,
   pro: 1500,

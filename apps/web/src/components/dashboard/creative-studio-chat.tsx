@@ -16,6 +16,7 @@ import {
   ThumbsUp,
   ThumbsDown,
   RotateCw,
+  RotateCcw,
   Copy,
   Reply,
   X,
@@ -396,6 +397,7 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
   const [selectedEmailTemplateId, setSelectedEmailTemplateId] = useState<EmailTemplateId | null>(null);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
+  const [plusMenuOpen, setPlusMenuOpen] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   /** Object URLs for pending image previews; synced from pendingFiles and revoked on cleanup. */
@@ -409,6 +411,7 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const optionsRef = useRef<HTMLDivElement>(null);
   const toolsRef = useRef<HTMLDivElement>(null);
+  const plusMenuRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const pollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -796,12 +799,13 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
       if (optionsRef.current && !optionsRef.current.contains(target)) setOptionsOpen(false);
       if (toolsRef.current && !toolsRef.current.contains(target)) setToolsOpen(false);
       if (brandPickerRef.current && !brandPickerRef.current.contains(target)) setBrandPickerOpen(false);
+      if (plusMenuRef.current && !plusMenuRef.current.contains(target)) setPlusMenuOpen(false);
     }
-    if (optionsOpen || toolsOpen || brandPickerOpen) {
+    if (optionsOpen || toolsOpen || brandPickerOpen || plusMenuOpen) {
       document.addEventListener("mousedown", handleClick);
       return () => document.removeEventListener("mousedown", handleClick);
     }
-  }, [optionsOpen, toolsOpen]);
+  }, [optionsOpen, toolsOpen, brandPickerOpen, plusMenuOpen]);
 
   useEffect(() => {
     if (!imagePreviewUrl) return;
@@ -1359,6 +1363,15 @@ ${bodyRows}
 
       const imageFiles = pendingFiles.filter((f) => f.type.startsWith("image/")).slice(0, MAX_INPUT_IMAGES);
       const attachedUrls = imageFiles.length > 0 ? await Promise.all(imageFiles.map(fileToDataUrl)) : [];
+      const attachedImagesForApi =
+        imageFiles.length > 0
+          ? await Promise.all(
+              imageFiles.map(async (f) => ({
+                data: await fileToBase64(f),
+                mimeType: f.type || "image/png",
+              }))
+            )
+          : [];
 
       const userMsg: CreativeMessage = {
         role: "user",
@@ -1394,6 +1407,7 @@ ${bodyRows}
               likedSnippets: likedSnippets.length ? likedSnippets : undefined,
               dislikedSnippets: dislikedSnippets.length ? dislikedSnippets : undefined,
               replyTo,
+              ...(attachedImagesForApi.length > 0 && { attachedImages: attachedImagesForApi }),
             }),
           }
         );
@@ -2112,28 +2126,94 @@ ${bodyRows}
               </div>
             );
 
+  function handleResetChat() {
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = null;
+    }
+    setMessages([]);
+    setPrompt("");
+    setSelectedTool(null);
+    setContinuationPrompts([]);
+    setImageSlidePrompts([]);
+    setImageOptions(defaultImageOptions());
+    setVideoOptions(defaultVideoOptions());
+    setEmailOptions(defaultEmailOptions());
+    setLikedSnippets([]);
+    setDislikedSnippets([]);
+    setSelectedEmailTemplateId(null);
+    setReplyingTo(null);
+    const clearedState = {
+      messages: [],
+      prompt: "",
+      selectedTool: null as CreativeTool,
+      imageOptions: defaultImageOptions(),
+      videoOptions: defaultVideoOptions(),
+      emailOptions: defaultEmailOptions(),
+      continuationPrompts: [] as string[],
+      imageSlidePrompts: [] as string[],
+      likedSnippets: [] as string[],
+      dislikedSnippets: [] as string[],
+      selectedEmailTemplateId: null as EmailTemplateId | null,
+    };
+    saveCreativeStudioChatToSupabase(workspaceId, projectId, clearedState);
+  }
+
   /* ─── Shared input card (textarea first, then row: Plus, Options, Tools, Send) ─── */
 
   const inputActionRow = (
     <div className="flex items-center justify-between gap-2 flex-wrap pt-2 shrink-0">
       <div className="flex items-center gap-1.5 flex-wrap">
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          className={cn(
-            "flex items-center justify-center size-8 rounded-lg transition-colors shrink-0",
-            pendingFiles.length > 0
-              ? "icon-gradient-brand"
-              : "text-[#000000] dark:text-white hover:text-foreground"
+        <div className="relative shrink-0" ref={plusMenuRef}>
+          <button
+            type="button"
+            onClick={() => {
+              setPlusMenuOpen((v) => !v);
+              setOptionsOpen(false);
+              setToolsOpen(false);
+              setBrandPickerOpen(false);
+            }}
+            className={cn(
+              "flex items-center justify-center size-8 rounded-lg transition-colors shrink-0",
+              pendingFiles.length > 0
+                ? "icon-gradient-brand"
+                : "text-[#000000] dark:text-white hover:text-foreground"
+            )}
+            title="Add or reset"
+          >
+            <Plus className="size-4" />
+          </button>
+          {plusMenuOpen && (
+            <div className="absolute bottom-full left-0 mb-1 w-[200px] rounded-xl border border-border bg-card shadow-lg z-50 py-1">
+              <button
+                type="button"
+                onClick={() => {
+                  fileInputRef.current?.click();
+                  setPlusMenuOpen(false);
+                }}
+                className="w-full flex items-center gap-2 px-3 py-2 text-left text-xs font-medium hover:bg-secondary/60"
+              >
+                <ImagePlus className="size-3.5" />
+                <span className="flex-1">Add images</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  handleResetChat();
+                  setPlusMenuOpen(false);
+                }}
+                className="w-full flex items-center gap-2 px-3 py-2 text-left text-xs font-medium hover:bg-secondary/60"
+              >
+                <RotateCcw className="size-3.5" />
+                <span className="flex-1">Reset Chat</span>
+              </button>
+            </div>
           )}
-          title="Add images"
-        >
-          <Plus className="size-4" />
-        </button>
+        </div>
         <div className="relative shrink-0" ref={optionsRef}>
           <button
             type="button"
-            onClick={() => { setOptionsOpen((v) => !v); setToolsOpen(false); setBrandPickerOpen(false); }}
+            onClick={() => { setOptionsOpen((v) => !v); setToolsOpen(false); setBrandPickerOpen(false); setPlusMenuOpen(false); }}
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer text-[#000000] dark:text-white hover:text-foreground"
           >
             <SlidersHorizontal className={cn("size-3.5", optionsOpen && "icon-active-creative")} />
@@ -2148,7 +2228,7 @@ ${bodyRows}
         <div className="relative shrink-0" ref={toolsRef}>
           <button
             type="button"
-            onClick={() => { setToolsOpen((v) => !v); setOptionsOpen(false); setBrandPickerOpen(false); }}
+            onClick={() => { setToolsOpen((v) => !v); setOptionsOpen(false); setBrandPickerOpen(false); setPlusMenuOpen(false); }}
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer shrink-0 text-[#000000] dark:text-white hover:text-foreground"
           >
             <Hammer className={cn("size-3.5", (toolsOpen || selectedTool) && "icon-active-creative")} />
@@ -2222,7 +2302,7 @@ ${bodyRows}
           <div className="relative shrink-0" ref={brandPickerRef}>
             <button
               type="button"
-              onClick={() => { setBrandPickerOpen((v) => !v); setToolsOpen(false); setOptionsOpen(false); }}
+              onClick={() => { setBrandPickerOpen((v) => !v); setToolsOpen(false); setOptionsOpen(false); setPlusMenuOpen(false); }}
               className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer shrink-0 text-[#000000] dark:text-white hover:text-foreground"
             >
               <Palette className={cn("size-3.5", brandPickerOpen && "icon-active-creative")} />
@@ -2288,7 +2368,7 @@ ${bodyRows}
     return (
       <div className="flex flex-1 min-h-0">
         <div className="flex-1 min-w-0 flex flex-col transition-all duration-200">
-        <main className="flex-1 flex min-h-0 w-full flex-col items-center justify-start px-4 pt-6 pb-4">
+        <main className="flex-1 flex min-h-0 w-full flex-col items-center justify-center px-4 pt-6 pb-4">
           <div className="w-full max-w-2xl flex flex-col">
             <div className="text-center mb-4 shrink-0">
               <h1 className="text-2xl lg:text-3xl font-bold tracking-tight mb-2">

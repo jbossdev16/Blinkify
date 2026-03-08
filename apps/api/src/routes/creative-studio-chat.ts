@@ -54,6 +54,22 @@ router.post(
             }
           : undefined;
 
+      const MAX_ATTACHED_IMAGES = 4;
+      const MAX_IMAGE_BASE64_LEN = 8 * 1024 * 1024; // ~6MB decoded
+      let attachedImages: { data: string; mimeType: string }[] = [];
+      if (Array.isArray(req.body?.attachedImages)) {
+        attachedImages = (req.body.attachedImages as { data?: unknown; mimeType?: unknown }[])
+          .filter(
+            (x): x is { data: string; mimeType: string } =>
+              typeof x?.data === "string" &&
+              typeof x?.mimeType === "string" &&
+              /^image\/(jpeg|png|gif|webp)$/i.test(x.mimeType) &&
+              x.data.length <= MAX_IMAGE_BASE64_LEN
+          )
+          .slice(0, MAX_ATTACHED_IMAGES)
+          .map((x) => ({ data: x.data, mimeType: x.mimeType }));
+      }
+
       const user = (req as Request & { user: { id: string } }).user;
       const { data: membership } = await supabase
         .from("workspace_members")
@@ -79,7 +95,8 @@ router.post(
         prompt,
         project ?? undefined,
         { likedSnippets, dislikedSnippets },
-        replyTo
+        replyTo,
+        attachedImages.length > 0 ? attachedImages : undefined
       );
 
       res.json({ content, intent });

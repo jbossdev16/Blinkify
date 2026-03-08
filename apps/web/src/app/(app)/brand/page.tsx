@@ -32,14 +32,33 @@ export default async function BrandPage({ searchParams }: BrandPageProps) {
 
   const planFeatures = getPlanFeatures(workspace.plan);
 
-  // First brand ever — show the onboarding flow
+  // First brand ever — create a blank project and show card-based brand settings
   if (projects.length === 0) {
-    return (
-      <CreateProjectFlow
-        workspaceId={workspace.id}
-        redirectToAfterCreate="/brand"
-      />
-    );
+    try {
+      const { project: newProject } = await apiFetch<{ project: Project }>(
+        `/workspaces/${workspace.id}/projects`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            name: "Brand 1",
+            description: "New brand",
+            brand_colors: [],
+            brand_fonts: [],
+            brand_logo: null,
+            brand_guidelines: null,
+          }),
+        }
+      );
+      redirect(`/brand?project=${newProject.id}`);
+    } catch (err: unknown) {
+      if ((err as { digest?: string })?.digest?.startsWith("NEXT_REDIRECT")) throw err;
+      return (
+        <CreateProjectFlow
+          workspaceId={workspace.id}
+          redirectToAfterCreate="/brand"
+        />
+      );
+    }
   }
 
   // New brand slot requested — auto-create a blank project and redirect to it

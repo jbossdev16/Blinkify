@@ -13,6 +13,7 @@
   "dependencies": {
     "@google-cloud/speech": "^7.2.1",
     "@google/genai": "^1.40.0",
+    "@polar-sh/sdk": "^0.46.2",
     "@react-email/components": "^1.0.7",
     "@supabase/supabase-js": "^2.45.0",
     "cheerio": "^1.2.0",

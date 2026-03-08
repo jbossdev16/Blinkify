@@ -741,6 +741,8 @@ INTENT = "video" only when the user clearly wants to CREATE/GENERATE a video now
 
 INTENT = "email" when the user wants to CREATE/GENERATE a marketing email, email campaign, email creative, or newsletter (e.g. "create a marketing email", "make an email that converts", "generate an email campaign", "email for our product launch"). Set content to "Creating your email creative…" (no explanation).
 
+IMAGES — When the user attaches image(s), you CAN see them. Describe, analyze, or answer questions about what is in the image(s) (e.g. "what is this image?", "describe this", "suggest improvements"). For analysis/description only, set intent to null and put your answer in content. Do not claim you cannot see images when they are attached.
+
 Output exactly one line: valid JSON with "content" (string) and "intent" ("image" | "video" | "email" | null). No other text. Use \\n for line breaks inside content so the JSON stays on one line.`;
 
 export type CreativeStudioChatResult = { content: string; intent: "image" | "video" | "email" | null };
@@ -758,7 +760,8 @@ export async function chatForCreativeStudio(
   userPrompt: string,
   project?: { name?: string | null; description?: string | null; target_audience?: string | null; brand_guidelines?: string | null } | null,
   preference?: { likedSnippets: string[]; dislikedSnippets: string[] },
-  replyTo?: ReplyToContext | null
+  replyTo?: ReplyToContext | null,
+  attachedImages?: { data: string; mimeType: string }[]
 ): Promise<CreativeStudioChatResult> {
   const trimmed = userPrompt.trim();
   if (!trimmed) return { content: "", intent: null };
@@ -813,9 +816,17 @@ export async function chatForCreativeStudio(
     .filter(Boolean)
     .join("\n\n");
 
+  const hasImages = attachedImages && attachedImages.length > 0;
+  const contentParts = hasImages
+    ? [
+        ...attachedImages.map((img) => createPartFromBase64(img.data, img.mimeType)),
+        createPartFromText(userContent),
+      ]
+    : [createPartFromText(userContent)];
+
   const result = await gemini.models.generateContent({
     model: PROMPT_ENHANCE_MODEL,
-    contents: [{ text: userContent }],
+    contents: contentParts,
     config: {
       systemInstruction: CREATIVE_STUDIO_CHAT_SYSTEM,
       temperature: 0.4,

@@ -19,6 +19,13 @@ Set these in your production environment (e.g. host dashboard, `.env` in the API
 | `RESEND_API_KEY` | No | Resend.com API key for transactional emails. If unset, email send is skipped (warning logged). |
 | `RESEND_FROM_EMAIL` | No | From address for Resend, e.g. `Blinkify <noreply@yourdomain.com>`. Defaults to a placeholder. |
 | `CLEANUP_FAILED_GENERATIONS_INTERVAL_MS` | No | Interval in ms for cleanup job (default from code). Optional. |
+| `POLAR_ACCESS_TOKEN` | No | Polar.sh API access token for checkout session creation. Required for billing. |
+| `POLAR_SANDBOX` | No | Set to `true` or `1` to use Polar **Sandbox** API (`sandbox-api.polar.sh`). Use this with sandbox product IDs and a token from the Sandbox dashboard. Omit or leave unset for production. |
+| `POLAR_PRODUCT_ID_STANDARD` | No | Polar product ID for the Standard plan. Create in Polar dashboard. |
+| `POLAR_PRODUCT_ID_PROFESSIONAL` | No | Polar product ID for the Professional plan. Create in Polar dashboard. |
+| `POLAR_PRODUCT_ID_AGENCY` | No | Polar product ID for the Agency plan (top tier). Create in Polar dashboard. |
+
+**Polar embed (setup-plan):** Checkout is created via the [Checkout API](https://polar.sh/docs/features/checkout/session) and opened with [Embedded Checkout](https://polar.sh/docs/features/checkout/embed). Set `WEB_ORIGIN` to your frontend origin (e.g. `https://app.blinkify.com`) so `embed_origin` is correct. In Polar dashboard **Catalogue**, open each product (Standard Package, Professional Package, Agency Package), use the ⋮ menu → **Copy Product ID**, and set `POLAR_PRODUCT_ID_STANDARD`, `POLAR_PRODUCT_ID_PROFESSIONAL`, `POLAR_PRODUCT_ID_AGENCY` accordingly.
 
 **Checklist**
 
@@ -92,6 +99,11 @@ GEMINI_API_KEY=...
 # Optional:
 RESEND_API_KEY=...
 RESEND_FROM_EMAIL=Blinkify <noreply@yourdomain.com>
+# Polar (billing):
+POLAR_ACCESS_TOKEN=...
+POLAR_PRODUCT_ID_STANDARD=...
+POLAR_PRODUCT_ID_PROFESSIONAL=...
+POLAR_PRODUCT_ID_ULTRA=...
 ```
 
 **Web (production build)**
@@ -114,3 +126,5 @@ Replace `yourdomain.com` and `xxxx` with your real domain and Supabase project r
   - **`main`** – Production. Deploy to **blinkify.ai** (marketing site). Set `NEXT_PUBLIC_APP_URL=https://blinkify.ai` so the site is indexed and sitemap/robots point to the marketing domain.
   - **`dev`** – Development and pre-release. Deploy to a Vercel preview URL for testing before merging to `main`. Using **`dev`** as the second branch name is fine; alternatives are `develop` or `staging` if you prefer.
 - **Webapp (app.blinkify.ai):** When you add the app subdomain, use a **second Vercel project** (or separate deployment) that builds the same repo with `NEXT_PUBLIC_APP_URL=https://app.blinkify.ai`. That build will serve noindex, no sitemap, and disallow-all robots so the app is not indexed until you are ready.
+
+**Putting /signup and the app on app.blinkify.ai (not indexed):** (1) Use a second Vercel project with production domain app.blinkify.ai. (2) Set `NEXT_PUBLIC_APP_URL=https://app.blinkify.ai` for that project (same API/Supabase vars). The app already uses this to set noindex, Disallow: / in robots.txt, and an empty sitemap. (3) Marketing (blinkify.ai) keeps `NEXT_PUBLIC_APP_URL=https://blinkify.ai`. (4) Link Sign up / Log in from the marketing site to https://app.blinkify.ai/signup and https://app.blinkify.ai/signin; after login users stay on app.blinkify.ai.

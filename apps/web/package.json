@@ -10,6 +10,7 @@
     "clean": "rm -rf .next"
   },
   "dependencies": {
+    "@polar-sh/checkout": "^0.2.0",
     "@radix-ui/react-slot": "^1.2.4",
     "@react-email/components": "^1.0.8",
     "@supabase/ssr": "^0.5.0",

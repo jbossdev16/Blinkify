@@ -251,8 +251,11 @@ export default function SignupPage() {
         setVerifyLoading(false);
         return;
       }
-      // Success → redirect to log in
-      router.push("/signin?verified=true");
+      // Store email for plan setup page, then redirect
+      if (typeof window !== "undefined") {
+        sessionStorage.setItem("signup_email", email.trim());
+      }
+      router.push("/setup-plan");
     } catch {
       setVerifyError("Network error. Please try again.");
     } finally {

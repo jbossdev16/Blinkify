@@ -3,7 +3,7 @@ import { PLAN_CONFIG } from "../lib/plan-config.js";
 import crypto from "crypto";
 
 const TRIAL_DURATION_DAYS = 7;
-const TRIAL_CREDITS = 150;
+const TRIAL_CREDITS = 250;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 

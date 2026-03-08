@@ -3,7 +3,6 @@ import { Suspense } from "react";
 import { apiFetch, getWorkspaces, type Project } from "@/lib/api";
 import { NoProjectEmptyState } from "@/components/dashboard/no-project-empty-state";
 import { CreativeStudioView } from "@/components/dashboard/creative-studio-view";
-import { Sparkles } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +21,7 @@ export default async function CreativeStudioPage() {
         description="No workspace found. Please try refreshing."
         ctaHref="/creative-studio"
         ctaLabel="Refresh"
-        icon={Sparkles}
+        iconName="Sparkles"
       />
     );
   }
@@ -44,7 +43,7 @@ export default async function CreativeStudioPage() {
         description="Set up your brand first to use Creative Studio."
         ctaHref="/brand"
         ctaLabel="Set up brand"
-        icon={Sparkles}
+        iconName="Sparkles"
       />
     );
   }
