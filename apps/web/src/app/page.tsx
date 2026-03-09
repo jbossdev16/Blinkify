@@ -184,24 +184,13 @@ function Hero2DVerticalMarquee({ images }: { images: string[] }) {
 ───────────────────────────────────────────── */
 function HeroSection() {
   return (
-    <section className="relative flex-1 flex flex-col justify-center min-h-0 py-0 bg-[#ffffff] overflow-hidden">
-      {/* Subtle background: gradient + dot grid */}
-      <div className="absolute inset-0 pointer-events-none" aria-hidden>
-        <div className="absolute inset-0 bg-gradient-to-br from-slate-50/80 via-white to-blue-50/40" />
-        <div
-          className="absolute inset-0 opacity-[0.4]"
-          style={{
-            backgroundImage: "radial-gradient(circle at 1px 1px, rgb(0 0 0 / 0.06) 1px, transparent 0)",
-            backgroundSize: "24px 24px",
-          }}
-        />
-      </div>
-      <div className="relative z-10 max-w-[1200px] mx-auto px-4 w-full flex-1 flex flex-col md:flex-row md:items-center md:justify-start gap-8 md:gap-12 min-h-0">
-        <div className="flex flex-col items-start order-1 flex-shrink-0">
+    <section className="relative flex-none md:flex-1 flex flex-col justify-center min-h-0 py-0 bg-[#ffffff] overflow-x-hidden min-h-[280px] sm:min-h-0">
+      <div className="relative z-10 max-w-[1200px] mx-auto px-4 w-full flex-1 flex flex-col md:flex-row md:items-center md:justify-start gap-8 md:gap-12 min-h-0 pt-6 pb-6 sm:pt-0 sm:pb-0">
+        <div className="flex flex-col items-start order-1 flex-shrink-0 overflow-visible">
             <h1 className="text-4xl sm:text-5xl md:text-6xl font-medium leading-tight tracking-tight text-foreground mb-2 whitespace-nowrap">
               Better Ad Creatives.
             </h1>
-            <h1 className="text-4xl sm:text-5xl md:text-6xl font-medium leading-tight tracking-tight text-foreground mb-6 md:mb-8">
+            <h1 className="text-4xl sm:text-5xl md:text-6xl font-medium leading-tight tracking-tight text-foreground mb-6 md:mb-8 overflow-visible">
               <span className="text-gradient-brand">10x Faster.</span>
             </h1>
             <p className="text-base sm:text-lg text-muted-foreground max-w-md mb-6 md:mb-8 leading-relaxed">
@@ -1297,7 +1286,7 @@ function StatsBentoSection() {
           <BlurFade inView inViewMargin="-40px" delay={0.08} className="order-2 md:order-none md:col-start-2 md:row-start-1 md:col-span-2 md:row-span-1 min-h-[200px] md:min-h-0">
             <div className="h-full min-h-[200px] md:min-h-0 rounded-2xl overflow-hidden relative bg-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xs flex flex-col md:flex-row items-stretch">
               <div className="relative w-full md:w-[42%] min-h-0 flex shrink-0 items-center justify-center overflow-hidden rounded-t-2xl md:rounded-l-2xl md:rounded-tr-none aspect-[2/1] md:aspect-auto">
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none scale-75 sm:scale-90 md:scale-100 origin-center">
                   <div className="relative size-[180px] sm:size-[220px] md:size-[266px] lg:size-[304px]">
                     <OrbitingCircles radius={72} duration={20} delay={2.22} className="border-0 bg-transparent">
                       <img src="/Amazon/Amazon_Symbol_30.svg" alt="Amazon" className="h-9 w-9 object-contain" />
@@ -1892,9 +1881,9 @@ export default function Home() {
     <>
       <ContentGuideLines />
       <LandingHeader />
-      <main>
-        <div className="min-h-[calc(100svh-68px)] flex flex-col">
-          <div className="flex-1 flex flex-col min-h-0">
+      <main className="bg-[#ffffff]">
+        <div className="min-h-0 md:min-h-[calc(100svh-68px)] flex flex-col">
+          <div className="flex-none md:flex-1 flex flex-col min-h-0">
             <HeroSection />
           </div>
           <CompaniesMarqueeSection />
