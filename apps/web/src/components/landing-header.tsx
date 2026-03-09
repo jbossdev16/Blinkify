@@ -22,39 +22,39 @@ export function LandingHeader() {
 
   return (
     <header
-      className="fixed top-0 left-0 right-0 z-50 pt-4 px-4 md:px-6 transition-[opacity,transform] duration-300 ease-out"
+      className="fixed top-0 left-0 right-0 z-50 transition-[opacity,transform] duration-300 ease-out bg-[#ffffff] border-b border-black/[0.06]"
       style={{
         opacity: visible ? 1 : 0,
         transform: visible ? "translateY(0)" : "translateY(-12px)",
         pointerEvents: visible ? "auto" : "none",
       }}
     >
-      <div className="max-w-[1200px] mx-auto h-[68px] pl-6 pr-6 rounded-xl bg-white/80 backdrop-blur-md border border-border shadow-[0_4px_24px_rgba(0,0,0,0.06)] flex items-center justify-between relative">
+      <div className="max-w-[1200px] mx-auto min-h-[68px] pt-3 pb-3 px-4 flex items-center justify-between relative">
         <div className="flex items-center shrink-0">
           <BlinkifyLogo variant="full" height={40} href="/" className="text-xl" />
         </div>
         <nav className="hidden md:flex items-center gap-8 absolute left-1/2 -translate-x-1/2">
           <Link
             href="/#how-it-works"
-            className="text-body-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+            className="text-body-sm font-medium text-[#000000] transition-all duration-200 hover:-translate-y-0.5"
           >
             How it Works
           </Link>
           <Link
             href="/#who-its-for"
-            className="text-body-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+            className="text-body-sm font-medium text-[#000000] transition-all duration-200 hover:-translate-y-0.5"
           >
             Use Cases
           </Link>
           <Link
             href="/#value"
-            className="text-body-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+            className="text-body-sm font-medium text-[#000000] transition-all duration-200 hover:-translate-y-0.5"
           >
             Features
           </Link>
           <Link
             href="/#pricing"
-            className="text-body-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+            className="text-body-sm font-medium text-[#000000] transition-all duration-200 hover:-translate-y-0.5"
           >
             Pricing
           </Link>

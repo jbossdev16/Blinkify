@@ -227,6 +227,15 @@
     animation: marquee-reverse 25s linear infinite;
   }
 
+  /* Vertical marquee (2D, up then down) */
+  @keyframes marquee-vertical {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-50%); }
+  }
+  .animate-marquee-vertical {
+    animation: marquee-vertical 90s ease-in-out infinite;
+  }
+
   /* Orbiting circles animation */
   @keyframes orbit {
     0% {
@@ -267,6 +276,23 @@
   .animate-float-reverse {
     animation: float-reverse 4s ease-in-out infinite;
   }
+
+  /* Hero 3D ribbon marquee (Stripe-style) */
+  @keyframes ribbon-drift-1 {
+    0%, 100% { transform: translate(0, 0) skewY(-3deg); }
+    50% { transform: translate(-8%, 5%) skewY(-2deg); }
+  }
+  @keyframes ribbon-drift-2 {
+    0%, 100% { transform: translate(0, 0) skewY(2deg); }
+    50% { transform: translate(5%, -6%) skewY(3deg); }
+  }
+  @keyframes ribbon-drift-3 {
+    0%, 100% { transform: translate(0, 0) skewY(1deg); }
+    50% { transform: translate(-5%, -4%) skewY(-1deg); }
+  }
+  .animate-ribbon-1 { animation: ribbon-drift-1 12s ease-in-out infinite; }
+  .animate-ribbon-2 { animation: ribbon-drift-2 14s ease-in-out infinite; }
+  .animate-ribbon-3 { animation: ribbon-drift-3 10s ease-in-out infinite; }
 
   /* Brand gradient (Apple-style) for text and accents – even stops so all 4 colors show */
   .text-gradient-brand {

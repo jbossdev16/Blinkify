@@ -16,10 +16,6 @@ import React, { useState, useRef, useEffect, forwardRef, useCallback } from "rea
 import { cn } from "@/lib/utils";
 import { AnimatePresence, motion } from "motion/react";
 
-const MacbookScroll = dynamic(
-  () => import("@/components/ui/macbook-scroll").then((m) => ({ default: m.MacbookScroll })),
-  { ssr: false }
-);
 const OrbitingCircles = dynamic(
   () => import("@/components/ui/orbiting-circles").then((m) => ({ default: m.OrbitingCircles })),
   { ssr: false }
@@ -94,61 +90,118 @@ const companyLogos = [
   { name: "TikTok", src: "/TikTok/TikTok_Logo_0.svg" },
 ];
 
-function CompaniesSection() {
+/* Hero 3D marquee images (same as signup/signin) */
+const heroMarqueeBaseImages = [
+  "/blinkify-1770839372135.png",
+  "/blinkify-1770839665605.png",
+  "/Starbucks AFTER.png",
+  "/blinkify-1770843387104.png",
+  "/blinkify-1770843757047.png",
+  "/Skincare%20Product.webp",
+  "/Sneakers.webp",
+  "/Watch.webp",
+  "/Headphones.webp",
+  "/Coffee%20Bag.webp",
+  "/Sunglasses.webp",
+];
+
+function getHeroMarqueeImages(): string[] {
+  const cols: string[] = [];
+  for (let c = 0; c < 4; c++) {
+    for (let i = 0; i < 6; i++) cols.push(heroMarqueeBaseImages[i % heroMarqueeBaseImages.length]!);
+  }
+  return cols;
+}
+
+function shuffleHeroMarqueeImages(): string[] {
+  const cols: string[][] = [];
+  for (let c = 0; c < 4; c++) {
+    const pool = [...heroMarqueeBaseImages];
+    const col: string[] = [];
+    for (let i = 0; i < 6; i++) {
+      const available = pool.length > 0
+        ? pool.filter((img) => img !== col[col.length - 1])
+        : heroMarqueeBaseImages.filter((img) => img !== col[col.length - 1]);
+      const pick = available.length > 0
+        ? available[Math.floor(Math.random() * available.length)]!
+        : heroMarqueeBaseImages[i % heroMarqueeBaseImages.length]!;
+      col.push(pick);
+      const idx = pool.indexOf(pick);
+      if (idx !== -1) pool.splice(idx, 1);
+    }
+    cols.push(col);
+  }
+  return cols.flat();
+}
+
+function useHeroMarqueeImages() {
+  const [images, setImages] = useState<string[]>(getHeroMarqueeImages);
+  useEffect(() => {
+    setImages(shuffleHeroMarqueeImages());
+  }, []);
+  return images;
+}
+
+/* 2D vertical marquee: 2 columns, 2 images per column (4 total), moves up and down slowly */
+function Hero2DVerticalMarquee({ images }: { images: string[] }) {
+  const capped = images.slice(0, 4);
+  const cols = [capped.slice(0, 2), capped.slice(2, 4)];
   return (
-    <section className="py-8 md:py-[40px] bg-[#ffffff]">
-      <div className="max-w-[1200px] mx-auto px-4 sm:px-6">
-        <p className="text-center text-body-sm text-muted-foreground mb-8 uppercase tracking-wider font-normal">
-          Companies Leveraging Gen AI
-        </p>
-        <div className="relative overflow-hidden h-12">
-          {/* Fade edges */}
-          <div className="absolute left-0 top-0 bottom-0 w-24 bg-linear-to-r from-background to-transparent z-10" />
-          <div className="absolute right-0 top-0 bottom-0 w-24 bg-linear-to-l from-background to-transparent z-10" />
-          
-          {/* Marquee container: w-max so -50% = one set width for seamless loop */}
-          <div className="flex w-max animate-marquee items-center h-full">
-            {/* First set of logos */}
-            {companyLogos.map((company) => (
-              <BlurFade key={company.name} inView inViewMargin="-20px" className="shrink-0 w-[180px] h-8 flex items-center justify-center mx-4">
+    <div className="h-full w-full overflow-hidden flex gap-3 px-2">
+      {cols.map((columnImages, colIndex) => (
+        <div key={colIndex} className="flex-1 min-w-0 h-full overflow-hidden">
+          <div
+            className="flex h-max w-full flex-col animate-marquee-vertical"
+            style={{ animationDelay: `${colIndex * -2.5}s` }}
+          >
+            {columnImages.map((src, i) => (
+              <div key={`a-${colIndex}-${i}`} className="shrink-0 w-full pb-3">
                 <img
-                  src={company.src}
-                  alt={company.name}
-                  className="h-full w-full object-contain transition-all duration-300"
+                  src={src}
+                  alt=""
+                  className="w-full rounded-lg object-cover aspect-[9/16] shadow-sm"
                 />
-              </BlurFade>
+              </div>
             ))}
-            {/* Duplicate for seamless loop */}
-            {companyLogos.map((company) => (
-              <BlurFade key={`${company.name}-dup`} inView inViewMargin="-20px" className="shrink-0 w-[180px] h-8 flex items-center justify-center mx-4">
+            {columnImages.map((src, i) => (
+              <div key={`b-${colIndex}-${i}`} className="shrink-0 w-full pb-3">
                 <img
-                  src={company.src}
-                  alt={company.name}
-                  className="h-full w-full object-contain transition-all duration-300"
+                  src={src}
+                  alt=""
+                  className="w-full rounded-lg object-cover aspect-[9/16] shadow-sm"
                 />
-              </BlurFade>
+              </div>
             ))}
           </div>
         </div>
-      </div>
-    </section>
+      ))}
+    </div>
   );
 }
 
 /* ─────────────────────────────────────────────
-   HERO SECTION - two-column: CTA left, visuals right
+   HERO SECTION - CTA left, demo video right
 ───────────────────────────────────────────── */
 function HeroSection() {
   return (
-    <section className="relative flex-1 flex flex-col justify-center min-h-[calc(100svh-68px)] pt-[88px] pb-10 md:pt-[120px] md:pb-[100px] bg-[#ffffff] overflow-x-clip overflow-y-visible">
-      <div className="relative z-10 max-w-[1200px] mx-auto px-4 sm:px-6 w-full flex-1 flex flex-col justify-center">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12 items-start pt-0 md:pt-12">
-          {/* Left: CTA – clear fixed header on mobile (header ~84px) */}
-          <div className="flex flex-col items-start pt-2 md:pt-[90px] order-1">
-            <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold leading-tight tracking-tight text-foreground mb-2 whitespace-nowrap">
+    <section className="relative flex-1 flex flex-col justify-center min-h-0 py-0 bg-[#ffffff] overflow-hidden">
+      {/* Subtle background: gradient + dot grid */}
+      <div className="absolute inset-0 pointer-events-none" aria-hidden>
+        <div className="absolute inset-0 bg-gradient-to-br from-slate-50/80 via-white to-blue-50/40" />
+        <div
+          className="absolute inset-0 opacity-[0.4]"
+          style={{
+            backgroundImage: "radial-gradient(circle at 1px 1px, rgb(0 0 0 / 0.06) 1px, transparent 0)",
+            backgroundSize: "24px 24px",
+          }}
+        />
+      </div>
+      <div className="relative z-10 max-w-[1200px] mx-auto px-4 w-full flex-1 flex flex-col md:flex-row md:items-center md:justify-start gap-8 md:gap-12 min-h-0">
+        <div className="flex flex-col items-start order-1 flex-shrink-0">
+            <h1 className="text-4xl sm:text-5xl md:text-6xl font-medium leading-tight tracking-tight text-foreground mb-2 whitespace-nowrap">
               Better Ad Creatives.
             </h1>
-            <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold leading-tight tracking-tight text-foreground mb-6 md:mb-8">
+            <h1 className="text-4xl sm:text-5xl md:text-6xl font-medium leading-tight tracking-tight text-foreground mb-6 md:mb-8">
               <span className="text-gradient-brand">10x Faster.</span>
             </h1>
             <p className="text-base sm:text-lg text-muted-foreground max-w-md mb-6 md:mb-8 leading-relaxed">
@@ -161,73 +214,71 @@ function HeroSection() {
               </Link>
             </Button>
             <p className="mt-3 text-sm text-muted-foreground">
-              Free trial · No credit card required
+              Free Trial · Cancel Any Time
             </p>
           </div>
-
-          {/* Mobile: demo video */}
+          <div className="hidden md:block relative flex-1 min-w-0 max-w-[640px] aspect-video rounded-2xl overflow-hidden border border-black/5 shadow-lg bg-black order-2 ml-auto">
+            <DemoVideoPlayer />
+          </div>
           <div className="relative w-full aspect-video max-w-[min(100vw,400px)] mx-auto rounded-2xl overflow-hidden border border-black/5 shadow-md md:hidden order-2 bg-black">
             <DemoVideoPlayer />
           </div>
+      </div>
+    </section>
+  );
+}
 
-          {/* Right: Overlapping visual cards – desktop only */}
-          <div className="relative h-[700px] md:h-[720px] ml-0 md:ml-[140px] hidden md:block order-3">
-            {/* Back card: $2,400 Saved Monthly – tallest, white, BorderBeam, bottom-aligned with front card, extends to header nav */}
-            <div className="absolute bottom-[34px] right-[-200px] w-[320px] h-[630px] rounded-2xl bg-white border border-black/5 p-6 md:p-7 flex flex-col justify-between transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xs z-0 relative overflow-visible animate-float">
-              <div className="absolute inset-0 rounded-[inherit] z-10 pointer-events-none">
-                <BorderBeam size={80} duration={8} />
+/* ─────────────────────────────────────────────
+   COMPANIES MARQUEE SECTION (separate from hero)
+───────────────────────────────────────────── */
+function CompaniesMarqueeSection() {
+  const [hoveredCompany, setHoveredCompany] = useState<string | null>(null);
+  return (
+    <section className="py-0 bg-[#ffffff] border-b border-black/[0.06] p-1">
+      <div className="max-w-[1200px] mx-auto w-full">
+        <div className="w-full h-px bg-black/[0.06]" aria-hidden />
+      </div>
+      <div className="max-w-[1200px] mx-auto w-full">
+        <div className="w-full m-0">
+          <div className="py-0">
+            <div className="relative overflow-hidden h-[72px]">
+              <div className="flex w-max animate-marquee items-center h-full">
+                {companyLogos.map((company) => (
+                  <div
+                    key={company.name}
+                    className="shrink-0 w-[120px] h-6 flex items-center justify-center mx-3"
+                    onMouseEnter={() => setHoveredCompany(company.name)}
+                    onMouseLeave={() => setHoveredCompany(null)}
+                  >
+                    <img
+                      src={company.src}
+                      alt={company.name}
+                      className={cn(
+                        "max-h-full max-w-full w-auto h-auto object-contain object-center transition-all duration-300",
+                        hoveredCompany !== null && hoveredCompany !== company.name && "opacity-40 grayscale"
+                      )}
+                    />
+                  </div>
+                ))}
+                {companyLogos.map((company) => (
+                  <div
+                    key={`${company.name}-dup`}
+                    className="shrink-0 w-[120px] h-6 flex items-center justify-center mx-3"
+                    onMouseEnter={() => setHoveredCompany(company.name)}
+                    onMouseLeave={() => setHoveredCompany(null)}
+                  >
+                    <img
+                      src={company.src}
+                      alt={company.name}
+                      className={cn(
+                        "max-h-full max-w-full w-auto h-auto object-contain object-center transition-all duration-300",
+                        hoveredCompany !== null && hoveredCompany !== company.name && "opacity-40 grayscale"
+                      )}
+                    />
+                  </div>
+                ))}
               </div>
-              <p className="text-4xl font-bold text-foreground">Saved Monthly</p>
-              <p className="text-4xl font-bold text-gradient-brand">$2,400</p>
             </div>
-
-            {/* Middle card: Before/After – widest of all, vertically centered with black card */}
-            <BlurFade inView inViewMargin="-40px" delay={0.05} className="absolute top-[90px] left-[-30px] w-[440px] h-[420px] z-10 animate-float-reverse">
-              <div className="w-full h-full rounded-2xl overflow-hidden border border-black/5 shadow-md">
-                <div className="flex w-full h-full">
-                  <div className="flex-1 relative">
-                    <Image
-                      src="/Sunglasses%20RAW.webp"
-                      alt="Before - Raw product"
-                      fill
-                      className="object-cover"
-                      sizes="220px"
-                      fetchPriority="high"
-                    />
-                    <span className="absolute bottom-2 left-2 text-[10px] font-medium text-white bg-black/50 px-1.5 py-0.5 rounded z-10">
-                      Before
-                    </span>
-                  </div>
-                  <div className="flex-1 relative border-l border-black/5">
-                    <Image
-                      src="/Sunglasses.webp"
-                      alt="After - AI enhanced"
-                      fill
-                      className="object-cover"
-                      sizes="220px"
-                      priority
-                    />
-                    <span className="absolute bottom-2 right-2 text-[10px] font-medium text-white bg-black/50 px-1.5 py-0.5 rounded z-10">
-                      After
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </BlurFade>
-
-            {/* Front card: After image – down 30% from middle card, further left */}
-            <BlurFade inView inViewMargin="-40px" delay={0.1} className="absolute top-[216px] left-[-190px] w-[270px] h-[450px] z-20 animate-float [animation-delay:2s]">
-              <div className="w-full h-full rounded-2xl overflow-hidden border border-black/5 shadow-[0_2px_12px_rgba(0,0,0,0.06)] relative">
-                <Image
-                  src="/Sneakers.webp"
-                  alt="After - Sneakers"
-                  fill
-                  className="object-cover"
-                  sizes="270px"
-                  loading="lazy"
-                />
-              </div>
-            </BlurFade>
           </div>
         </div>
       </div>
@@ -379,11 +430,12 @@ function VisualDemoSection() {
   }, [isDragging]);
 
   return (
-    <section className="py-16 md:py-[192px] bg-[#ffffff] overflow-x-hidden">
-      <div className="max-w-[1200px] mx-auto px-4 sm:px-6">
+    <section className="py-24 bg-[#ffffff] overflow-x-hidden">
+      <div className="max-w-[1200px] mx-auto px-4">
         <div className="text-center mb-16">
-          <h2 className="text-h2 text-foreground mb-4 max-w-[600px] mx-auto">
-            See the Transformation
+          <h2 className="text-h2 text-foreground mb-4 max-w-[700px] mx-auto">
+            Create Stunning Visuals{" "}
+            <span className="text-gradient-brand">in a Blink</span>
           </h2>
           <p className="text-muted-foreground max-w-[520px] mx-auto font-normal">
             From product photo to ad-ready creative in a blink.
@@ -391,7 +443,7 @@ function VisualDemoSection() {
         </div>
       </div>
 
-      <div className="max-w-[1200px] mx-auto px-4 sm:px-6">
+      <div className="max-w-[1200px] mx-auto px-4">
         <div className="relative overflow-hidden">
           <div
             ref={containerRef}
@@ -462,27 +514,6 @@ function VisualDemoSection() {
           </Link>
         </Button>
       </div>
-    </section>
-  );
-}
-
-/* ─────────────────────────────────────────────
-   MACBOOK SCROLL SECTION
-───────────────────────────────────────────── */
-function MacbookScrollSection() {
-  return (
-    <section className="overflow-hidden bg-[#ffffff]">
-      <MacbookScroll
-        title={
-          <span className="text-foreground">
-            Create Stunning Visuals{" "}
-            <span className="text-gradient-brand">in a Blink</span>
-          </span>
-        }
-        showGradient={false}
-      >
-        <DemoVideoPlayer />
-      </MacbookScroll>
     </section>
   );
 }
@@ -579,8 +610,8 @@ function StepVideoTwoPart({ parts }: { parts: [string, string] }) {
 
 function HowItWorksSection() {
   return (
-    <section id="how-it-works" className="py-16 md:py-[192px] bg-[#ffffff]">
-      <div className="max-w-[1200px] mx-auto px-4 sm:px-6">
+    <section id="how-it-works" className="py-24 bg-[#ffffff]">
+      <div className="max-w-[1200px] mx-auto px-4">
         <div className="space-y-8 md:space-y-10">
           {howItWorksSteps.map((step, i) => {
             const imageLeft = i % 2 === 1;
@@ -639,8 +670,8 @@ const audiences = [
 
 function WhoItsForSection() {
   return (
-    <section id="who-its-for" className="py-16 md:py-[192px] bg-[#ffffff]">
-      <div className="max-w-[1200px] mx-auto px-4 sm:px-6">
+    <section id="who-its-for" className="py-24 bg-[#ffffff]">
+      <div className="max-w-[1200px] mx-auto px-4">
         <div className="text-center mb-12">
           <h2 className="text-h2 font-medium tracking-tight text-foreground mb-4 max-w-[600px] mx-auto">
             Who It&apos;s For
@@ -732,7 +763,7 @@ const platformLogos = [
 
 function ValueSection() {
   return (
-    <section id="value" className="py-16 md:py-[192px] bg-[#ffffff]">
+    <section id="value" className="py-24 bg-[#ffffff]">
       <svg width="0" height="0" className="absolute" aria-hidden>
         <defs>
           <linearGradient id="brandGradientLanding" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -743,7 +774,7 @@ function ValueSection() {
           </linearGradient>
         </defs>
       </svg>
-      <div className="max-w-[1200px] mx-auto px-4 sm:px-6">
+      <div className="max-w-[1200px] mx-auto px-4">
         <div className="text-center mb-12 md:mb-16">
           <h2 className="text-h2 font-medium tracking-tight text-foreground mb-3 max-w-[560px] mx-auto">
             Built for Your Brand
@@ -935,8 +966,8 @@ function AICreativesCarouselSection() {
   }, []);
 
   return (
-    <section ref={sectionRef} className="ai-creatives-carousel py-16 md:py-[192px] bg-[#ffffff] overflow-x-hidden">
-      <div className="max-w-[1200px] mx-auto px-4 sm:px-6 mb-12">
+    <section ref={sectionRef} className="ai-creatives-carousel py-24 bg-[#ffffff] overflow-x-hidden">
+      <div className="max-w-[1200px] mx-auto px-4 mb-12">
         <div className="text-center">
           <BlurFade inView inViewMargin="-40px">
             <h2 className="text-h2 font-medium tracking-tight text-foreground mb-3 max-w-[560px] mx-auto">
@@ -949,7 +980,7 @@ function AICreativesCarouselSection() {
         </div>
       </div>
 
-      <div className="max-w-[1200px] mx-auto px-4 sm:px-6">
+      <div className="max-w-[1200px] mx-auto px-4">
         <div className="relative overflow-hidden carousel-contain">
           {/* Row 1: 9:16 images + videos (evenly spaced), moves right to left; object-contain so full content visible; no pause on hover */}
           <div className="relative overflow-hidden py-2">
@@ -1239,8 +1270,8 @@ const BENTO_10X_VIDEO = "/blinkify-video-1771438910604.mp4";
 
 function StatsBentoSection() {
   return (
-    <section className="py-16 md:py-[192px] bg-[#ffffff]">
-      <div className="max-w-[1200px] mx-auto px-4 sm:px-6">
+    <section className="py-24 bg-[#ffffff]">
+      <div className="max-w-[1200px] mx-auto px-4">
         <div className="flex flex-col gap-6 md:grid md:grid-cols-3 md:grid-rows-3 md:gap-8 md:h-[1000px]">
           {/* 10x Faster – first on mobile for clear message */}
           <BlurFade inView inViewMargin="-40px" delay={0} className="order-1 md:order-none md:col-start-2 md:row-start-2 md:col-span-2 md:row-span-2 min-h-[240px] md:min-h-0">
@@ -1264,7 +1295,7 @@ function StatsBentoSection() {
 
           {/* $2,400 card – second on mobile */}
           <BlurFade inView inViewMargin="-40px" delay={0.08} className="order-2 md:order-none md:col-start-2 md:row-start-1 md:col-span-2 md:row-span-1 min-h-[200px] md:min-h-0">
-            <div className="h-full min-h-[200px] md:min-h-0 rounded-2xl overflow-hidden relative border border-black/5 bg-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xs flex flex-col md:flex-row items-stretch">
+            <div className="h-full min-h-[200px] md:min-h-0 rounded-2xl overflow-hidden relative bg-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xs flex flex-col md:flex-row items-stretch">
               <div className="relative w-full md:w-[42%] min-h-0 flex shrink-0 items-center justify-center overflow-hidden rounded-t-2xl md:rounded-l-2xl md:rounded-tr-none aspect-[2/1] md:aspect-auto">
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                   <div className="relative size-[180px] sm:size-[220px] md:size-[266px] lg:size-[304px]">
@@ -1317,7 +1348,7 @@ function StatsBentoSection() {
 
           {/* Notifications list – shorter on mobile */}
           <BlurFade inView inViewMargin="-40px" delay={0.24} className="order-4 md:order-none md:col-start-1 md:row-start-3 md:col-span-1 md:row-span-1 min-h-[160px] max-h-[220px] md:min-h-0 md:max-h-none">
-            <div className="relative flex h-full w-full min-h-[160px] max-h-[220px] md:min-h-0 md:max-h-none flex-col overflow-hidden rounded-2xl border border-black/5">
+            <div className="relative flex h-full w-full min-h-[160px] max-h-[220px] md:min-h-0 md:max-h-none flex-col overflow-hidden rounded-2xl">
               <LoopingBentoList />
               <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/4 bg-gradient-to-t from-[#ffffff] to-transparent" />
             </div>
@@ -1418,8 +1449,8 @@ const testimonials: {
 
 function TestimonialBentoSection() {
   return (
-    <section className="py-16 md:py-24 bg-[#ffffff]">
-      <div className="max-w-[1200px] mx-auto px-4 sm:px-6">
+    <section className="py-24 bg-[#ffffff]">
+      <div className="max-w-[1200px] mx-auto px-4">
         <div className="text-center mb-8">
           <h2 className="text-h2 font-medium tracking-tight text-foreground mb-2">
             Loved by Creators and Teams
@@ -1569,8 +1600,8 @@ const plans: {
 
 function PricingSection() {
   return (
-    <section id="pricing" className="py-16 md:py-[192px] bg-[#ffffff]">
-      <div className="max-w-[1200px] mx-auto px-4 sm:px-6">
+    <section id="pricing" className="py-24 bg-[#ffffff]">
+      <div className="max-w-[1200px] mx-auto px-4">
         <div className="text-center mb-16 md:mb-20">
           <h2 className="text-h2 font-medium tracking-tight text-foreground mb-4 max-w-[600px] mx-auto">
             Predictable Pricing
@@ -1747,8 +1778,8 @@ function FAQSection() {
   const [openIndex, setOpenIndex] = useState<number | null>(null);
 
   return (
-    <section className="py-[80px] md:py-[100px] bg-[#ffffff]">
-      <div className="max-w-[1200px] mx-auto px-4 sm:px-6">
+    <section className="py-24 bg-[#ffffff]">
+      <div className="max-w-[1200px] mx-auto px-4">
         <h2 className="text-h2 font-medium tracking-tight text-foreground mb-8 text-center">
           Frequently Asked Questions
         </h2>
@@ -1808,8 +1839,8 @@ function FAQSection() {
 ───────────────────────────────────────────── */
 function FinalCTASection() {
   return (
-    <section className="py-16 md:py-[120px] bg-[#ffffff]">
-      <div className="max-w-[1200px] mx-auto px-4 sm:px-6 text-center">
+    <section className="py-24 bg-[#ffffff]">
+      <div className="max-w-[1200px] mx-auto px-4 text-center">
         <div>
           <h2 className="text-h2 text-foreground mb-4 max-w-[700px] mx-auto">
             Create Ad Creatives <span className="text-gradient-brand">10x Faster</span>
@@ -1830,31 +1861,66 @@ function FinalCTASection() {
 }
 
 /* ─────────────────────────────────────────────
+   CONTENT GUIDE LINES (Stripe-style)
+───────────────────────────────────────────── */
+function ContentGuideLines() {
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none fixed inset-0 z-[1] hidden md:flex justify-center"
+    >
+      <div className="w-full max-w-[1200px] mx-auto h-full flex">
+        <div className="flex-1 border-x border-black/[0.06]" />
+      </div>
+    </div>
+  );
+}
+
+function SectionDivider() {
+  return (
+    <div aria-hidden className="hidden md:block max-w-[1200px] mx-auto w-full">
+      <div className="h-px bg-black/[0.06]" />
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────
    MAIN PAGE
 ───────────────────────────────────────────── */
 export default function Home() {
   return (
     <>
+      <ContentGuideLines />
       <LandingHeader />
       <main>
         <div className="min-h-[calc(100svh-68px)] flex flex-col">
-          <HeroSection />
+          <div className="flex-1 flex flex-col min-h-0">
+            <HeroSection />
+          </div>
+          <CompaniesMarqueeSection />
         </div>
-        <div className="hidden md:block">
-          <MacbookScrollSection />
-        </div>
+        <SectionDivider />
         <StatsBentoSection />
-        <CompaniesSection />
+        <SectionDivider />
         <VisualDemoSection />
+        <SectionDivider />
         <HowItWorksSection />
+        <SectionDivider />
         <WhoItsForSection />
+        <SectionDivider />
         <ValueSection />
+        <SectionDivider />
         <AICreativesCarouselSection />
+        <SectionDivider />
         <TestimonialBentoSection />
+        <SectionDivider />
         <PricingSection />
+        <SectionDivider />
         <FAQSection />
+        <SectionDivider />
         <FinalCTASection />
       </main>
+      <SectionDivider />
       <LandingFooter />
     </>
   );
