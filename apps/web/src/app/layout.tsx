@@ -73,6 +73,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
+        <link rel="dns-prefetch" href="https://www.googletagmanager.com" />
         <link rel="preload" href="/Sunglasses.webp" as="image" />
         {!isAppDomain && jsonLd ? (
           <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd }} />
@@ -86,9 +87,9 @@ export default function RootLayout({
       <body className={`${manrope.variable} font-sans antialiased`}>
         <Script
           src={`https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}`}
-          strategy="afterInteractive"
+          strategy="lazyOnload"
         />
-        <Script id="google-analytics" strategy="afterInteractive">
+        <Script id="google-analytics" strategy="lazyOnload">
           {`
             window.dataLayer = window.dataLayer || [];
             function gtag(){dataLayer.push(arguments);}

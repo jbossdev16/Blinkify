@@ -180,38 +180,50 @@ function Hero2DVerticalMarquee({ images }: { images: string[] }) {
 }
 
 /* ─────────────────────────────────────────────
-   HERO SECTION - CTA left, demo video right
+   HERO SECTION - Centered text over demo video
 ───────────────────────────────────────────── */
 function HeroSection() {
   return (
-    <section className="relative flex-none md:flex-1 flex flex-col justify-center min-h-0 py-0 bg-[#ffffff] overflow-x-hidden min-h-[280px] sm:min-h-0">
-      <div className="relative z-10 max-w-[1200px] mx-auto px-4 w-full flex-1 flex flex-col md:flex-row md:items-center md:justify-start gap-8 md:gap-12 min-h-0 pt-6 pb-6 sm:pt-0 sm:pb-0">
-        <div className="flex flex-col items-start order-1 flex-shrink-0 overflow-visible">
-            <h1 className="text-4xl sm:text-5xl md:text-6xl font-medium leading-tight tracking-tight text-foreground mb-2 whitespace-nowrap">
-              Better Ad Creatives.
-            </h1>
-            <h1 className="text-4xl sm:text-5xl md:text-6xl font-medium leading-tight tracking-tight text-foreground mb-6 md:mb-8 overflow-visible">
-              <span className="text-gradient-brand">10x Faster.</span>
-            </h1>
-            <p className="text-base sm:text-lg text-muted-foreground max-w-md mb-6 md:mb-8 leading-relaxed">
-              AI-powered creative enhancement for product ads. Upload once, get scroll-stopping visuals in seconds.
-            </p>
+    <section className="relative flex-none md:flex-1 bg-[#ffffff] overflow-x-hidden">
+      <div className="relative z-10 max-w-[1200px] mx-auto px-4 pt-10 pb-12 lg:pt-14 lg:pb-20">
+        <div className="relative max-w-3xl mx-auto text-center">
+          <div
+            className="pointer-events-none absolute inset-[-40px] sm:inset-[-56px] -z-10 blur-3xl opacity-90"
+            aria-hidden
+          >
+            <div className="mx-auto h-full w-full max-w-2xl bg-[radial-gradient(ellipse_80%_50%_at_20%_30%,rgba(59,130,246,0.25),_transparent_50%),radial-gradient(ellipse_60%_60%_at_50%_50%,rgba(139,92,246,0.2),_transparent_55%),radial-gradient(ellipse_70%_50%_at_80%_70%,rgba(249,115,22,0.2),_transparent_50%),radial-gradient(ellipse_50%_50%_at_70%_20%,rgba(239,68,68,0.15),_transparent_55%)]" />
+          </div>
+
+          <p className="inline-flex items-center rounded-full border border-black/[0.08] bg-white/80 px-3 py-1 text-xs font-medium text-muted-foreground shadow-sm mb-4">
+            Feel the future of Ad Creatives.
+          </p>
+          <h1 className="text-4xl sm:text-5xl md:text-6xl font-medium leading-tight tracking-tight text-foreground mb-2">
+            Better Ad Creatives,
+          </h1>
+          <h2 className="text-4xl sm:text-5xl md:text-6xl font-medium leading-tight tracking-tight text-foreground mb-6 md:mb-7">
+            <span className="text-gradient-brand">10x Faster & Cheaper.</span>
+          </h2>
+          <p className="text-base sm:text-lg text-muted-foreground max-w-xl mx-auto mb-7 md:mb-8 leading-relaxed">
+            AI-powered creative enhancement for product ads. Upload once, get scroll-stopping visuals in seconds.
+          </p>
+          <div className="flex flex-col sm:inline-flex sm:flex-row sm:items-center sm:justify-center gap-3 sm:gap-4">
             <Button asChild size="lg" className="text-base font-semibold px-8">
               <Link href="/waitlist">
                 Join Waitlist
                 <ArrowRight className="ml-2 h-5 w-5" />
               </Link>
             </Button>
-            <p className="mt-3 text-sm text-muted-foreground">
+            <p className="text-sm text-muted-foreground sm:ml-2">
               Free Trial · Cancel Any Time
             </p>
           </div>
-          <div className="hidden md:block relative flex-1 min-w-0 max-w-[640px] aspect-video rounded-2xl overflow-hidden border border-black/5 shadow-lg bg-black order-2 ml-auto">
+        </div>
+
+        <div className="relative mt-8 sm:mt-10 lg:mt-12">
+          <div className="relative w-full rounded-xl border border-black/5 bg-slate-100 overflow-hidden aspect-[16/9]">
             <DemoVideoPlayer />
           </div>
-          <div className="relative w-full aspect-video max-w-[min(100vw,400px)] mx-auto rounded-2xl overflow-hidden border border-black/5 shadow-md md:hidden order-2 bg-black">
-            <DemoVideoPlayer />
-          </div>
+        </div>
       </div>
     </section>
   );
@@ -223,10 +235,7 @@ function HeroSection() {
 function CompaniesMarqueeSection() {
   const [hoveredCompany, setHoveredCompany] = useState<string | null>(null);
   return (
-    <section className="py-0 bg-[#ffffff] border-b border-black/[0.06] p-1">
-      <div className="max-w-[1200px] mx-auto w-full">
-        <div className="w-full h-px bg-black/[0.06]" aria-hidden />
-      </div>
+    <section className="py-0 bg-[#ffffff] p-1">
       <div className="max-w-[1200px] mx-auto w-full">
         <div className="w-full m-0">
           <div className="py-0">
@@ -242,6 +251,8 @@ function CompaniesMarqueeSection() {
                     <img
                       src={company.src}
                       alt={company.name}
+                      width={120}
+                      height={24}
                       className={cn(
                         "max-h-full max-w-full w-auto h-auto object-contain object-center transition-all duration-300",
                         hoveredCompany !== null && hoveredCompany !== company.name && "opacity-40 grayscale"
@@ -259,6 +270,8 @@ function CompaniesMarqueeSection() {
                     <img
                       src={company.src}
                       alt={company.name}
+                      width={120}
+                      height={24}
                       className={cn(
                         "max-h-full max-w-full w-auto h-auto object-contain object-center transition-all duration-300",
                         hoveredCompany !== null && hoveredCompany !== company.name && "opacity-40 grayscale"
@@ -336,12 +349,15 @@ function ImageCard({ item, imageType }: { item: typeof demoImages[0]; imageType:
       <BlurFade inView inViewMargin="-30px">
         <Card className="overflow-hidden shadow-none h-full">
           <div className="aspect-9/16 relative overflow-hidden bg-slate-100">
-            <img
+            <Image
               src={imageSrc}
               alt={`${item.title} - ${imageType === "raw" ? "Before" : "After"}`}
+              width={320}
+              height={569}
               className="w-full h-full object-cover pointer-events-none"
               draggable={false}
               loading="lazy"
+              sizes="320px"
             />
           </div>
         </Card>
@@ -981,6 +997,8 @@ function AICreativesCarouselSection() {
                     <img
                       src={item.src}
                       alt=""
+                      width={200}
+                      height={355}
                       className="w-full h-full object-contain"
                       loading="lazy"
                       draggable={false}
@@ -1007,6 +1025,8 @@ function AICreativesCarouselSection() {
                     <img
                       src={item.src}
                       alt=""
+                      width={200}
+                      height={355}
                       className="w-full h-full object-contain"
                       loading="lazy"
                       draggable={false}
@@ -1076,6 +1096,8 @@ function AICreativesCarouselSection() {
                   <img
                     src={src}
                     alt=""
+                    width={220}
+                    height={275}
                     className={cn("w-full h-full", carouselRow3ZoomFit.has(src) ? "object-cover" : "object-contain")}
                     loading="lazy"
                     draggable={false}
@@ -1089,6 +1111,8 @@ function AICreativesCarouselSection() {
                   <img
                     src={src}
                     alt=""
+                    width={220}
+                    height={275}
                     className={cn("w-full h-full", carouselRow3ZoomFit.has(src) ? "object-cover" : "object-contain")}
                     loading="lazy"
                     draggable={false}
@@ -1115,6 +1139,8 @@ const BENTO_LIST_ICON = (
   <img
     src="/Shopify.com/Shopify.com_Symbol_12.svg"
     alt=""
+    width={40}
+    height={40}
     className="size-10 object-contain"
   />
 );
@@ -1270,6 +1296,7 @@ function StatsBentoSection() {
                 loop
                 muted
                 playsInline
+                preload="metadata"
                 className="absolute inset-0 w-full h-full object-cover"
                 src={BENTO_10X_VIDEO}
                 aria-hidden
@@ -1289,22 +1316,22 @@ function StatsBentoSection() {
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none scale-75 sm:scale-90 md:scale-100 origin-center">
                   <div className="relative size-[180px] sm:size-[220px] md:size-[266px] lg:size-[304px]">
                     <OrbitingCircles radius={72} duration={20} delay={2.22} className="border-0 bg-transparent">
-                      <img src="/Amazon/Amazon_Symbol_30.svg" alt="Amazon" className="h-9 w-9 object-contain" />
+                      <img src="/Amazon/Amazon_Symbol_30.svg" alt="Amazon" className="h-9 w-9 object-contain" width={36} height={36} />
                     </OrbitingCircles>
                     <OrbitingCircles radius={72} duration={20} delay={8.88} className="border-0 bg-transparent">
-                      <img src="/LinkedIn/LinkedIn_Symbol_9.svg" alt="LinkedIn" className="h-9 w-9 object-contain" />
+                      <img src="/LinkedIn/LinkedIn_Symbol_9.svg" alt="LinkedIn" className="h-9 w-9 object-contain" width={36} height={36} />
                     </OrbitingCircles>
                     <OrbitingCircles radius={72} duration={20} delay={15.55} className="border-0 bg-transparent">
-                      <img src="/X/X_idJxGuURW1_0.svg" alt="X" className="h-9 w-9 object-contain" />
+                      <img src="/X/X_idJxGuURW1_0.svg" alt="X" className="h-9 w-9 object-contain" width={36} height={36} />
                     </OrbitingCircles>
                     <OrbitingCircles radius={133} duration={20} delay={4.44} className="border-0 bg-transparent">
-                      <img src="/Instagram/Instagram_Symbol_0.svg" alt="Instagram" className="h-9 w-9 object-contain" />
+                      <img src="/Instagram/Instagram_Symbol_0.svg" alt="Instagram" className="h-9 w-9 object-contain" width={36} height={36} />
                     </OrbitingCircles>
                     <OrbitingCircles radius={133} duration={20} delay={11.11} className="border-0 bg-transparent">
-                      <img src="/Facebook/Facebook_Symbol_0.png" alt="Facebook" className="h-9 w-9 object-contain" />
+                      <img src="/Facebook/Facebook_Symbol_0.png" alt="Facebook" className="h-9 w-9 object-contain" width={36} height={36} />
                     </OrbitingCircles>
                     <OrbitingCircles radius={133} duration={20} delay={17.77} className="border-0 bg-transparent">
-                      <img src="/Shopify.com/Shopify.com_Symbol_12.svg" alt="Shopify" className="h-9 w-9 object-contain" />
+                      <img src="/Shopify.com/Shopify.com_Symbol_12.svg" alt="Shopify" className="h-9 w-9 object-contain" width={36} height={36} />
                     </OrbitingCircles>
                   </div>
                 </div>
@@ -1325,12 +1352,15 @@ function StatsBentoSection() {
 
           {/* Carousel image */}
           <BlurFade inView inViewMargin="-40px" delay={0.16} className="order-3 md:order-none md:col-start-1 md:row-start-1 md:col-span-1 md:row-span-2 min-h-[280px] md:min-h-0">
-            <div className="h-full min-h-[280px] md:min-h-0 rounded-2xl overflow-hidden border border-black/5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xs flex items-center justify-center bg-slate-100">
-              <img
+            <div className="h-full min-h-[280px] md:min-h-0 rounded-2xl overflow-hidden border border-black/5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xs flex items-center justify-center bg-slate-100 relative">
+              <Image
                 src={BENTO_CAROUSEL_IMAGE}
                 alt="AI creative"
+                width={378}
+                height={677}
                 className="h-full w-auto max-w-full object-contain"
                 loading="lazy"
+                sizes="(max-width: 768px) 100vw, 378px"
               />
             </div>
           </BlurFade>
@@ -1469,6 +1499,8 @@ function TestimonialBentoSection() {
                     <img
                       src={`https://ui-avatars.com/api/?name=${t.avatarSeed}&size=96&background=${t.bgHex}&color=fff`}
                       alt={t.name}
+                      width={40}
+                      height={40}
                       className="size-9 md:size-10 rounded-full object-cover shrink-0"
                     />
                     <div className="flex items-center gap-1.5 min-w-0">
@@ -1483,14 +1515,16 @@ function TestimonialBentoSection() {
                     {t.image && (
                       <div
                         className={cn(
-                          "rounded-xl overflow-hidden border border-black/5 shrink-0",
+                          "rounded-xl overflow-hidden border border-black/5 shrink-0 relative",
                           t.imageAspect === "9/16" ? "aspect-[9/16]" : t.span === "wide" ? "aspect-video" : "aspect-[4/3]"
                         )}
                       >
-                        <img
+                        <Image
                           src={t.image}
                           alt=""
-                          className="w-full h-full object-cover"
+                          fill
+                          className="object-cover"
+                          sizes="(max-width: 768px) 352px, 468px"
                         />
                       </div>
                     )}
@@ -1617,6 +1651,7 @@ function PricingSection() {
                       loop
                       muted
                       playsInline
+                      preload="metadata"
                       className="absolute inset-0 w-full h-full object-cover"
                       src="/grainient-1770491527486.webm"
                     />
@@ -1859,7 +1894,7 @@ function ContentGuideLines() {
       className="pointer-events-none fixed inset-0 z-[1] hidden md:flex justify-center"
     >
       <div className="w-full max-w-[1200px] mx-auto h-full flex">
-        <div className="flex-1 border-x border-black/[0.06]" />
+        <div className="flex-1" />
       </div>
     </div>
   );
@@ -1868,7 +1903,7 @@ function ContentGuideLines() {
 function SectionDivider() {
   return (
     <div aria-hidden className="hidden md:block max-w-[1200px] mx-auto w-full">
-      <div className="h-px bg-black/[0.06]" />
+      <div className="h-px" />
     </div>
   );
 }
@@ -1881,6 +1916,9 @@ export default function Home() {
     <>
       <ContentGuideLines />
       <LandingHeader />
+      <div aria-hidden className="w-full shrink-0">
+        <div className="h-px w-full" />
+      </div>
       <main className="bg-[#ffffff]">
         <div className="min-h-0 md:min-h-[calc(100svh-68px)] flex flex-col">
           <div className="flex-none md:flex-1 flex flex-col min-h-0">
@@ -1909,7 +1947,9 @@ export default function Home() {
         <SectionDivider />
         <FinalCTASection />
       </main>
-      <SectionDivider />
+      <div aria-hidden className="w-full shrink-0">
+        <div className="h-px w-full" />
+      </div>
       <LandingFooter />
     </>
   );

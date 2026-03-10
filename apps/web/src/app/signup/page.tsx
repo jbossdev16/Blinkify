@@ -136,7 +136,7 @@ function ArrowLeftIcon({ className }: { className?: string }) {
 const inputBase =
   "flex h-11 w-full rounded-xl border border-input bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus-visible:outline-none";
 
-type FormErrors = { firstName?: string; lastName?: string; email?: string; password?: string; form?: string };
+type FormErrors = { firstName?: string; lastName?: string; email?: string; password?: string; agreeToTerms?: string; form?: string };
 type Step = "form" | "verify";
 
 const COOLDOWN_SECONDS = 30;
@@ -153,6 +153,7 @@ export default function SignupPage() {
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [agreeToTerms, setAgreeToTerms] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
   const [loading, setLoading] = useState(false);
 
@@ -196,6 +197,7 @@ export default function SignupPage() {
     if (!email.trim()) next.email = "Email is required";
     if (!password) next.password = "Password is required";
     else if (password.length < 8) next.password = "Password must be at least 8 characters";
+    if (!agreeToTerms) next.agreeToTerms = "You must agree to the Terms and Privacy Policy to sign up.";
     setErrors(next);
     if (Object.keys(next).length > 0) return;
 
@@ -450,6 +452,32 @@ export default function SignupPage() {
             )}
           </div>
 
+          <label className="flex items-start gap-3 cursor-pointer group">
+            <input
+              type="checkbox"
+              checked={agreeToTerms}
+              onChange={(e) => {
+                setAgreeToTerms(e.target.checked);
+                if (errors.agreeToTerms) setErrors((prev) => ({ ...prev, agreeToTerms: undefined }));
+              }}
+              className="mt-1 h-4 w-4 rounded border-input text-primary focus:ring-primary cursor-pointer"
+              aria-describedby={errors.agreeToTerms ? "agree-error" : undefined}
+            />
+            <span className="text-sm text-muted-foreground group-hover:text-foreground/90 transition-colors">
+              I agree to the{" "}
+              <Link href="/terms" className="text-primary font-medium hover:underline" target="_blank" rel="noopener noreferrer">
+                Terms
+              </Link>
+              {" "}and{" "}
+              <Link href="/privacy" className="text-primary font-medium hover:underline" target="_blank" rel="noopener noreferrer">
+                Privacy Policy
+              </Link>
+            </span>
+          </label>
+          {errors.agreeToTerms && (
+            <p id="agree-error" className="text-xs text-destructive/90 font-medium -mt-2" role="alert">{errors.agreeToTerms}</p>
+          )}
+
           {errors.form && (
             <p className="text-xs text-destructive/90 font-medium text-center" role="alert">{errors.form}</p>
           )}
@@ -570,23 +598,19 @@ export default function SignupPage() {
       </div>
 
       {/* Right: 3D marquee + companies marquee */}
-      <div className="relative z-10 hidden lg:flex lg:w-1/2 min-h-screen flex-col pointer-events-auto">
-        <div className="flex-1 relative">
-          <div className="absolute bottom-0 left-0 right-0 h-40 bg-gradient-to-t from-white to-transparent pointer-events-none" />
-        </div>
-        <div className="relative bg-white py-5">
+      <div className="relative z-10 hidden lg:flex lg:w-1/2 min-h-screen flex-col pointer-events-auto border-l border-border">
+        <div className="flex-1 relative" />
+        <div className="relative bg-white py-5 border-t border-border">
           <div className="relative overflow-hidden h-8">
-            <div className="absolute left-0 top-0 bottom-0 w-24 bg-linear-to-r from-white to-transparent z-10 pointer-events-none" />
-            <div className="absolute right-0 top-0 bottom-0 w-24 bg-linear-to-l from-white to-transparent z-10 pointer-events-none" />
-            <div className="flex w-max animate-marquee items-center h-full">
+            <div className="group flex w-max animate-marquee items-center h-full">
               {companyLogos.map((company) => (
-                <div key={company.name} className="shrink-0 w-[140px] h-6 flex items-center justify-center mx-3">
-                  <img src={company.src} alt={company.name} className="h-full w-full object-contain opacity-40 grayscale" />
+                <div key={company.name} className="group/logo shrink-0 w-[140px] h-6 flex items-center justify-center mx-3 cursor-default">
+                  <img src={company.src} alt={company.name} className="h-full w-full object-contain opacity-100 grayscale-0 group-hover:opacity-40 group-hover:grayscale group-hover/logo:opacity-100 group-hover/logo:grayscale-0" />
                 </div>
               ))}
               {companyLogos.map((company) => (
-                <div key={`${company.name}-dup`} className="shrink-0 w-[140px] h-6 flex items-center justify-center mx-3">
-                  <img src={company.src} alt={company.name} className="h-full w-full object-contain opacity-40 grayscale" />
+                <div key={`${company.name}-dup`} className="group/logo shrink-0 w-[140px] h-6 flex items-center justify-center mx-3 cursor-default">
+                  <img src={company.src} alt={company.name} className="h-full w-full object-contain opacity-100 grayscale-0 group-hover:opacity-40 group-hover:grayscale group-hover/logo:opacity-100 group-hover/logo:grayscale-0" />
                 </div>
               ))}
             </div>

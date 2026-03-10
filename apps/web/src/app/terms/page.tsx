@@ -22,11 +22,34 @@ function Ul({ children }: { children: React.ReactNode }) {
   );
 }
 
+function ContentGuideLines() {
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none fixed inset-0 z-[1] hidden md:flex justify-center"
+    >
+      <div className="w-full max-w-[1200px] mx-auto h-full flex">
+        <div className="flex-1" />
+      </div>
+    </div>
+  );
+}
+
+function SectionDivider() {
+  return (
+    <div aria-hidden className="hidden md:block w-full">
+      <div className="h-px" />
+    </div>
+  );
+}
+
 export default function TermsPage() {
   return (
-    <div className="min-h-screen bg-background">
+    <>
+      <ContentGuideLines />
       <LandingHeader />
-      <main className="max-w-3xl mx-auto px-4 sm:px-6 pt-[100px] pb-10 sm:pb-14">
+      <main className="bg-[#ffffff]">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 py-10 sm:py-14">
         <h1 className="text-h2 text-foreground mb-2">
           Terms of Service — Blinkify (RollCall LLC)
         </h1>
@@ -171,8 +194,10 @@ export default function TermsPage() {
             </a>
           </P>
         </section>
+        </div>
       </main>
+      <SectionDivider />
       <LandingFooter />
-    </div>
+    </>
   );
 }

@@ -439,23 +439,19 @@ function SigninContent() {
         </div>
       </div>
 
-      <div className="relative z-10 hidden lg:flex lg:w-1/2 min-h-screen flex-col pointer-events-auto">
-        <div className="flex-1 relative">
-          <div className="absolute bottom-0 left-0 right-0 h-40 bg-gradient-to-t from-white to-transparent pointer-events-none" />
-        </div>
-        <div className="relative bg-white py-5">
+      <div className="relative z-10 hidden lg:flex lg:w-1/2 min-h-screen flex-col pointer-events-auto border-l border-border">
+        <div className="flex-1 relative" />
+        <div className="relative bg-white py-5 border-t border-border">
           <div className="relative overflow-hidden h-8">
-            <div className="absolute left-0 top-0 bottom-0 w-24 bg-linear-to-r from-white to-transparent z-10 pointer-events-none" />
-            <div className="absolute right-0 top-0 bottom-0 w-24 bg-linear-to-l from-white to-transparent z-10 pointer-events-none" />
-            <div className="flex w-max animate-marquee items-center h-full">
+            <div className="group flex w-max animate-marquee items-center h-full">
               {companyLogos.map((company) => (
-                <div key={company.name} className="shrink-0 w-[140px] h-6 flex items-center justify-center mx-3">
-                  <img src={company.src} alt={company.name} className="h-full w-full object-contain opacity-40 grayscale" />
+                <div key={company.name} className="group/logo shrink-0 w-[140px] h-6 flex items-center justify-center mx-3 cursor-default">
+                  <img src={company.src} alt={company.name} className="h-full w-full object-contain opacity-100 grayscale-0 group-hover:opacity-40 group-hover:grayscale group-hover/logo:opacity-100 group-hover/logo:grayscale-0" />
                 </div>
               ))}
               {companyLogos.map((company) => (
-                <div key={`${company.name}-dup`} className="shrink-0 w-[140px] h-6 flex items-center justify-center mx-3">
-                  <img src={company.src} alt={company.name} className="h-full w-full object-contain opacity-40 grayscale" />
+                <div key={`${company.name}-dup`} className="group/logo shrink-0 w-[140px] h-6 flex items-center justify-center mx-3 cursor-default">
+                  <img src={company.src} alt={company.name} className="h-full w-full object-contain opacity-100 grayscale-0 group-hover:opacity-40 group-hover:grayscale group-hover/logo:opacity-100 group-hover/logo:grayscale-0" />
                 </div>
               ))}
             </div>

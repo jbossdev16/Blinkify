@@ -283,12 +283,6 @@ export default function SetupPlanPage() {
               );
             })}
           </div>
-          <p className="text-xs text-muted-foreground mt-6 text-center">
-            Already have an account?{" "}
-            <Link href="/signin" className="text-primary font-medium hover:underline">
-              Log In
-            </Link>
-          </p>
         </div>
       </div>
 
