@@ -25,7 +25,10 @@
     "google-gax": {
       "protobufjs": ">=7.2.5"
     },
-    "@tootallnate/once": ">=3.0.1"
+    "@tootallnate/once": ">=3.0.1",
+    "@react-email/body": "0.2.1",
+    "glob": "^11.0.0",
+    "node-domexception": "^2.0.2"
   },
   "dependencies": {
     "supabase": "^2.76.6"
