@@ -27,7 +27,6 @@
       "protobufjs": ">=7.2.5"
     },
     "@react-email/body": "0.2.1",
-    "rimraf": "^6.1.2",
-    "whatwg-encoding": "npm:@exodus/bytes@^1.15.0"
+    "rimraf": "^6.1.2"
   }
 }
