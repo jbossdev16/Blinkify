@@ -5,7 +5,18 @@ const router = Router();
 
 const POLAR_ACCESS_TOKEN = process.env.POLAR_ACCESS_TOKEN ?? "";
 const POLAR_SANDBOX = process.env.POLAR_SANDBOX === "true" || process.env.POLAR_SANDBOX === "1";
-const WEB_ORIGIN = process.env.WEB_ORIGIN ?? "http://localhost:3000";
+
+const allowedOrigins = (process.env.WEB_ORIGIN ?? "http://localhost:3000")
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+const defaultOrigin = allowedOrigins[0] ?? "http://localhost:3000";
+
+function getOriginForRequest(req: Request): string {
+  const origin = req.get("Origin");
+  if (origin && allowedOrigins.includes(origin)) return origin;
+  return defaultOrigin;
+}
 
 const POLAR_PRODUCT_IDS: Record<string, string | undefined> = {
   standard: process.env.POLAR_PRODUCT_ID_STANDARD,
@@ -36,13 +47,14 @@ router.post(
       }
 
       const productId = POLAR_PRODUCT_IDS[plan]!;
+      const webOrigin = getOriginForRequest(req);
 
       const checkout = await polar.checkouts.create({
         products: [productId],
         ...(email && { customerEmail: email }),
-        embedOrigin: WEB_ORIGIN,
-        successUrl: `${WEB_ORIGIN}/signin?verified=true`,
-        returnUrl: `${WEB_ORIGIN}/setup-plan`,
+        embedOrigin: webOrigin,
+        successUrl: `${webOrigin}/signin?verified=true`,
+        returnUrl: `${webOrigin}/setup-plan`,
         trialInterval: "day",
         trialIntervalCount: 3,
       });

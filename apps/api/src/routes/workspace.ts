@@ -15,6 +15,18 @@ import crypto from "crypto";
 
 const router = Router();
 
+const allowedOrigins = (process.env.WEB_ORIGIN ?? "http://localhost:3000")
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+const defaultOrigin = allowedOrigins[0] ?? "http://localhost:3000";
+
+function getOriginForRequest(req: Request): string {
+  const origin = req.get("Origin");
+  if (origin && allowedOrigins.includes(origin)) return origin;
+  return defaultOrigin;
+}
+
 // ─── POST /workspaces/init ───────────────────────────────────────────────────
 // Called on first login (or every login). Ensures user + workspace exist.
 // Idempotent. Does not use requireCurrentUser because user may not exist yet.
@@ -196,7 +208,7 @@ router.post(
         throw inviteError;
       }
 
-      const webOrigin = process.env.WEB_ORIGIN ?? "http://localhost:3000";
+      const webOrigin = getOriginForRequest(req);
       const inviteUrl = `${webOrigin}/invite/${token}`;
 
       const emailResult = await sendInvitationEmail({

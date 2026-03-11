@@ -34,7 +34,22 @@ const CLEANUP_UNSAVED_INTERVAL_MS = process.env.CLEANUP_UNSAVED_GENERATIONS_INTE
 const PORT = process.env.PORT ?? 4001;
 
 app.use(helmet());
-app.use(cors({ origin: process.env.WEB_ORIGIN ?? "http://localhost:3000" }));
+const allowedOrigins = (process.env.WEB_ORIGIN ?? "http://localhost:3000")
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+
+app.use(
+  cors({
+    origin: (origin, cb) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        cb(null, origin ? origin : true);
+      } else {
+        cb(null, false);
+      }
+    },
+  })
+);
 app.use(morgan("combined"));
 // Allow large payloads for /generate (base64 reference images; up to 10)
 app.use(express.json({ limit: "50mb" }));
