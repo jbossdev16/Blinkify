@@ -83,29 +83,34 @@ app.use(
   }
 );
 
-app.listen(PORT, () => {
-  console.log(`API running on http://localhost:${PORT}`);
-  ensureEmailAssetsBucket().catch((err) => console.error("ensureEmailAssetsBucket error:", err));
-  if (CLEANUP_INTERVAL_MS > 0) {
-    setInterval(() => {
-      runCleanupFailedGenerations()
-        .then((r) => {
-          if (r.deletedGenerations > 0 || r.deletedVideoGenerations > 0 || r.storageFilesRemoved > 0) {
-            console.log("cleanup-failed-generations:", r);
-          }
-        })
-        .catch((err) => console.error("cleanup-failed-generations error:", err));
-    }, CLEANUP_INTERVAL_MS);
-  }
-  if (CLEANUP_UNSAVED_INTERVAL_MS > 0) {
-    setInterval(() => {
-      runCleanupUnsavedGenerations()
-        .then((r) => {
-          if (r.imageGenerationsCleaned > 0 || r.videoGenerationsCleaned > 0 || r.storageFilesRemoved > 0) {
-            console.log("cleanup-unsaved-generations:", r);
-          }
-        })
-        .catch((err) => console.error("cleanup-unsaved-generations error:", err));
-    }, CLEANUP_UNSAVED_INTERVAL_MS);
-  }
-});
+/** Export for Vercel serverless. When not on Vercel, start the server and scheduled jobs. */
+export default app;
+
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`API running on http://localhost:${PORT}`);
+    ensureEmailAssetsBucket().catch((err) => console.error("ensureEmailAssetsBucket error:", err));
+    if (CLEANUP_INTERVAL_MS > 0) {
+      setInterval(() => {
+        runCleanupFailedGenerations()
+          .then((r) => {
+            if (r.deletedGenerations > 0 || r.deletedVideoGenerations > 0 || r.storageFilesRemoved > 0) {
+              console.log("cleanup-failed-generations:", r);
+            }
+          })
+          .catch((err) => console.error("cleanup-failed-generations error:", err));
+      }, CLEANUP_INTERVAL_MS);
+    }
+    if (CLEANUP_UNSAVED_INTERVAL_MS > 0) {
+      setInterval(() => {
+        runCleanupUnsavedGenerations()
+          .then((r) => {
+            if (r.imageGenerationsCleaned > 0 || r.videoGenerationsCleaned > 0 || r.storageFilesRemoved > 0) {
+              console.log("cleanup-unsaved-generations:", r);
+            }
+          })
+          .catch((err) => console.error("cleanup-unsaved-generations error:", err));
+      }, CLEANUP_UNSAVED_INTERVAL_MS);
+    }
+  });
+}
