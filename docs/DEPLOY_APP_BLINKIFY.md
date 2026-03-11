@@ -15,19 +15,16 @@ Already done. Same repo, domain **blinkify.ai**, root `apps/web` (or as currentl
 - **Vercel** → Add New → **Project** → import the same Git repo.
 - **Root Directory:** `apps/api`.
 - **Framework:** Other (no framework).
-- **Build Command:** `npm run build` (or `npx tsc`).
-- **Output Directory:** leave empty (this project is a serverless API, not static).
-- **Install Command:** `npm install` (from repo root you may need to run from monorepo root; if so, set Root to repo root and override build to `cd apps/api && npm install && npm run build` — or use a root that has package.json for the API).
+- **Build Command / Output Directory:** leave default or empty; `apps/api/vercel.json` defines the serverless function from `src/index.ts`.
 
-For a monorepo, the API project is usually deployed with **Root Directory** = `apps/api`. If `apps/api` has its own `package.json`, Vercel will run `npm install` and `npm run build` in that directory. Confirm that `apps/api/package.json` has the right scripts.
-
-- **No custom Output Directory.** The API is exposed as a serverless function: the repo exports the Express app from `apps/api/src/index.ts` (see code: `export default app` when running on Vercel).
+- **No custom Output Directory.** The API is exposed as a serverless function: `apps/api/vercel.json` points `@vercel/node` at `src/index.ts`; the Express app is the default export.
+- **Root Directory must be `apps/api`.** If it isn’t, Vercel uses the repo root and `/health` (and all routes) will 404. In Project Settings → General, set **Root Directory** to `apps/api`.
 - Add **Environment Variables** (Production) from `docs/PRODUCTION_ENVIRONMENT.md` (API section), especially:
   - `WEB_ORIGIN` = `https://app.blinkify.ai`
   - Supabase and Gemini keys, etc.
 - Deploy. Copy the project URL, e.g. `https://blinkify-api-xxx.vercel.app`. This is your **API_BACKEND_URL** for the app project.
 
-**Vercel warning:** If you see *"Due to `builds` existing in your configuration file, the Build and Development Settings defined in your Project Settings will not apply"* — that’s expected. `apps/api/vercel.json` uses a `builds` array, so the build is driven by that file (including `buildCommand`) and dashboard build settings are ignored. Safe to ignore the warning.
+**Vercel warning:** If you see *"Due to `builds` existing in your configuration file, the Build and Development Settings defined in your Project Settings will not apply"* — that’s expected. `apps/api/vercel.json` uses a `builds` array, so the deployment is driven by that file. Safe to ignore the warning.
 
 **Note:** On Vercel the API runs as serverless (no long-running process). The scheduled cleanups (failed generations, unsaved generations) do **not** run automatically. To run them on a schedule, add [Vercel Cron](https://vercel.com/docs/cron-jobs) later that call your cleanup endpoints, or leave cleanup disabled (set `CLEANUP_FAILED_GENERATIONS_INTERVAL_MS=0` and `CLEANUP_UNSAVED_GENERATIONS_INTERVAL_MS=0` if you prefer).
 
