@@ -1,4 +1,4 @@
-import { apiFetch, getWorkspaces } from "@/lib/api";
+import { apiFetch, getWorkspaces, type Workspace } from "@/lib/api";
 import { notFound, redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
@@ -10,8 +10,13 @@ export default async function ProjectPage({
 }) {
   const { id } = await params;
 
-  const { workspaces } = await getWorkspaces();
-  const workspace = workspaces?.[0];
+  let workspace: Workspace | undefined;
+  try {
+    const { workspaces } = await getWorkspaces();
+    workspace = workspaces?.[0];
+  } catch {
+    return notFound();
+  }
   if (!workspace) return notFound();
 
   try {

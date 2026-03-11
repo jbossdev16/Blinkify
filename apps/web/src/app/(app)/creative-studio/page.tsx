@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
-import { apiFetch, getWorkspaces, type Project } from "@/lib/api";
+import { apiFetch, getWorkspaces, type Project, type Workspace } from "@/lib/api";
 import { NoProjectEmptyState } from "@/components/dashboard/no-project-empty-state";
 import { CreativeStudioView } from "@/components/dashboard/creative-studio-view";
 
@@ -11,8 +11,14 @@ export const metadata: Metadata = {
 };
 
 export default async function CreativeStudioPage() {
-  const { workspaces } = await getWorkspaces();
-  const workspace = workspaces?.[0];
+  let workspace: Workspace | undefined;
+  try {
+    const { workspaces } = await getWorkspaces();
+    workspace = workspaces?.[0];
+  } catch {
+    // API unreachable or error; show empty state instead of crashing
+    workspace = undefined;
+  }
 
   if (!workspace) {
     return (

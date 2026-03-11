@@ -1,4 +1,4 @@
-import { getWorkspaces, apiFetch, getProjectLogoUrl, type Project } from "@/lib/api";
+import { getWorkspaces, apiFetch, getProjectLogoUrl, type Project, type Workspace } from "@/lib/api";
 import { redirect } from "next/navigation";
 import { CreateProjectFlow } from "@/components/dashboard/create-project-flow";
 import { ProjectSettings } from "@/components/dashboard/project-settings";
@@ -12,12 +12,14 @@ interface BrandPageProps {
 
 export default async function BrandPage({ searchParams }: BrandPageProps) {
   const params = await searchParams;
-  const { workspaces } = await getWorkspaces();
-  const workspace = workspaces?.[0];
-
-  if (!workspace) {
+  let workspace: Workspace | undefined;
+  try {
+    const { workspaces } = await getWorkspaces();
+    workspace = workspaces?.[0];
+  } catch {
     redirect("/creative-studio");
   }
+  if (!workspace) redirect("/creative-studio");
 
   let projects: Project[] = [];
   try {
