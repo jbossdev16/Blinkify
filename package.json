@@ -21,7 +21,11 @@
     "node": ">=18"
   },
   "overrides": {
-    "protobufjs": ">=7.2.5"
+    "protobufjs": ">=7.2.5",
+    "google-gax": {
+      "protobufjs": ">=7.2.5"
+    },
+    "@tootallnate/once": ">=3.0.1"
   },
   "dependencies": {
     "supabase": "^2.76.6"
