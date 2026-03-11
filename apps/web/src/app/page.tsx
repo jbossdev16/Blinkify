@@ -15,6 +15,11 @@ import React, { useState, useRef, useEffect, forwardRef, useCallback } from "rea
 import { cn } from "@/lib/utils";
 import { AnimatePresence, motion } from "motion/react";
 
+const APP_BASE =
+  process.env.NEXT_PUBLIC_APP_URL === "https://blinkify.ai"
+    ? "https://app.blinkify.ai"
+    : "";
+
 const OrbitingCircles = dynamic(
   () => import("@/components/ui/orbiting-circles").then((m) => ({ default: m.OrbitingCircles })),
   { ssr: false }
@@ -149,10 +154,10 @@ function HeroSection() {
                 Learn More
               </Link>
               <Button asChild size="lg" className="text-base font-semibold px-8 h-11 rounded-md bg-[#007aff] hover:bg-[#0066dd] border-0 text-white">
-                <Link href="/signup">
+                <a href={`${APP_BASE}/signup`}>
                   Start Free Trial
                   <ArrowRight className="ml-2 h-5 w-5" />
-                </Link>
+                </a>
               </Button>
             </div>
           </div>
@@ -192,10 +197,10 @@ function HeroSection() {
               Learn More
             </Link>
             <Button asChild size="lg" className="text-base font-semibold px-8 h-11 rounded-md bg-[#007aff] hover:bg-[#0066dd] border-0 text-white">
-              <Link href="/signup">
+              <a href={`${APP_BASE}/signup`}>
                 Start Free Trial
                 <ArrowRight className="ml-2 h-5 w-5" />
-              </Link>
+              </a>
             </Button>
           </div>
         </div>
@@ -499,10 +504,10 @@ function VisualDemoSection() {
 
       <div className="flex justify-center mt-16">
         <Button asChild size="lg" className="text-base font-medium px-8">
-          <Link href="/signup">
+          <a href={`${APP_BASE}/signup`}>
             Start Free Trial
             <ArrowRight className="ml-2 h-5 w-5" />
-          </Link>
+          </a>
         </Button>
       </div>
     </section>
@@ -697,10 +702,10 @@ function WhoItsForSection() {
 
         <div className="flex justify-center mt-16">
           <Button asChild size="lg" className="text-base font-medium px-8">
-            <Link href="/signup">
+            <a href={`${APP_BASE}/signup`}>
               Start Free Trial
               <ArrowRight className="ml-2 h-5 w-5" />
-            </Link>
+            </a>
           </Button>
         </div>
       </div>
@@ -1695,10 +1700,10 @@ function PricingSection() {
                       }
                       asChild
                     >
-                      <Link href="/signup">
+                      <a href={`${APP_BASE}/signup`}>
                         Start Free Trial
                         <ArrowRight className="ml-2 h-4 w-4" />
-                      </Link>
+                      </a>
                     </Button>
                   </div>
                   <ul
@@ -1866,10 +1871,10 @@ function FinalCTASection() {
             Join teams already creating at 10x speed. No designer needed.
           </p>
           <Button asChild size="lg" className="text-base font-medium px-8">
-            <Link href="/signup">
+            <a href={`${APP_BASE}/signup`}>
               Start Free Trial
               <ArrowRight className="ml-2 h-5 w-5" />
-            </Link>
+            </a>
           </Button>
         </div>
       </div>

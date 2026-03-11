@@ -4,10 +4,7 @@ import { NextResponse, type NextRequest } from "next/server";
 const MARKETING_HOST = "blinkify.ai";
 const APP_HOST = "app.blinkify.ai";
 
-const MARKETING_ONLY_PATHS = new Set([
-  "/brand-assets",
-  "/waitlist",
-]);
+const MARKETING_ONLY_PATHS = new Set(["/brand-assets", "/waitlist"]);
 
 const APP_ROUTE_PREFIXES = [
   "/signin",
@@ -31,17 +28,29 @@ function isAppRoute(pathname: string) {
   );
 }
 
+function isApiProxyPath(pathname: string) {
+  if (pathname === "/health" || pathname === "/me") return true;
+  const prefixes = ["/auth", "/checkout", "/workspaces", "/invitations"];
+  return prefixes.some((p) => pathname === p || pathname.startsWith(p + "/"));
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const hostname = request.headers.get("host")?.replace(/:\d+$/, "") || "";
 
-  // --- Domain-based routing (production only, skip localhost) ---
+  if (isApiProxyPath(pathname)) {
+    return NextResponse.next();
+  }
+
+  const hostname = request.headers.get("host")?.replace(/:\d+$/, "") || "";
   const isMarketing =
     hostname === MARKETING_HOST || hostname === `www.${MARKETING_HOST}`;
   const isApp = hostname === APP_HOST;
 
   if (isMarketing && isAppRoute(pathname)) {
-    const url = new URL(pathname + request.nextUrl.search, `https://${APP_HOST}`);
+    const url = new URL(
+      pathname + request.nextUrl.search,
+      `https://${APP_HOST}`
+    );
     return NextResponse.redirect(url);
   }
 
@@ -55,7 +64,6 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // --- Supabase session refresh + protected-route guard ---
   try {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;

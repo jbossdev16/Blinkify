@@ -6,6 +6,11 @@ import { Button } from "@/components/ui/button";
 import { BlinkifyLogo } from "@/components/blinkify-logo";
 import { cn } from "@/lib/utils";
 
+const APP_BASE =
+  process.env.NEXT_PUBLIC_APP_URL === "https://blinkify.ai"
+    ? "https://app.blinkify.ai"
+    : "";
+
 export function LandingHeader() {
   const [scrolled, setScrolled] = useState(false);
 
@@ -49,14 +54,14 @@ export function LandingHeader() {
           </Link>
         </nav>
         <div className="flex items-center gap-3 shrink-0">
-          <Link
-            href="/signin"
+          <a
+            href={`${APP_BASE}/signin`}
             className="inline-flex items-center justify-center rounded-md border-2 border-transparent bg-white px-5 h-10 text-sm font-semibold text-[#000000] transition-colors hover:bg-slate-50 [background:linear-gradient(white,white)_padding-box,linear-gradient(135deg,#0079d0_0,#9e52d8_32%,#da365c_84%,#d04901_100%)_border-box]"
           >
             Log in
-          </Link>
+          </a>
           <Button asChild size="sm" className="font-semibold h-10 px-6 rounded-md bg-[#007aff] hover:bg-[#0066dd] border-0 text-white">
-            <Link href="/signup">Sign up</Link>
+            <a href={`${APP_BASE}/signup`}>Sign up</a>
           </Button>
         </div>
       </div>
