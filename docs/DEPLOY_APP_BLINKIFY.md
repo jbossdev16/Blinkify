@@ -27,6 +27,8 @@ For a monorepo, the API project is usually deployed with **Root Directory** = `a
   - Supabase and Gemini keys, etc.
 - Deploy. Copy the project URL, e.g. `https://blinkify-api-xxx.vercel.app`. This is your **API_BACKEND_URL** for the app project.
 
+**Vercel warning:** If you see *"Due to `builds` existing in your configuration file, the Build and Development Settings defined in your Project Settings will not apply"* — that’s expected. `apps/api/vercel.json` uses a `builds` array, so the build is driven by that file (including `buildCommand`) and dashboard build settings are ignored. Safe to ignore the warning.
+
 **Note:** On Vercel the API runs as serverless (no long-running process). The scheduled cleanups (failed generations, unsaved generations) do **not** run automatically. To run them on a schedule, add [Vercel Cron](https://vercel.com/docs/cron-jobs) later that call your cleanup endpoints, or leave cleanup disabled (set `CLEANUP_FAILED_GENERATIONS_INTERVAL_MS=0` and `CLEANUP_UNSAVED_GENERATIONS_INTERVAL_MS=0` if you prefer).
 
 ### 3. Vercel project 3 – app.blinkify.ai (apps/web)
