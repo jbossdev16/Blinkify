@@ -11,7 +11,7 @@
     "verify-credits": "GEMINI_API_KEY=skip tsx scripts/verify-credits.ts"
   },
   "dependencies": {
-    "@google-cloud/speech": "^7.2.1",
+    "@google-cloud/speech": "^5.0.0",
     "@google/genai": "^1.40.0",
     "@polar-sh/sdk": "^0.46.2",
     "@react-email/components": "^1.0.7",
