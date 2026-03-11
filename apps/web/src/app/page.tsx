@@ -183,18 +183,86 @@ function Hero2DVerticalMarquee({ images }: { images: string[] }) {
    HERO SECTION - Centered text over demo video
 ───────────────────────────────────────────── */
 function HeroSection() {
+  const leftMessages: { label: string; color: string }[] = [
+    { label: "Higher Ad Conversion", color: "text-[#7c3aed]" },
+    { label: "Lower Cost", color: "text-[#2563eb]" },
+    { label: "10x More Content", color: "text-[#db2777]" },
+  ];
+  const rightMessages: { label: string; color: string }[] = [
+    { label: "No Designer Needed", color: "text-[#059669]" },
+    { label: "Brand-Consistent", color: "text-[#7c3aed]" },
+    { label: "Launch in Minutes", color: "text-[#dc2626]" },
+  ];
+
+  const MessagePill = ({ label, color, tilt }: { label: string; color: string; tilt: string }) => (
+    <span className={cn("rounded-full bg-white px-4 py-2.5 text-xs font-semibold shadow-lg border border-black/5 whitespace-nowrap", color, tilt)}>
+      {label}
+    </span>
+  );
+
   return (
     <section className="relative flex-none md:flex-1 bg-[#ffffff] overflow-x-hidden">
       <div className="relative z-10 max-w-[1200px] mx-auto px-4 pt-10 pb-12 lg:pt-14 lg:pb-20">
-        <div className="relative max-w-3xl mx-auto text-center">
+        {/* On md+: row with [left pills] [center] [right pills] so pills align with center content */}
+        <div className="hidden md:flex md:items-center md:justify-between md:gap-8">
+          <div className="flex flex-col gap-3 shrink-0 pointer-events-none z-20 w-[160px] items-end justify-center">
+            <MessagePill label={leftMessages[0].label} color={leftMessages[0].color} tilt="-rotate-2 self-end" />
+            <MessagePill label={leftMessages[1].label} color={leftMessages[1].color} tilt="rotate-1 self-start ml-4" />
+            <MessagePill label={leftMessages[2].label} color={leftMessages[2].color} tilt="-rotate-2 self-end" />
+          </div>
+
+          <div className="relative max-w-3xl mx-auto text-center flex-1 min-w-0">
+            <div
+              className="pointer-events-none absolute inset-[-40px] sm:inset-[-56px] -z-10 blur-3xl opacity-90"
+              aria-hidden
+            >
+              <div className="mx-auto h-full w-full max-w-2xl bg-[radial-gradient(ellipse_80%_50%_at_20%_30%,rgba(59,130,246,0.25),_transparent_50%),radial-gradient(ellipse_60%_60%_at_50%_50%,rgba(139,92,246,0.2),_transparent_55%),radial-gradient(ellipse_70%_50%_at_80%_70%,rgba(249,115,22,0.2),_transparent_50%),radial-gradient(ellipse_50%_50%_at_70%_20%,rgba(239,68,68,0.15),_transparent_55%)]" />
+            </div>
+
+            <p className="inline-flex items-center rounded-full border border-black/[0.08] bg-white/80 px-3 py-1 text-xs font-medium text-[#000000] shadow-sm mb-4">
+              Feel the future of Ad Creatives.
+            </p>
+            <h1 className="text-4xl sm:text-5xl md:text-6xl font-medium leading-tight tracking-tight text-foreground mb-2">
+              Better Ad Creatives,
+            </h1>
+            <h2 className="text-4xl sm:text-5xl md:text-6xl font-medium leading-tight tracking-tight text-foreground mb-6 md:mb-7">
+              <span className="text-gradient-brand">10x Faster & Cheaper.</span>
+            </h2>
+            <p className="text-base sm:text-lg text-[#000000] max-w-xl mx-auto mb-7 md:mb-8 leading-relaxed">
+              Upload once, get scroll-stopping visuals in seconds.
+            </p>
+            <div className="flex flex-col sm:inline-flex sm:flex-row sm:items-center sm:justify-center gap-3 sm:gap-4">
+              <Link
+                href="/#how-it-works"
+                className="inline-flex items-center justify-center rounded-md border-2 border-transparent bg-white px-8 h-11 text-base font-semibold text-[#000000] transition-colors hover:bg-slate-50 [background:linear-gradient(white,white)_padding-box,linear-gradient(135deg,#0079d0_0,#9e52d8_32%,#da365c_84%,#d04901_100%)_border-box]"
+              >
+                Learn More
+              </Link>
+              <Button asChild size="lg" className="text-base font-semibold px-8 h-11 rounded-md bg-[#007aff] hover:bg-[#0066dd] border-0 text-white">
+                <Link href="/signup">
+                  Start Free Trial
+                  <ArrowRight className="ml-2 h-5 w-5" />
+                </Link>
+              </Button>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-3 shrink-0 pointer-events-none z-20 w-[160px] items-start justify-center">
+            <MessagePill label={rightMessages[0].label} color={rightMessages[0].color} tilt="rotate-2 self-start" />
+            <MessagePill label={rightMessages[1].label} color={rightMessages[1].color} tilt="-rotate-1 self-end mr-4" />
+            <MessagePill label={rightMessages[2].label} color={rightMessages[2].color} tilt="rotate-2 self-start" />
+          </div>
+        </div>
+
+        {/* Mobile: center content only */}
+        <div className="md:hidden relative max-w-3xl mx-auto text-center">
           <div
             className="pointer-events-none absolute inset-[-40px] sm:inset-[-56px] -z-10 blur-3xl opacity-90"
             aria-hidden
           >
             <div className="mx-auto h-full w-full max-w-2xl bg-[radial-gradient(ellipse_80%_50%_at_20%_30%,rgba(59,130,246,0.25),_transparent_50%),radial-gradient(ellipse_60%_60%_at_50%_50%,rgba(139,92,246,0.2),_transparent_55%),radial-gradient(ellipse_70%_50%_at_80%_70%,rgba(249,115,22,0.2),_transparent_50%),radial-gradient(ellipse_50%_50%_at_70%_20%,rgba(239,68,68,0.15),_transparent_55%)]" />
           </div>
-
-          <p className="inline-flex items-center rounded-full border border-black/[0.08] bg-white/80 px-3 py-1 text-xs font-medium text-muted-foreground shadow-sm mb-4">
+          <p className="inline-flex items-center rounded-full border border-black/[0.08] bg-white/80 px-3 py-1 text-xs font-medium text-[#000000] shadow-sm mb-4">
             Feel the future of Ad Creatives.
           </p>
           <h1 className="text-4xl sm:text-5xl md:text-6xl font-medium leading-tight tracking-tight text-foreground mb-2">
@@ -203,19 +271,22 @@ function HeroSection() {
           <h2 className="text-4xl sm:text-5xl md:text-6xl font-medium leading-tight tracking-tight text-foreground mb-6 md:mb-7">
             <span className="text-gradient-brand">10x Faster & Cheaper.</span>
           </h2>
-          <p className="text-base sm:text-lg text-muted-foreground max-w-xl mx-auto mb-7 md:mb-8 leading-relaxed">
-            AI-powered creative enhancement for product ads. Upload once, get scroll-stopping visuals in seconds.
+          <p className="text-base sm:text-lg text-[#000000] max-w-xl mx-auto mb-7 md:mb-8 leading-relaxed">
+            Upload once, get scroll-stopping visuals in seconds.
           </p>
           <div className="flex flex-col sm:inline-flex sm:flex-row sm:items-center sm:justify-center gap-3 sm:gap-4">
-            <Button asChild size="lg" className="text-base font-semibold px-8">
-              <Link href="/waitlist">
-                Join Waitlist
+            <Link
+              href="/#how-it-works"
+              className="inline-flex items-center justify-center rounded-md border-2 border-transparent bg-white px-8 h-11 text-base font-semibold text-[#000000] transition-colors hover:bg-slate-50 [background:linear-gradient(white,white)_padding-box,linear-gradient(135deg,#0079d0_0,#9e52d8_32%,#da365c_84%,#d04901_100%)_border-box]"
+            >
+              Learn More
+            </Link>
+            <Button asChild size="lg" className="text-base font-semibold px-8 h-11 rounded-md bg-[#007aff] hover:bg-[#0066dd] border-0 text-white">
+              <Link href="/signup">
+                Start Free Trial
                 <ArrowRight className="ml-2 h-5 w-5" />
               </Link>
             </Button>
-            <p className="text-sm text-muted-foreground sm:ml-2">
-              Free Trial · Cancel Any Time
-            </p>
           </div>
         </div>
 
@@ -239,7 +310,12 @@ function CompaniesMarqueeSection() {
       <div className="max-w-[1200px] mx-auto w-full">
         <div className="w-full m-0">
           <div className="py-0">
-            <div className="relative overflow-hidden h-[72px]">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider text-center mb-2">
+              Companies leveraging Gen AI
+            </p>
+            <div
+              className="relative overflow-hidden h-[72px] [mask-image:linear-gradient(to_right,transparent_0,black_60px,black_calc(100%-60px),transparent_100%)] [-webkit-mask-image:linear-gradient(to_right,transparent_0,black_60px,black_calc(100%-60px),transparent_100%)]"
+            >
               <div className="flex w-max animate-marquee items-center h-full">
                 {companyLogos.map((company) => (
                   <div
@@ -449,7 +525,7 @@ function VisualDemoSection() {
       </div>
 
       <div className="max-w-[1200px] mx-auto px-4">
-        <div className="relative overflow-hidden">
+        <div className="relative overflow-hidden [mask-image:linear-gradient(to_right,transparent_0,black_80px,black_calc(100%-80px),transparent_100%)] [-webkit-mask-image:linear-gradient(to_right,transparent_0,black_80px,black_calc(100%-80px),transparent_100%)]">
           <div
             ref={containerRef}
             className="w-full relative overflow-hidden select-none"
@@ -513,8 +589,8 @@ function VisualDemoSection() {
 
       <div className="flex justify-center mt-16">
         <Button asChild size="lg" className="text-base font-medium px-8">
-          <Link href="/waitlist">
-            Join Waitlist
+          <Link href="/signup">
+            Start Free Trial
             <ArrowRight className="ml-2 h-5 w-5" />
           </Link>
         </Button>
@@ -711,8 +787,8 @@ function WhoItsForSection() {
 
         <div className="flex justify-center mt-16">
           <Button asChild size="lg" className="text-base font-medium px-8">
-            <Link href="/waitlist">
-              Join Waitlist
+            <Link href="/signup">
+              Start Free Trial
               <ArrowRight className="ml-2 h-5 w-5" />
             </Link>
           </Button>
@@ -768,7 +844,13 @@ const platformLogos = [
 
 function ValueSection() {
   return (
-    <section id="value" className="py-24 bg-[#ffffff]">
+    <section id="value" className="relative py-24 bg-[#ffffff]">
+      <div
+        className="pointer-events-none absolute inset-0 -z-10 blur-3xl opacity-90 flex items-center justify-center"
+        aria-hidden
+      >
+        <div className="w-full max-w-md h-64 bg-[radial-gradient(ellipse_80%_50%_at_50%_50%,rgba(59,130,246,0.25),_transparent_50%),radial-gradient(ellipse_60%_60%_at_50%_50%,rgba(139,92,246,0.2),_transparent_55%),radial-gradient(ellipse_70%_50%_at_50%_50%,rgba(249,115,22,0.2),_transparent_50%),radial-gradient(ellipse_50%_50%_at_50%_50%,rgba(239,68,68,0.15),_transparent_55%)]" />
+      </div>
       <svg width="0" height="0" className="absolute" aria-hidden>
         <defs>
           <linearGradient id="brandGradientLanding" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -779,7 +861,7 @@ function ValueSection() {
           </linearGradient>
         </defs>
       </svg>
-      <div className="max-w-[1200px] mx-auto px-4">
+      <div className="max-w-[1200px] mx-auto px-4 relative z-10">
         <div className="text-center mb-12 md:mb-16">
           <h2 className="text-h2 font-medium tracking-tight text-foreground mb-3 max-w-[560px] mx-auto">
             Built for Your Brand
@@ -986,7 +1068,7 @@ function AICreativesCarouselSection() {
       </div>
 
       <div className="max-w-[1200px] mx-auto px-4">
-        <div className="relative overflow-hidden carousel-contain">
+        <div className="relative overflow-hidden carousel-contain [mask-image:linear-gradient(to_right,transparent_0,black_80px,black_calc(100%-80px),transparent_100%)] [-webkit-mask-image:linear-gradient(to_right,transparent_0,black_80px,black_calc(100%-80px),transparent_100%)]">
           {/* Row 1: 9:16 images + videos (evenly spaced), moves right to left; object-contain so full content visible; no pause on hover */}
           <div className="relative overflow-hidden py-2">
             <div className="flex w-max animate-marquee animate-marquee-no-pause items-stretch gap-4 pl-4 carousel-row" style={{ animationDuration: "25s" }}>
@@ -1708,8 +1790,8 @@ function PricingSection() {
                       }
                       asChild
                     >
-                      <Link href="/waitlist">
-                        Join Waitlist
+                      <Link href="/signup">
+                        Start Free Trial
                         <ArrowRight className="ml-2 h-4 w-4" />
                       </Link>
                     </Button>
@@ -1782,7 +1864,7 @@ function PricingSection() {
 const faqItems: { q: string; a: string }[] = [
   {
     q: "Is there really a free trial?",
-    a: "Yes. Start your free trial in one click. No credit card required. Cancel anytime.",
+    a: "Yes. Start your free trial in one click. Cancel anytime.",
   },
   {
     q: "What formats can I generate?",
@@ -1863,8 +1945,14 @@ function FAQSection() {
 ───────────────────────────────────────────── */
 function FinalCTASection() {
   return (
-    <section className="py-24 bg-[#ffffff]">
-      <div className="max-w-[1200px] mx-auto px-4 text-center">
+    <section className="relative py-24 bg-[#ffffff] overflow-hidden">
+      <div
+        className="pointer-events-none absolute inset-[-40px] sm:inset-[-80px] -z-10 blur-3xl opacity-90"
+        aria-hidden
+      >
+        <div className="mx-auto h-full w-full max-w-4xl bg-[radial-gradient(ellipse_80%_50%_at_20%_30%,rgba(59,130,246,0.35),_transparent_50%),radial-gradient(ellipse_60%_60%_at_50%_50%,rgba(139,92,246,0.28),_transparent_55%),radial-gradient(ellipse_70%_50%_at_80%_70%,rgba(249,115,22,0.28),_transparent_50%),radial-gradient(ellipse_50%_50%_at_70%_20%,rgba(239,68,68,0.22),_transparent_55%)]" />
+      </div>
+      <div className="max-w-[1200px] mx-auto px-4 text-center relative z-10">
         <div>
           <h2 className="text-h2 text-foreground mb-4 max-w-[700px] mx-auto">
             Create Ad Creatives <span className="text-gradient-brand">10x Faster</span>
@@ -1873,8 +1961,8 @@ function FinalCTASection() {
             Join teams already creating at 10x speed. No designer needed.
           </p>
           <Button asChild size="lg" className="text-base font-medium px-8">
-            <Link href="/waitlist">
-              Join Waitlist
+            <Link href="/signup">
+              Start Free Trial
               <ArrowRight className="ml-2 h-5 w-5" />
             </Link>
           </Button>

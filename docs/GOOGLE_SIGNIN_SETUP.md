@@ -23,14 +23,14 @@ Your app already uses Supabase’s Google OAuth on signup and signin (`signInWit
    - **Authorized redirect URIs** – add **Supabase’s callback URL**:
      - `https://<YOUR_SUPABASE_PROJECT_REF>.supabase.co/auth/v1/callback`
      - Example: `https://tcbziypuirgizkqlslzw.supabase.co/auth/v1/callback`
-     - Find your project ref in Supabase Dashboard → Project Settings → General → Reference ID.
+     - Find your project ref in Supabase creative-studio → Project Settings → General → Reference ID.
 6. **Create** and copy the **Client ID** and **Client secret**.
 
 ---
 
-## 2. Supabase Dashboard – Google provider
+## 2. Supabase creative-studio – Google provider
 
-1. [Supabase Dashboard](https://supabase.com/dashboard) → your project.
+1. [Supabase creative-studio](https://supabase.com/creative-studio) → your project.
 2. **Authentication** → **Providers** → **Google**.
 3. Enable **Google**.
 4. Paste **Client ID** and **Client secret** from step 1.
@@ -43,25 +43,25 @@ Your app already uses Supabase’s Google OAuth on signup and signin (`signInWit
 1. **Authentication** → **URL Configuration**.
 2. **Site URL**: the main origin users see (e.g. `https://app.blinkify.ai` or `http://localhost:3000` for dev).
 3. **Redirect URLs**: add every origin/path your app uses as `redirectTo` after login:
-   - `http://localhost:3000/dashboard`
+   - `http://localhost:3000/creative-studio`
    - `http://localhost:3000/**` (optional; wildcard for dev)
-   - `https://app.blinkify.ai/dashboard`
+   - `https://app.blinkify.ai/creative-studio`
    - `https://app.blinkify.ai/**` (optional)
    - Add `/signin` if you redirect there in some flows.
 
 Your app currently uses:
-- Signup: `redirectTo: ${origin}/dashboard`
-- Signin: `redirectTo: ${origin}${returnTo}` (e.g. `/dashboard` or a path like `/creative-studio`)
+- Signup: `redirectTo: ${origin}/creative-studio`
+- Signin: `redirectTo: ${origin}${returnTo}` (e.g. `/creative-studio` or a path like `/creative-studio`)
 
 So at least:
-- `http://localhost:3000/dashboard` and `http://localhost:3000/**` for dev.
-- `https://app.blinkify.ai/dashboard` and `https://app.blinkify.ai/**` for prod (or your real app origin).
+- `http://localhost:3000/creative-studio` and `http://localhost:3000/**` for dev.
+- `https://app.blinkify.ai/creative-studio` and `https://app.blinkify.ai/**` for prod (or your real app origin).
 
 ---
 
 ## 4. Local dev – optional
 
-For local testing, in **Google OAuth client** you already added `http://localhost:3000` as authorized origin and in Supabase you added `http://localhost:3000/dashboard` (and optionally `http://localhost:3000/**`) as redirect URLs. No code change needed.
+For local testing, in **Google OAuth client** you already added `http://localhost:3000` as authorized origin and in Supabase you added `http://localhost:3000/creative-studio` (and optionally `http://localhost:3000/**`) as redirect URLs. No code change needed.
 
 ---
 
@@ -69,8 +69,8 @@ For local testing, in **Google OAuth client** you already added `http://localhos
 
 1. Open signup or signin (e.g. `http://localhost:3000/signup` or your app URL).
 2. Click **Continue with Google**.
-3. Sign in with Google; you should be redirected back to `/dashboard` (or your `returnTo` path) with a session.
-4. Your API uses `ensureCurrentUser` and creates a `users` row from the JWT (`sub`, `email`, `name`, `picture`) when missing, so the first dashboard load after Google sign-in should work without extra setup.
+3. Sign in with Google; you should be redirected back to `/creative-studio` (or your `returnTo` path) with a session.
+4. Your API uses `ensureCurrentUser` and creates a `users` row from the JWT (`sub`, `email`, `name`, `picture`) when missing, so the first creative-studio load after Google sign-in should work without extra setup.
 
 ---
 
@@ -79,7 +79,7 @@ For local testing, in **Google OAuth client** you already added `http://localhos
 | Issue | Check |
 |-------|--------|
 | Redirect URI mismatch | Redirect URI in Google must be exactly `https://<ref>.supabase.co/auth/v1/callback`. No trailing slash. |
-| “Redirect URL not allowed” | Add the exact `redirectTo` URL (e.g. `https://app.blinkify.ai/dashboard`) in Supabase **Redirect URLs**. |
+| “Redirect URL not allowed” | Add the exact `redirectTo` URL (e.g. `https://app.blinkify.ai/creative-studio`) in Supabase **Redirect URLs**. |
 | User not found after login | API uses `auth_provider_id = JWT sub` and auto-provisions via `ensureCurrentUser`; ensure API has valid Supabase anon key and can read/write `users`. |
 | Cookies not set | App uses `@supabase/ssr` and middleware; ensure signup/signin run on the same origin as the redirect (no cross-origin redirect from Supabase to a different subdomain unless both are in Redirect URLs and cookie domain is correct). |
 
@@ -88,6 +88,6 @@ For local testing, in **Google OAuth client** you already added `http://localhos
 ## Summary
 
 - **Google Cloud:** Web OAuth client, authorized origin = app origin, redirect URI = Supabase callback only.
-- **Supabase:** Google provider enabled with Client ID/secret; Site URL and Redirect URLs include app origin and `/dashboard` (and any other `redirectTo` paths).
+- **Supabase:** Google provider enabled with Client ID/secret; Site URL and Redirect URLs include app origin and `/creative-studio` (and any other `redirectTo` paths).
 
 No code changes are required in your repo for a standard setup; only Google and Supabase configuration.
