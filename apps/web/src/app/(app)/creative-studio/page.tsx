@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { apiFetch, getWorkspaces, type Project, type Workspace } from "@/lib/api";
 import { NoProjectEmptyState } from "@/components/dashboard/no-project-empty-state";
@@ -15,8 +16,11 @@ export default async function CreativeStudioPage() {
   try {
     const { workspaces } = await getWorkspaces();
     workspace = workspaces?.[0];
-  } catch {
-    // API unreachable or error; show empty state instead of crashing
+  } catch (err: unknown) {
+    const status = (err as Error & { status?: number })?.status;
+    if (status === 401 || status === 403) {
+      redirect("/signin?returnTo=/creative-studio");
+    }
     workspace = undefined;
   }
 

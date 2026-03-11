@@ -53,6 +53,7 @@ router.post("/init", requireAuth, async (req: Request, res: Response) => {
 
 // ─── GET /workspaces ─────────────────────────────────────────────────────────
 // List all workspaces the current user is a member of.
+// If the user has none, ensure one is created (idempotent).
 
 router.get(
   "/",
@@ -60,9 +61,9 @@ router.get(
   ensureCurrentUser,
   async (req: Request, res: Response) => {
     try {
-      const user = (req as Request & { user: { id: string } }).user;
+      const user = (req as Request & { user: { id: string; email?: string | null; name?: string | null } }).user;
 
-      const { data: memberships, error } = await supabase
+      let { data: memberships, error } = await supabase
         .from("workspace_members")
         .select("role, workspaces(*)")
         .eq("user_id", user.id);
@@ -70,10 +71,30 @@ router.get(
       if (error) throw error;
 
       type MembershipRow = { role: string; workspaces: Record<string, unknown> };
-      const rows = (memberships ?? []) as unknown as MembershipRow[];
-      const workspaces = rows
+      let rows = (memberships ?? []) as unknown as MembershipRow[];
+      let workspaces = rows
         .map((m) => ({ ...m.workspaces, role: m.role }))
         .filter((w) => (w as { deleted_at?: string | null }).deleted_at === null);
+
+      // User exists but has no workspace (e.g. init failed or data gap) — ensure one
+      if (workspaces.length === 0) {
+        const payload = req.auth?.payload;
+        await ensureWorkspace({
+          authProviderId: payload?.sub ?? "",
+          email: typeof payload?.email === "string" ? payload.email : user.email ?? undefined,
+          name: typeof payload?.name === "string" ? payload.name : user.name ?? undefined,
+          avatarUrl: typeof payload?.picture === "string" ? payload.picture : undefined,
+        });
+        const retry = await supabase
+          .from("workspace_members")
+          .select("role, workspaces(*)")
+          .eq("user_id", user.id);
+        if (retry.error) throw retry.error;
+        rows = (retry.data ?? []) as unknown as MembershipRow[];
+        workspaces = rows
+          .map((m) => ({ ...m.workspaces, role: m.role }))
+          .filter((w) => (w as { deleted_at?: string | null }).deleted_at === null);
+      }
 
       res.json({ workspaces });
     } catch (err: unknown) {
