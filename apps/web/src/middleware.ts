@@ -1,7 +1,65 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+const MARKETING_HOST = "blinkify.ai";
+const APP_HOST = "app.blinkify.ai";
+
+const MARKETING_PATHS = new Set([
+  "/",
+  "/privacy",
+  "/terms",
+  "/cookies",
+  "/brand-assets",
+  "/waitlist",
+]);
+
+const APP_ROUTE_PREFIXES = [
+  "/signin",
+  "/signup",
+  "/reset-password",
+  "/setup-plan",
+  "/creative-studio",
+  "/brand",
+  "/asset-collection",
+  "/billing",
+  "/settings",
+  "/studio",
+  "/admin",
+  "/projects",
+  "/dashboard",
+];
+
+function isAppRoute(pathname: string) {
+  return APP_ROUTE_PREFIXES.some(
+    (p) => pathname === p || pathname.startsWith(p + "/")
+  );
+}
+
 export async function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+  const hostname = request.headers.get("host")?.replace(/:\d+$/, "") || "";
+
+  // --- Domain-based routing (production only, skip localhost) ---
+  const isMarketing =
+    hostname === MARKETING_HOST || hostname === `www.${MARKETING_HOST}`;
+  const isApp = hostname === APP_HOST;
+
+  if (isMarketing && isAppRoute(pathname)) {
+    const url = new URL(pathname + request.nextUrl.search, `https://${APP_HOST}`);
+    return NextResponse.redirect(url);
+  }
+
+  if (isApp) {
+    if (pathname === "/") {
+      return NextResponse.redirect(new URL("/creative-studio", request.url));
+    }
+    if (MARKETING_PATHS.has(pathname) && pathname !== "/") {
+      const url = new URL(pathname, `https://${MARKETING_HOST}`);
+      return NextResponse.redirect(url);
+    }
+  }
+
+  // --- Supabase session refresh + protected-route guard ---
   try {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -16,13 +74,23 @@ export async function middleware(request: NextRequest) {
         getAll() {
           return request.cookies.getAll();
         },
-        setAll(cookiesToSet: { name: string; value: string; options?: Record<string, unknown> }[]) {
+        setAll(
+          cookiesToSet: {
+            name: string;
+            value: string;
+            options?: Record<string, unknown>;
+          }[]
+        ) {
           cookiesToSet.forEach(({ name, value }) =>
             request.cookies.set(name, value)
           );
           supabaseResponse = NextResponse.next({ request });
           cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options as Parameters<typeof supabaseResponse.cookies.set>[2])
+            supabaseResponse.cookies.set(
+              name,
+              value,
+              options as Parameters<typeof supabaseResponse.cookies.set>[2]
+            )
           );
         },
       },
@@ -32,12 +100,24 @@ export async function middleware(request: NextRequest) {
       data: { user },
     } = await supabase.auth.getUser();
 
-    const protectedPaths = ["/creative-studio", "/brand", "/asset-collection", "/billing", "/settings", "/admin", "/projects", "/studio"];
-    const isProtected = protectedPaths.some((p) => request.nextUrl.pathname === p || request.nextUrl.pathname.startsWith(p + "/"));
+    const protectedPaths = [
+      "/creative-studio",
+      "/brand",
+      "/asset-collection",
+      "/billing",
+      "/settings",
+      "/admin",
+      "/projects",
+      "/studio",
+    ];
+    const isProtected = protectedPaths.some(
+      (p) => pathname === p || pathname.startsWith(p + "/")
+    );
+
     if (!user && isProtected) {
       const redirectUrl = request.nextUrl.clone();
       redirectUrl.pathname = "/signin";
-      redirectUrl.searchParams.set("returnTo", request.nextUrl.pathname);
+      redirectUrl.searchParams.set("returnTo", pathname);
       return NextResponse.redirect(redirectUrl);
     }
 
@@ -49,7 +129,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Run on all routes except static files and _next
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|mp4|webm)$).*)",
   ],
 };

@@ -1,5 +1,7 @@
 import type { NextConfig } from "next";
 
+// Required for app.blinkify.ai: rewrites proxy /auth, /workspaces, etc. to the API.
+// If API_BACKEND_URL is missing at build time, rewrites are empty → signup/login/API calls 404.
 const apiBackend = process.env.API_BACKEND_URL;
 
 const nextConfig: NextConfig = {
