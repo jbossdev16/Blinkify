@@ -4,7 +4,7 @@ import React from "react";
 import { supabase } from "../lib/supabase.js";
 import { resend } from "../lib/resend.js";
 import { isEmail, normalizeEmail } from "../lib/validation.js";
-import { WaitlistWelcomeEmail } from "../emails/waitlist-welcome.js";
+import { WaitlistWelcomeEmail } from "../emails/waitlist-welcome";
 
 const router = Router();
 

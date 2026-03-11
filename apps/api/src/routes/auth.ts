@@ -4,8 +4,8 @@ import crypto from "crypto";
 import React from "react";
 import { resend } from "../lib/resend.js";
 import { supabase } from "../lib/supabase.js";
-import { VerificationCodeEmail } from "../emails/verification-code.js";
-import { ResetPasswordEmail } from "../emails/reset-password.js";
+import { VerificationCodeEmail } from "../emails/verification-code";
+import { ResetPasswordEmail } from "../emails/reset-password";
 import { isEmail, normalizeEmail } from "../lib/validation.js";
 import {
   getVerification,

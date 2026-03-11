@@ -1,5 +1,5 @@
 import { resend } from "../lib/resend.js";
-import { InvitationEmail } from "../emails/invitation.js";
+import { InvitationEmail } from "../emails/invitation";
 import React from "react";
 
 const FROM_EMAIL = process.env.RESEND_FROM_EMAIL ?? "Blinkify <noreply@blinkify.ai>";
