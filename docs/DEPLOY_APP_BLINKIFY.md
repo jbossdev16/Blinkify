@@ -1,6 +1,6 @@
 # Deploy Blinkify (marketing + app + API)
 
-gBoth **blinkify.ai** and **app.blinkify.ai** deploy from the same `apps/web` codebase. Middleware in `src/middleware.ts` enforces route separation by hostname.
+Both **blinkify.ai** and **app.blinkify.ai** deploy from the same `apps/web` codebase. Middleware in `src/middleware.ts` enforces route separation by hostname.
 
 ---
 
@@ -70,7 +70,7 @@ Deploy → copy the project URL (e.g. `https://blinkify-api.vercel.app`). This i
 | `NEXT_PUBLIC_SUPABASE_URL` | Production Supabase URL | Auth fails |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Production Supabase anon key | Auth fails |
 
-**Important:** `API_BACKEND_URL` is read at **build time**. After adding or changing it, trigger a **Redeploy** so the rewrites are baked in. Without it, `/auth/send-code`, `/auth/verify-code`, `/workspaces`, etc. are not proxied and return 404.
+**Important:** `API_BACKEND_URL` is read at **build time**. After adding or changing it, trigger a **Redeploy** so the rewrites are baked in. Without it, `/auth/send-code`, `/auth/verify-code`, `/workspaces`, etc. are not proxied and return **404** (you’ll see “Network error” on signup). For the app project, the build will **fail** on Vercel if `NEXT_PUBLIC_APP_URL` is `https://app.blinkify.ai` but `API_BACKEND_URL` is missing.
 
 **Domain setup:** Vercel → Settings → Domains → Add `app.blinkify.ai`. Copy the CNAME target. In GoDaddy DNS, add CNAME `app` → Vercel CNAME target.
 

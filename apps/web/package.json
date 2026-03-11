@@ -10,7 +10,7 @@
   ],
   "scripts": {
     "dev": "next dev --port 3000",
-    "build": "next build",
+    "build": "node scripts/check-api-backend-env.js && next build",
     "start": "next start",
     "lint": "next lint",
     "clean": "rm -rf .next"
