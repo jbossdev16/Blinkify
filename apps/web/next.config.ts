@@ -5,7 +5,10 @@ const apiBackend = process.env.API_BACKEND_URL;
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   async redirects() {
-    return [{ source: "/favicon.ico", destination: "/icon", permanent: false }];
+    return [
+      { source: "/favicon.ico", destination: "/icon", permanent: false },
+      { source: "/icon", destination: "/icon.svg", permanent: false },
+    ];
   },
   async rewrites() {
     if (!apiBackend) return [];
