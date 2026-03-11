@@ -4,11 +4,7 @@ import { NextResponse, type NextRequest } from "next/server";
 const MARKETING_HOST = "blinkify.ai";
 const APP_HOST = "app.blinkify.ai";
 
-const MARKETING_PATHS = new Set([
-  "/",
-  "/privacy",
-  "/terms",
-  "/cookies",
+const MARKETING_ONLY_PATHS = new Set([
   "/brand-assets",
   "/waitlist",
 ]);
@@ -53,7 +49,7 @@ export async function middleware(request: NextRequest) {
     if (pathname === "/") {
       return NextResponse.redirect(new URL("/creative-studio", request.url));
     }
-    if (MARKETING_PATHS.has(pathname) && pathname !== "/") {
+    if (MARKETING_ONLY_PATHS.has(pathname)) {
       const url = new URL(pathname, `https://${MARKETING_HOST}`);
       return NextResponse.redirect(url);
     }

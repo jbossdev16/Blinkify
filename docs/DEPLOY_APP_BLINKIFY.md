@@ -1,6 +1,6 @@
 # Deploy Blinkify (marketing + app + API)
 
-Both **blinkify.ai** and **app.blinkify.ai** deploy from the same `apps/web` codebase. Middleware in `src/middleware.ts` enforces route separation by hostname.
+gBoth **blinkify.ai** and **app.blinkify.ai** deploy from the same `apps/web` codebase. Middleware in `src/middleware.ts` enforces route separation by hostname.
 
 ---
 
@@ -14,7 +14,7 @@ Both **blinkify.ai** and **app.blinkify.ai** deploy from the same `apps/web` cod
 
 **How it works:** `src/middleware.ts` checks the `Host` header:
 - On **blinkify.ai**, app routes (signin, signup, creative-studio, etc.) redirect to `app.blinkify.ai`.
-- On **app.blinkify.ai**, marketing routes (/privacy, /terms, /cookies, /brand-assets, /waitlist) redirect to `blinkify.ai`. Root `/` redirects to `/creative-studio`.
+- On **app.blinkify.ai**, marketing-only routes (/brand-assets, /waitlist) redirect to `blinkify.ai`. Root `/` redirects to `/creative-studio`. Legal pages (/privacy, /terms, /cookies) render on both domains so app pages can link to them without CORS issues.
 - On **localhost**, no domain routing — all pages accessible for development.
 
 ---
