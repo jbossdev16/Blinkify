@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
-  ArrowLeft,
   Loader2,
   Trash2,
   X,

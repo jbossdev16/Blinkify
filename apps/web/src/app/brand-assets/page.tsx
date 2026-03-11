@@ -33,11 +33,9 @@ const ICONS: Asset[] = [
 function AssetCard({
   asset,
   type,
-  previewDark,
 }: {
   asset: Asset;
   type: "logo" | "icon";
-  previewDark?: boolean;
 }) {
   const isWhite = asset.name === "White";
   const bg = isWhite ? "bg-neutral-900" : "bg-white";
@@ -112,7 +110,7 @@ export default function BrandPage() {
           <h2 className="text-h4 font-normal text-foreground mb-6">Full Logo</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {FULL_LOGOS.map((asset) => (
-              <AssetCard key={asset.name} asset={asset} type="logo" previewDark={asset.name === "White"} />
+              <AssetCard key={asset.name} asset={asset} type="logo" />
             ))}
           </div>
         </section>
@@ -121,7 +119,7 @@ export default function BrandPage() {
           <h2 className="text-h4 font-normal text-foreground mb-6">Icon Only</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {ICONS.map((asset) => (
-              <AssetCard key={asset.name} asset={asset} type="icon" previewDark={asset.name === "White"} />
+              <AssetCard key={asset.name} asset={asset} type="icon" />
             ))}
           </div>
         </section>

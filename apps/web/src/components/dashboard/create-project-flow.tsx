@@ -151,13 +151,6 @@ export function CreateProjectFlow({ workspaceId, redirectToAfterCreate }: Props)
     }
   }
 
-  /* ── Gradient fill: how far down the line we've progressed ── */
-
-  const progressPercent =
-    highestUnlocked >= STEPS.length
-      ? 100
-      : ((highestUnlocked - 1) / (STEPS.length - 1)) * 100;
-
   return (
     <div className="pb-20">
       {/* Top bar */}

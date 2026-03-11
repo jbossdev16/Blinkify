@@ -5,8 +5,7 @@ import Image from "next/image";
 import dynamic from "next/dynamic";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card-legacy";
-import { Store, ShoppingCart, Users, ArrowRight, Check, X, Palette, Target, Zap, Lock, ChevronDown, Play, Pause } from "lucide-react";
-import { FlickeringGrid } from "@/components/ui/flickering-grid";
+import { Store, ShoppingCart, Users, ArrowRight, Check, X, Palette, Target, Zap, Lock, ChevronDown, Play } from "lucide-react";
 import { BlurFade } from "@/components/ui/blur-fade";
 import { BorderBeam } from "@/components/ui/border-beam";
 import { BlinkifyLogo } from "@/components/blinkify-logo";
@@ -89,95 +88,6 @@ const companyLogos = [
   { name: "Google", src: "/Google/Google_Logo_0.svg" },
   { name: "TikTok", src: "/TikTok/TikTok_Logo_0.svg" },
 ];
-
-/* Hero 3D marquee images (same as signup/signin) */
-const heroMarqueeBaseImages = [
-  "/blinkify-1770839372135.png",
-  "/blinkify-1770839665605.png",
-  "/Starbucks AFTER.png",
-  "/blinkify-1770843387104.png",
-  "/blinkify-1770843757047.png",
-  "/Skincare%20Product.webp",
-  "/Sneakers.webp",
-  "/Watch.webp",
-  "/Headphones.webp",
-  "/Coffee%20Bag.webp",
-  "/Sunglasses.webp",
-];
-
-function getHeroMarqueeImages(): string[] {
-  const cols: string[] = [];
-  for (let c = 0; c < 4; c++) {
-    for (let i = 0; i < 6; i++) cols.push(heroMarqueeBaseImages[i % heroMarqueeBaseImages.length]!);
-  }
-  return cols;
-}
-
-function shuffleHeroMarqueeImages(): string[] {
-  const cols: string[][] = [];
-  for (let c = 0; c < 4; c++) {
-    const pool = [...heroMarqueeBaseImages];
-    const col: string[] = [];
-    for (let i = 0; i < 6; i++) {
-      const available = pool.length > 0
-        ? pool.filter((img) => img !== col[col.length - 1])
-        : heroMarqueeBaseImages.filter((img) => img !== col[col.length - 1]);
-      const pick = available.length > 0
-        ? available[Math.floor(Math.random() * available.length)]!
-        : heroMarqueeBaseImages[i % heroMarqueeBaseImages.length]!;
-      col.push(pick);
-      const idx = pool.indexOf(pick);
-      if (idx !== -1) pool.splice(idx, 1);
-    }
-    cols.push(col);
-  }
-  return cols.flat();
-}
-
-function useHeroMarqueeImages() {
-  const [images, setImages] = useState<string[]>(getHeroMarqueeImages);
-  useEffect(() => {
-    setImages(shuffleHeroMarqueeImages());
-  }, []);
-  return images;
-}
-
-/* 2D vertical marquee: 2 columns, 2 images per column (4 total), moves up and down slowly */
-function Hero2DVerticalMarquee({ images }: { images: string[] }) {
-  const capped = images.slice(0, 4);
-  const cols = [capped.slice(0, 2), capped.slice(2, 4)];
-  return (
-    <div className="h-full w-full overflow-hidden flex gap-3 px-2">
-      {cols.map((columnImages, colIndex) => (
-        <div key={colIndex} className="flex-1 min-w-0 h-full overflow-hidden">
-          <div
-            className="flex h-max w-full flex-col animate-marquee-vertical"
-            style={{ animationDelay: `${colIndex * -2.5}s` }}
-          >
-            {columnImages.map((src, i) => (
-              <div key={`a-${colIndex}-${i}`} className="shrink-0 w-full pb-3">
-                <img
-                  src={src}
-                  alt=""
-                  className="w-full rounded-lg object-cover aspect-[9/16] shadow-sm"
-                />
-              </div>
-            ))}
-            {columnImages.map((src, i) => (
-              <div key={`b-${colIndex}-${i}`} className="shrink-0 w-full pb-3">
-                <img
-                  src={src}
-                  alt=""
-                  className="w-full rounded-lg object-cover aspect-[9/16] shadow-sm"
-                />
-              </div>
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
 
 /* ─────────────────────────────────────────────
    HERO SECTION - Centered text over demo video
@@ -1213,9 +1123,6 @@ function AICreativesCarouselSection() {
 /* ─────────────────────────────────────────────
    STATS BENTO GRID
 ───────────────────────────────────────────── */
-const bentoCardBase =
-  "h-full rounded-2xl bg-white border border-black/5 p-6 md:p-7 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xs flex flex-col relative";
-
 /* Looping stack for Grid D – enough items to fill card, then cycle (oldest out, next in) */
 const BENTO_LIST_ICON = (
   <img
@@ -1360,8 +1267,6 @@ function AnimatedBeamBiDirectional() {
 }
 
 const BENTO_CAROUSEL_IMAGE = "/blinkify-1771027611405.webp";
-
-const BENTO_VIDEO_BG = "/blinkify-video-1771438910604.mp4";
 
 const BENTO_10X_VIDEO = "/blinkify-video-1771438910604.mp4";
 

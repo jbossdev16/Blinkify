@@ -148,11 +148,6 @@ const VIDEO_RESOLUTIONS: { value: VideoResolution; label: string }[] = [
   { value: "4k", label: "Ultra (4K)" },
 ];
 
-const EMAIL_ASPECT_RATIOS: { value: EmailAspectRatio; label: string }[] = [
-  { value: "9:16", label: "9:16 Portrait" },
-  { value: "1:1", label: "1:1 Square" },
-];
-
 const EMAIL_NUMBER_OF_IMAGES: { value: EmailNumberOfImages; label: string }[] = [
   { value: 1, label: "1 image" },
   { value: 2, label: "2 images" },
@@ -2406,7 +2401,7 @@ ${bodyRows}
                   if (imageEntries.length === 0) return null;
                   return (
                     <div className="flex flex-wrap gap-3 overflow-x-auto pb-1">
-                      {imageEntries.map(({ f, pendingIndex }, j) => (
+                      {imageEntries.map(({ pendingIndex }, j) => (
                         <div
                           key={pendingIndex}
                           className="relative shrink-0 rounded-xl border border-border bg-card overflow-hidden w-[140px]"
@@ -2960,7 +2955,7 @@ ${bodyRows}
                 if (imageEntries.length === 0) return null;
                 return (
                   <div className="flex flex-wrap gap-3 overflow-x-auto pb-1">
-                    {imageEntries.map(({ f, pendingIndex }, j) => (
+                    {imageEntries.map(({ pendingIndex }, j) => (
                       <div
                         key={pendingIndex}
                         className="relative shrink-0 rounded-xl border border-border bg-card overflow-hidden w-[140px]"

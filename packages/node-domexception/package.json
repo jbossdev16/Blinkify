@@ -1,0 +1,10 @@
+{
+  "name": "node-domexception",
+  "version": "1.0.1",
+  "description": "Stub — re-exports the native DOMException available in Node 18+",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js"
+  }
+}
