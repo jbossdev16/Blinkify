@@ -4,6 +4,16 @@ import { NextResponse, type NextRequest } from "next/server";
 const MARKETING_HOST = "blinkify.ai";
 const APP_HOST = "app.blinkify.ai";
 
+/** Use HTTPS for production hosts to avoid redirect loops (Vercel proxy may send request as HTTP). */
+function redirectOrigin(hostname: string): `https://${string}` | null {
+  if (hostname === APP_HOST || hostname === MARKETING_HOST || hostname === `www.${MARKETING_HOST}`) {
+    return hostname === MARKETING_HOST || hostname === `www.${MARKETING_HOST}`
+      ? `https://${MARKETING_HOST}`
+      : `https://${APP_HOST}`;
+  }
+  return null;
+}
+
 const MARKETING_ONLY_PATHS = new Set(["/brand-assets", "/waitlist"]);
 
 const APP_ROUTE_PREFIXES = [
@@ -56,7 +66,8 @@ export async function middleware(request: NextRequest) {
 
   if (isApp) {
     if (pathname === "/") {
-      return NextResponse.redirect(new URL("/creative-studio", request.url));
+      const base = redirectOrigin(hostname) ?? request.url;
+      return NextResponse.redirect(new URL("/creative-studio", base));
     }
     if (MARKETING_ONLY_PATHS.has(pathname)) {
       const url = new URL(pathname, `https://${MARKETING_HOST}`);
@@ -119,7 +130,8 @@ export async function middleware(request: NextRequest) {
     );
 
     if (!user && isProtected) {
-      const redirectUrl = request.nextUrl.clone();
+      const base = redirectOrigin(hostname);
+      const redirectUrl = base ? new URL("/signin", base) : request.nextUrl.clone();
       redirectUrl.pathname = "/signin";
       redirectUrl.searchParams.set("returnTo", pathname);
       return NextResponse.redirect(redirectUrl);
