@@ -1,13 +1,21 @@
 import type { MetadataRoute } from "next";
+import { headers } from "next/headers";
 
-const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://blinkify.ai";
-const isAppDomain =
-  typeof baseUrl === "string" && baseUrl.includes("app.blinkify.ai");
+const APP_HOST = "app.blinkify.ai";
+const MARKETING_HOST = "blinkify.ai";
 
-export default function sitemap(): MetadataRoute.Sitemap {
-  if (isAppDomain) return [];
+/** Use request host so sitemap is correct per domain regardless of NEXT_PUBLIC_APP_URL. */
+export const dynamic = "force-dynamic";
+
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  const headersList = await headers();
+  const host = headersList.get("host")?.replace(/:\d+$/, "") ?? MARKETING_HOST;
+  if (host === APP_HOST) return [];
+
+  const baseUrl = `https://${host}`;
   return [
     { url: baseUrl, lastModified: new Date(), changeFrequency: "weekly", priority: 1 },
+    { url: `${baseUrl}/waitlist`, lastModified: new Date(), changeFrequency: "monthly", priority: 0.8 },
     { url: `${baseUrl}/privacy`, lastModified: new Date(), changeFrequency: "yearly", priority: 0.3 },
     { url: `${baseUrl}/terms`, lastModified: new Date(), changeFrequency: "yearly", priority: 0.3 },
     { url: `${baseUrl}/cookies`, lastModified: new Date(), changeFrequency: "yearly", priority: 0.3 },

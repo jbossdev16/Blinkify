@@ -33,6 +33,9 @@ const nextConfig: NextConfig = {
         pathname: "/storage/**",
       },
     ],
+    // Serve 320w for ~320px slots (demo cards) and 378w for bento to reduce payload vs default 640w
+    deviceSizes: [320, 378, 640, 750, 828, 1080, 1200, 1920, 2048],
+    imageSizes: [16, 32, 48, 64, 96, 128, 256],
   },
   experimental: {
     serverActions: {

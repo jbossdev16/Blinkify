@@ -37,10 +37,19 @@ const DEMO_VIDEO_SRC = "/blinkify-demo.webm";
 function DemoVideoPlayer({ className }: { className?: string }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [playing, setPlaying] = useState(false);
+  const [srcLoaded, setSrcLoaded] = useState(false);
 
   const toggle = useCallback(() => {
     const v = videoRef.current;
     if (!v) return;
+    if (!srcLoaded) {
+      setSrcLoaded(true);
+      v.src = DEMO_VIDEO_SRC;
+      v.load();
+      v.play().catch(() => {});
+      setPlaying(true);
+      return;
+    }
     if (v.paused) {
       v.play().catch(() => {});
       setPlaying(true);
@@ -48,7 +57,7 @@ function DemoVideoPlayer({ className }: { className?: string }) {
       v.pause();
       setPlaying(false);
     }
-  }, []);
+  }, [srcLoaded]);
 
   useEffect(() => {
     const v = videoRef.current;
@@ -64,10 +73,11 @@ function DemoVideoPlayer({ className }: { className?: string }) {
     <div className={cn("relative w-full h-full cursor-pointer group", className)} onClick={toggle}>
       <video
         ref={videoRef}
-        src={DEMO_VIDEO_SRC}
+        src={srcLoaded ? DEMO_VIDEO_SRC : undefined}
         loop
         playsInline
-        preload="metadata"
+        preload="none"
+        poster="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 9' fill='%23e2e8f0'%3E%3Crect width='16' height='9'/%3E%3C/svg%3E"
         className="absolute inset-0 w-full h-full object-cover"
       />
       {!playing && (
@@ -348,7 +358,7 @@ function ImageCard({ item, imageType }: { item: typeof demoImages[0]; imageType:
               className="w-full h-full object-cover pointer-events-none"
               draggable={false}
               loading="lazy"
-              sizes="320px"
+              sizes="(max-width: 400px) 280px, 320px"
             />
           </div>
         </Card>
@@ -897,7 +907,7 @@ const carouselVideos9x16 = [
 ];
 
 const carouselVideos16x9 = [
-  "/blinkify-video-8daaf9f4.mp4",
+  "/blinkify-video-3235da29.mp4",
   "/blinkify-video-74541ceb.mp4",
   "/blinkify-video-e64682ce.mp4",
   "/blinkify-video-1771438910604.mp4",
@@ -1320,7 +1330,7 @@ function StatsBentoSection() {
                       <img src="/Instagram/Instagram_Symbol_0.svg" alt="Instagram" className="h-9 w-9 object-contain" width={36} height={36} />
                     </OrbitingCircles>
                     <OrbitingCircles radius={133} duration={20} delay={11.11} className="border-0 bg-transparent">
-                      <img src="/Facebook/Facebook_Symbol_0.png" alt="Facebook" className="h-9 w-9 object-contain" width={36} height={36} />
+                      <Image src="/Facebook/Facebook_Symbol_0.png" alt="Facebook" className="h-9 w-9 object-contain" width={36} height={36} sizes="36px" />
                     </OrbitingCircles>
                     <OrbitingCircles radius={133} duration={20} delay={17.77} className="border-0 bg-transparent">
                       <img src="/Shopify.com/Shopify.com_Symbol_12.svg" alt="Shopify" className="h-9 w-9 object-contain" width={36} height={36} />
@@ -1613,6 +1623,40 @@ const plans: {
   },
 ];
 
+const GRAINIENT_VIDEO_SRC = "/grainient-1770491527486.webm";
+
+function LazyPricingVideo() {
+  const ref = useRef<HTMLDivElement>(null);
+  const [src, setSrc] = useState<string | null>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) setSrc(GRAINIENT_VIDEO_SRC);
+      },
+      { rootMargin: "100px", threshold: 0 }
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+  return (
+    <div ref={ref} className="absolute inset-0 w-full h-full">
+      {src && (
+        <video
+          autoPlay
+          loop
+          muted
+          playsInline
+          preload="metadata"
+          className="absolute inset-0 w-full h-full object-cover"
+          src={src}
+        />
+      )}
+    </div>
+  );
+}
+
 function PricingSection() {
   return (
     <section id="pricing" className="py-24 bg-[#ffffff]">
@@ -1638,15 +1682,7 @@ function PricingSection() {
               >
                 {plan.popular && (
                   <div className="absolute inset-0 rounded-[inherit] overflow-hidden z-0">
-                    <video
-                      autoPlay
-                      loop
-                      muted
-                      playsInline
-                      preload="metadata"
-                      className="absolute inset-0 w-full h-full object-cover"
-                      src="/grainient-1770491527486.webm"
-                    />
+                    <LazyPricingVideo />
                   </div>
                 )}
                 <div className="absolute inset-0 rounded-[inherit] z-10 pointer-events-none">

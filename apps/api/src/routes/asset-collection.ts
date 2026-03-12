@@ -153,6 +153,69 @@ router.get(
 
       if (error) throw error;
 
+      const itemRows = rows ?? [];
+      const genIds = itemRows.map((r) => r.generation_id).filter(Boolean) as string[];
+      const vidIds = itemRows.map((r) => r.video_generation_id).filter(Boolean) as string[];
+
+      const [gensRes, vidsRes] = await Promise.all([
+        genIds.length > 0
+          ? supabase
+              .from("generations")
+              .select("id, result_url, prompt, project_id, aspect_ratio")
+              .in("id", genIds)
+              .is("deleted_at", null)
+          : Promise.resolve({ data: [] as { id: string; result_url: string | null; prompt: string | null; project_id: string; aspect_ratio: string | null }[], error: null }),
+        vidIds.length > 0
+          ? supabase
+              .from("video_generations")
+              .select("id, storage_path, prompt, project_id, aspect_ratio, resolution, duration_seconds, model")
+              .in("id", vidIds)
+          : Promise.resolve({ data: [] as { id: string; storage_path: string | null; prompt: string | null; project_id: string; aspect_ratio: string | null; resolution: string | null; duration_seconds: number | null; model: string | null }[], error: null }),
+      ]);
+
+      if (gensRes.error) throw gensRes.error;
+      if (vidsRes.error) throw vidsRes.error;
+
+      const gensMap = new Map(
+        (gensRes.data ?? []).map((g) => [g.id, g])
+      );
+      const vidsMap = new Map(
+        (vidsRes.data ?? []).map((v) => [v.id, v])
+      );
+      const projectIds = [
+        ...new Set([
+          ...(gensRes.data ?? []).map((g) => g.project_id),
+          ...(vidsRes.data ?? []).map((v) => v.project_id),
+        ]),
+      ];
+      const { data: projects } =
+        projectIds.length > 0
+          ? await supabase.from("projects").select("id, name").in("id", projectIds)
+          : { data: [] as { id: string; name: string }[] };
+      const projectNames = new Map((projects ?? []).map((p) => [p.id, p.name]));
+
+      const imageUrlPromises = (gensRes.data ?? [])
+        .filter((g) => g.result_url)
+        .map((g) =>
+          resolveGenerationImageUrl(supabase.storage, g.result_url!, IMAGES_BUCKET).then(
+            (url) => [g.id, url] as const
+          )
+        );
+      const videoUrlPromises = (vidsRes.data ?? [])
+        .filter((v) => v.storage_path)
+        .map((v) =>
+          supabase.storage
+            .from(VIDEOS_BUCKET)
+            .createSignedUrl(v.storage_path!, SIGNED_URL_EXPIRY_SECONDS)
+            .then(({ data }) => [v.id, data?.signedUrl ?? null] as const)
+        );
+      const [imageUrls, videoUrls] = await Promise.all([
+        Promise.all(imageUrlPromises),
+        Promise.all(videoUrlPromises),
+      ]);
+      const imageUrlMap = new Map(imageUrls);
+      const videoUrlMap = new Map(videoUrls);
+
       const items: Array<{
         id: string;
         generationId?: string;
@@ -165,81 +228,39 @@ router.get(
         metadata?: Record<string, unknown>;
       }> = [];
 
-      for (const row of rows ?? []) {
+      for (const row of itemRows) {
         if (row.generation_id) {
-          const { data: gen } = await supabase
-            .from("generations")
-            .select("result_url, prompt, project_id, aspect_ratio")
-            .eq("id", row.generation_id)
-            .is("deleted_at", null)
-            .single();
-          let url: string | null = null;
-          let projectName = "Unknown";
-          let prompt: string | null = null;
+          const gen = gensMap.get(row.generation_id);
+          const projectName = gen ? (projectNames.get(gen.project_id) ?? "Unknown") : "Unknown";
+          const url = imageUrlMap.get(row.generation_id) ?? null;
           const metadata: Record<string, unknown> = {};
-          if (gen) {
-            projectName =
-              (
-                await supabase
-                  .from("projects")
-                  .select("name")
-                  .eq("id", gen.project_id)
-                  .single()
-              ).data?.name ?? "Unknown";
-            prompt = gen.prompt;
-            if (gen.aspect_ratio) metadata.aspectRatio = gen.aspect_ratio;
-            if (gen.result_url) {
-              url = await resolveGenerationImageUrl(supabase.storage, gen.result_url, IMAGES_BUCKET);
-            }
-          }
+          if (gen?.aspect_ratio) metadata.aspectRatio = gen.aspect_ratio;
           items.push({
             id: row.id,
             generationId: row.generation_id,
             type: "image",
             url,
             projectName,
-            prompt,
+            prompt: gen?.prompt ?? null,
             createdAt: row.created_at,
             metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
           });
         } else if (row.video_generation_id) {
-          const { data: vid } = await supabase
-            .from("video_generations")
-            .select("storage_path, prompt, project_id, aspect_ratio, resolution, duration_seconds, model")
-            .eq("id", row.video_generation_id)
-            .single();
-          let url: string | null = null;
-          let projectName = "Unknown";
-          let prompt: string | null = null;
+          const vid = vidsMap.get(row.video_generation_id);
+          const projectName = vid ? (projectNames.get(vid.project_id) ?? "Unknown") : "Unknown";
+          const url = videoUrlMap.get(row.video_generation_id) ?? null;
           const metadata: Record<string, unknown> = {};
-          if (vid) {
-            projectName =
-              (
-                await supabase
-                  .from("projects")
-                  .select("name")
-                  .eq("id", vid.project_id)
-                  .single()
-              ).data?.name ?? "Unknown";
-            prompt = vid.prompt;
-            if (vid.aspect_ratio) metadata.aspectRatio = vid.aspect_ratio;
-            if (vid.resolution) metadata.resolution = vid.resolution;
-            if (vid.duration_seconds != null) metadata.durationSeconds = vid.duration_seconds;
-            if (vid.model) metadata.model = vid.model;
-            if (vid.storage_path) {
-              const { data: signed } = await supabase.storage
-                .from(VIDEOS_BUCKET)
-                .createSignedUrl(vid.storage_path, SIGNED_URL_EXPIRY_SECONDS);
-              if (signed?.signedUrl) url = signed.signedUrl;
-            }
-          }
+          if (vid?.aspect_ratio) metadata.aspectRatio = vid.aspect_ratio;
+          if (vid?.resolution) metadata.resolution = vid.resolution;
+          if (vid?.duration_seconds != null) metadata.durationSeconds = vid.duration_seconds;
+          if (vid?.model) metadata.model = vid.model;
           items.push({
             id: row.id,
             videoGenerationId: row.video_generation_id,
             type: "video",
             url,
             projectName,
-            prompt,
+            prompt: vid?.prompt ?? null,
             createdAt: row.created_at,
             metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
           });

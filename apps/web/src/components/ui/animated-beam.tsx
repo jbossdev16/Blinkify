@@ -65,7 +65,9 @@ export const AnimatedBeam: React.FC<AnimatedBeamProps> = ({
 
   useEffect(() => {
     const updatePath = () => {
-      if (containerRef.current && fromRef.current && toRef.current) {
+      if (!containerRef.current || !fromRef.current || !toRef.current) return
+      requestAnimationFrame(() => {
+        if (!containerRef.current || !fromRef.current || !toRef.current) return
         const containerRect = containerRef.current.getBoundingClientRect()
         const rectA = fromRef.current.getBoundingClientRect()
         const rectB = toRef.current.getBoundingClientRect()
@@ -88,10 +90,9 @@ export const AnimatedBeam: React.FC<AnimatedBeamProps> = ({
           (startX + endX) / 2
         },${controlY} ${endX},${endY}`
         setPathD(d)
-      }
+      })
     }
 
-    // Initialize ResizeObserver
     const resizeObserver = new ResizeObserver(() => {
       updatePath()
     })

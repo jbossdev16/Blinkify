@@ -18,27 +18,21 @@ export default async function DashboardLayout({
     redirect("/signin?returnTo=/dashboard");
   }
 
-  // Ensure user + workspace exist (idempotent)
-  try {
-    await apiFetch("/workspaces/init", { method: "POST" });
-  } catch {
-    // API may be unreachable; pages will handle fallback
-  }
-
   let workspace: { plan: string; credits: number } | null = null;
+  const [initResult, workspacesResult] = await Promise.allSettled([
+    apiFetch("/workspaces/init", { method: "POST" }),
+    getWorkspaces(),
+  ]);
 
-  try {
-    const { workspaces } = await getWorkspaces();
+  if (workspacesResult.status === "fulfilled") {
+    const { workspaces } = workspacesResult.value;
     const ws = workspaces?.[0];
-    if (ws) {
-      workspace = { plan: ws.plan, credits: ws.credits };
-    }
-  } catch (err: unknown) {
-    const status = (err as Error & { status?: number })?.status;
-    if (status === 401 || status === 403) {
+    if (ws) workspace = { plan: ws.plan, credits: ws.credits };
+  } else {
+    const err = workspacesResult.reason as Error & { status?: number };
+    if (err?.status === 401 || err?.status === 403) {
       redirect("/signin?returnTo=/dashboard");
     }
-    // API unreachable or other error — continue with null; pages show fallback
   }
 
   const adminEmails = (process.env.BLINKIFY_ADMIN_EMAILS ?? "")

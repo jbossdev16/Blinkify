@@ -53,11 +53,20 @@ export const metadata: Metadata = {
     title,
     description,
     url: baseUrl,
+    images: [
+      {
+        url: "/logo/blinkify-logo-color-white-bg.png",
+        width: 1200,
+        height: 630,
+        alt: siteName,
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
     title,
     description,
+    images: ["/logo/blinkify-logo-color-white-bg.png"],
   },
   robots: isAppDomain
     ? { index: false, follow: false }

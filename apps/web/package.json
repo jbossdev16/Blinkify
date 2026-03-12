@@ -3,9 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "browserslist": [
-    "chrome >= 90",
-    "safari >= 14",
-    "firefox >= 88",
+    "chrome >= 92",
+    "safari >= 15.4",
+    "firefox >= 90",
     "not dead"
   ],
   "scripts": {

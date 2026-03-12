@@ -47,6 +47,9 @@ function isApiProxyPath(pathname: string) {
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  if (pathname === "/robots.txt" || pathname === "/sitemap.xml") {
+    return NextResponse.next();
+  }
   if (isApiProxyPath(pathname)) {
     return NextResponse.next();
   }
