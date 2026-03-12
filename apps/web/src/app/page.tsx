@@ -5,7 +5,7 @@ import Image from "next/image";
 import dynamic from "next/dynamic";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card-legacy";
-import { Store, ShoppingCart, Users, ArrowRight, Check, X, Palette, Target, Zap, Lock, ChevronDown, Play } from "lucide-react";
+import { Store, ShoppingCart, Users, ArrowRight, Check, X, Palette, Target, Zap, Lock, ChevronDown, Play, DollarSign, Clock } from "lucide-react";
 import { BlurFade } from "@/components/ui/blur-fade";
 import { BorderBeam } from "@/components/ui/border-beam";
 import { BlinkifyLogo } from "@/components/blinkify-logo";
@@ -239,7 +239,7 @@ function HeroSection() {
             </div>
 
             <h1 className="text-4xl sm:text-5xl md:text-6xl font-medium leading-tight tracking-tight text-foreground mb-2">
-              Better Ad Creatives,
+              Ad creatives that convert,
             </h1>
             <h2 className="text-4xl sm:text-5xl md:text-6xl font-medium leading-tight tracking-tight text-foreground mb-6 md:mb-7">
               <span className="text-gradient-brand">10x Faster & Cheaper.</span>
@@ -266,7 +266,7 @@ function HeroSection() {
             <div className="mx-auto h-full w-full max-w-2xl bg-[radial-gradient(ellipse_80%_50%_at_20%_30%,rgba(59,130,246,0.25),_transparent_50%),radial-gradient(ellipse_60%_60%_at_50%_50%,rgba(139,92,246,0.2),_transparent_55%),radial-gradient(ellipse_70%_50%_at_80%_70%,rgba(249,115,22,0.2),_transparent_50%),radial-gradient(ellipse_50%_50%_at_70%_20%,rgba(239,68,68,0.15),_transparent_55%)]" />
           </div>
           <h1 className="text-4xl sm:text-5xl md:text-6xl font-medium leading-tight tracking-tight text-foreground mb-2">
-            Better Ad Creatives,
+            Ad creatives that convert,
           </h1>
           <h2 className="text-4xl sm:text-5xl md:text-6xl font-medium leading-tight tracking-tight text-foreground mb-6 md:mb-7">
             <span className="text-gradient-brand">10x Faster & Cheaper.</span>
@@ -299,7 +299,7 @@ function CompaniesMarqueeSection() {
         <div className="w-full m-0">
           <div className="py-0">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider text-center mb-2">
-              Companies leveraging Gen AI
+              LEADING COMPANIES USE AI FOR CREATIVES
             </p>
             <div
               className="relative overflow-hidden h-[72px] [mask-image:linear-gradient(to_right,transparent_0,black_60px,black_calc(100%-60px),transparent_100%)] [-webkit-mask-image:linear-gradient(to_right,transparent_0,black_60px,black_calc(100%-60px),transparent_100%)]"
@@ -574,15 +574,6 @@ function VisualDemoSection() {
           </div>
         </div>
       </div>
-
-      <div className="flex justify-center mt-16">
-        <Button asChild size="lg" className="text-base font-medium px-8">
-          <a href={`${APP_BASE}/signup`}>
-            Start Free Trial
-            <ArrowRight className="ml-2 h-5 w-5" />
-          </a>
-        </Button>
-      </div>
     </section>
   );
 }
@@ -684,18 +675,29 @@ function HowItWorksSection() {
         <div className="space-y-8 md:space-y-10">
           {howItWorksSteps.map((step, i) => {
             const imageLeft = i % 2 === 1;
+            const isLastStep = i === howItWorksSteps.length - 1;
             return (
             <div
               key={step.title}
               className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-10 items-center bg-white rounded-2xl p-6 md:p-8"
             >
-              <div className={`min-w-0 order-2 ${imageLeft ? "md:order-2" : "md:order-1"}`}>
+              <div className={`min-w-0 order-2 flex flex-col ${imageLeft ? "md:order-2" : "md:order-1"}`}>
                 <h3 className="text-xl md:text-2xl font-medium tracking-tight text-foreground">
                   {step.title}
                 </h3>
                 <p className="mt-3 text-slate-600 font-normal leading-relaxed">
                   {step.description}
                 </p>
+                {isLastStep && (
+                  <div className="mt-8">
+                    <Button asChild size="lg" className="text-base font-medium px-8">
+                      <a href={`${APP_BASE}/signup`}>
+                        Start Free Trial
+                        <ArrowRight className="ml-2 h-5 w-5" />
+                      </a>
+                    </Button>
+                  </div>
+                )}
               </div>
               <BlurFade inView inViewMargin="-40px" delay={i * 0.08} className={`relative overflow-hidden rounded-xl bg-slate-100 order-1 aspect-4/3 w-full border border-black/5 ${imageLeft ? "md:order-1" : "md:order-2"}`}>
                 {step.videoParts ? (
@@ -771,15 +773,6 @@ function WhoItsForSection() {
               </Card>
             </BlurFade>
           ))}
-        </div>
-
-        <div className="flex justify-center mt-16">
-          <Button asChild size="lg" className="text-base font-medium px-8">
-            <a href={`${APP_BASE}/signup`}>
-              Start Free Trial
-              <ArrowRight className="ml-2 h-5 w-5" />
-            </a>
-          </Button>
         </div>
       </div>
     </section>
@@ -1444,6 +1437,266 @@ function StatsBentoSection() {
 }
 
 /* ─────────────────────────────────────────────
+   ROI CALCULATOR – Blinkify savings vs agency/freelance
+───────────────────────────────────────────── */
+const ROI_COUNTRIES = [
+  { id: "us", label: "United States", hourlyRate: 85 },
+  { id: "uk", label: "United Kingdom", hourlyRate: 72 },
+  { id: "ca", label: "Canada", hourlyRate: 78 },
+  { id: "eu", label: "Europe (EU)", hourlyRate: 70 },
+  { id: "au", label: "Australia", hourlyRate: 82 },
+  { id: "other", label: "Other", hourlyRate: 65 },
+] as const;
+
+const ROI_TEAM_OPTIONS = [
+  { id: "1", label: "1 User", users: 1 },
+  { id: "2", label: "2 Users", users: 2 },
+  { id: "3-10", label: "3–10 Users", users: 6 },
+  { id: "11-25", label: "11–25 Users", users: 18 },
+] as const;
+
+const ROI_CREATIVES_PER_WEEK = [
+  { id: "0-3", label: "Up to 3 creatives / week", mid: 2 },
+  { id: "4-5", label: "4 – 5 creatives / week", mid: 4.5 },
+  { id: "6-8", label: "6 – 8 creatives / week", mid: 7 },
+  { id: "9-13", label: "9 – 13 creatives / week", mid: 11 },
+  { id: "14-20", label: "14 – 20 creatives / week", mid: 17 },
+  { id: "21-26", label: "21 – 26 creatives / week", mid: 23 },
+  { id: "27-38", label: "27 – 38 creatives / week", mid: 32 },
+  { id: "39-50", label: "39 – 50 creatives / week", mid: 44 },
+  { id: "50+", label: "More than 50 creatives / week", mid: 60 },
+] as const;
+
+const BLINKIFY_PLANS = [
+  { id: "standard", name: "Standard", credits: 400, price: 39 },
+  { id: "professional", name: "Professional", credits: 1500, price: 119 },
+  { id: "agency", name: "Agency", credits: 5000, price: 397 },
+];
+
+const HOURS_PER_CREATIVE = 1;
+const CREDITS_PER_CREATIVE = 2; // blended average (static/carousel/video)
+
+const CREATIVES_TO_PLAN: Record<string, (typeof BLINKIFY_PLANS)[number]> = (() => {
+  const [Standard, Professional, Agency] = BLINKIFY_PLANS;
+  const map: Record<string, (typeof BLINKIFY_PLANS)[number]> = {};
+  ROI_CREATIVES_PER_WEEK.forEach((c) => {
+    if (["0-3", "4-5", "6-8"].includes(c.id)) map[c.id] = Standard;
+    else if (["9-13", "14-20", "21-26"].includes(c.id)) map[c.id] = Professional;
+    else map[c.id] = Agency; // 27-38, 39-50, 50+
+  });
+  return map;
+})();
+
+function getRecommendedPlanByCreatives(creativesId: string): (typeof BLINKIFY_PLANS)[number] {
+  return CREATIVES_TO_PLAN[creativesId] ?? BLINKIFY_PLANS[1];
+}
+
+function getRecommendedPlan(teamId: string, creativesId: string): (typeof BLINKIFY_PLANS)[number] {
+  if (teamId === "3-10" || teamId === "11-25") return BLINKIFY_PLANS[2]; // 3+ users → Agency
+  return getRecommendedPlanByCreatives(creativesId);
+}
+
+const ROI_DISCLAIMER = `This ROI calculator is for informational and estimation purposes only. Results do not guarantee or predict actual financial outcomes and may vary based on your business, workflows, and market conditions.
+
+Blinkify does not assume responsibility for the accuracy of any output or for decisions made based on these estimates. We encourage you to seek independent professional advice before making financial or strategic decisions.
+
+Pricing and savings estimates are illustrative and should not be interpreted as fixed quotes. The model is based on typical usage, industry benchmarks, and estimated efficiency gains from automation. Blinkify makes no warranties regarding the completeness or applicability of results for your specific situation.
+
+This tool is provided "AS IS" without express or implied warranties. Blinkify disclaims all liability for any damages or losses arising from reliance on these estimates.`;
+
+function CostCalculatorSection() {
+  const [countryId, setCountryId] = useState<string>(ROI_COUNTRIES[0].id);
+  const [teamId, setTeamId] = useState<string>(ROI_TEAM_OPTIONS[0].id);
+  const [creativesId, setCreativesId] = useState<string>(ROI_CREATIVES_PER_WEEK[3].id); // 9–13 default
+  const [disclaimerOpen, setDisclaimerOpen] = useState(false);
+
+  const country = ROI_COUNTRIES.find((c) => c.id === countryId) ?? ROI_COUNTRIES[0];
+  const team = ROI_TEAM_OPTIONS.find((t) => t.id === teamId) ?? ROI_TEAM_OPTIONS[0];
+  const creativesRange = ROI_CREATIVES_PER_WEEK.find((c) => c.id === creativesId) ?? ROI_CREATIVES_PER_WEEK[3];
+
+  const creativesPerMonth = Math.round((creativesRange.mid * 52) / 12);
+  const recommendedPlan = getRecommendedPlan(teamId, creativesId);
+
+  const agencyCostMonthly = creativesPerMonth * HOURS_PER_CREATIVE * country.hourlyRate;
+  const agencyCostAnnual = agencyCostMonthly * 12;
+  const blinkifyCostAnnual = recommendedPlan.price * 12;
+  const costSavingsAnnual = Math.max(0, agencyCostAnnual - blinkifyCostAnnual);
+  const timeSavedHours = Math.round(creativesRange.mid * 52 * HOURS_PER_CREATIVE);
+  const roiMultiplier = blinkifyCostAnnual > 0 ? costSavingsAnnual / blinkifyCostAnnual : 0;
+  const roiCapped = Math.max(2, Math.min(roiMultiplier, 20));
+  const roiDisplay = roiCapped >= 2 ? `${roiCapped.toFixed(1)}x` : "2.0x";
+
+  return (
+    <section id="cost-calculator" className="py-16 sm:py-24 bg-[#ffffff]">
+      <div className="max-w-[1200px] mx-auto px-4">
+        <div className="text-center mb-12">
+          <h2 className="text-h2 font-medium tracking-tight text-foreground mb-3 max-w-[600px] mx-auto">
+            Calculate your Return on Investment
+          </h2>
+          <p className="text-slate-600 max-w-[520px] mx-auto font-normal">
+            See how much you could save with Blinkify vs. agency or freelance.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8 items-stretch w-full max-w-5xl mx-auto">
+          {/* Left: inputs — stretches toward center */}
+          <div className="rounded-2xl border border-black/8 bg-white p-5 sm:p-6 lg:min-w-0 lg:flex-1">
+            <h3 className="text-base sm:text-lg font-semibold text-foreground mb-4 sm:mb-5">
+              Calculate your Return on Investment
+            </h3>
+            <div className="space-y-5">
+              <div>
+                <label htmlFor="roi-country" className="flex items-center gap-1.5 text-sm font-medium text-foreground mb-2">
+                  Country of operation
+                  <span className="text-muted-foreground" title="Designer rates vary by region">ⓘ</span>
+                </label>
+                <select
+                  id="roi-country"
+                  value={countryId}
+                  onChange={(e) => setCountryId(e.target.value)}
+                  className="w-full rounded-lg border border-black/10 bg-white px-4 py-3 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                >
+                  {ROI_COUNTRIES.map((c) => (
+                    <option key={c.id} value={c.id}>{c.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="roi-team" className="flex items-center gap-1.5 text-sm font-medium text-foreground mb-2">
+                  Number of team members who will use Blinkify
+                  <span className="text-muted-foreground" title="Affects recommended plan">ⓘ</span>
+                </label>
+                <select
+                  id="roi-team"
+                  value={teamId}
+                  onChange={(e) => setTeamId(e.target.value)}
+                  className="w-full rounded-lg border border-black/10 bg-white px-4 py-3 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                >
+                  {ROI_TEAM_OPTIONS.map((t) => (
+                    <option key={t.id} value={t.id}>{t.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="roi-creatives" className="flex items-center gap-1.5 text-sm font-medium text-foreground mb-2">
+                  How many creatives do you need per week on average?
+                  <span className="text-muted-foreground" title="Ad creatives per week">ⓘ</span>
+                </label>
+                <select
+                  id="roi-creatives"
+                  value={creativesId}
+                  onChange={(e) => setCreativesId(e.target.value)}
+                  className="w-full rounded-lg border border-black/10 bg-white px-4 py-3 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                >
+                  {ROI_CREATIVES_PER_WEEK.map((c) => (
+                    <option key={c.id} value={c.id}>{c.label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setDisclaimerOpen(true)}
+              className="mt-4 text-xs text-red-600 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded"
+            >
+              Disclaimer
+            </button>
+          </div>
+
+          {/* Right: results — stretches toward center */}
+          <div className="lg:min-w-0 lg:flex-1 lg:flex lg:flex-col">
+            <div className="rounded-2xl border border-black/8 bg-white p-5 sm:p-6 lg:pt-6 lg:p-6 w-full h-full text-[#000000] flex flex-col">
+              <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 text-[#000000]">
+                Your Return on Investment with Blinkify
+              </h3>
+              <div className="mb-4 sm:mb-6">
+                <span className="text-3xl sm:text-4xl md:text-5xl font-bold text-gradient-brand">{roiDisplay}</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-4">
+                <div className="rounded-xl border border-black/5 p-4">
+                  <div className="flex items-center gap-2 text-sm mb-1.5 text-[#000000]">
+                    <DollarSign className="h-4 w-4 text-primary shrink-0" aria-hidden />
+                    Cost Savings
+                  </div>
+                  <p className="text-2xl sm:text-3xl font-semibold text-[#000000]">
+                    ${(costSavingsAnnual / 1000).toFixed(1)}k
+                  </p>
+                </div>
+                <div className="rounded-xl border border-black/5 p-4">
+                  <div className="flex items-center gap-2 text-sm mb-1.5 text-[#000000]">
+                    <Clock className="h-4 w-4 text-primary shrink-0" aria-hidden />
+                    Time Saved
+                  </div>
+                  <p className="text-2xl sm:text-3xl font-semibold text-[#000000]">≈ {timeSavedHours} hours</p>
+                </div>
+              </div>
+              <p className="text-xs mb-4 text-[#000000]">Currency in $USD · Annual estimates</p>
+              <div className="rounded-xl border border-black/5 p-4 mb-6">
+                <p className="text-sm font-medium mb-2 text-[#000000]">Your recommended plan</p>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-lg sm:text-xl font-semibold text-[#000000]">{recommendedPlan.name}</span>
+                  <span className="text-lg sm:text-xl font-medium text-[#000000]">${recommendedPlan.price}/mo</span>
+                </div>
+              </div>
+              <Button asChild size="lg" className="w-full text-base font-medium mt-auto">
+                <a href={`${APP_BASE}/signup`}>
+                  Try for free now
+                  <ArrowRight className="ml-2 h-5 w-5" />
+                </a>
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Disclaimer modal */}
+      <AnimatePresence>
+        {disclaimerOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+            onClick={() => setDisclaimerOpen(false)}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="disclaimer-title"
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.96 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[85vh] overflow-hidden flex flex-col"
+            >
+              <div className="flex items-center justify-between p-4 border-b border-black/5">
+                <h2 id="disclaimer-title" className="text-lg font-semibold text-foreground">Disclaimer</h2>
+                <button
+                  type="button"
+                  onClick={() => setDisclaimerOpen(false)}
+                  className="p-2 rounded-lg hover:bg-black/5 text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  aria-label="Close"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <div className="p-4 overflow-y-auto text-sm text-slate-600 leading-relaxed whitespace-pre-line">
+                {ROI_DISCLAIMER}
+              </div>
+              <div className="p-4 border-t border-black/5">
+                <Button onClick={() => setDisclaimerOpen(false)} className="w-full">
+                  Close
+                </Button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </section>
+  );
+}
+
+/* ─────────────────────────────────────────────
    TESTIMONIALS BENTO
 ───────────────────────────────────────────── */
 const VerifiedBadge = ({ className, ...props }: React.SVGProps<SVGSVGElement>) => (
@@ -1466,6 +1719,7 @@ const testimonials: {
   imageAspect?: "16/9" | "9/16" | "4/3";
   location?: string;
   date?: string;
+  metric?: string;
 }[] = [
   {
     name: "Sarah Chen",
@@ -1477,6 +1731,7 @@ const testimonials: {
     image: "/1.png",
     location: "CA",
     date: "Mar 6, 2025",
+    metric: "50+ variations/week",
   },
   {
     name: "Marcus Johnson",
@@ -1576,6 +1831,11 @@ function TestimonialBentoSection() {
                   <p className="text-foreground text-[14px] md:text-[15px] leading-relaxed font-normal">
                     {t.quote}
                   </p>
+                  {t.metric && (
+                    <p className="text-sm font-semibold text-primary mt-2">
+                      {t.metric}
+                    </p>
+                  )}
                   <div className="mt-auto pt-2 flex flex-col gap-2">
                     {t.image && (
                       <div
@@ -1665,7 +1925,7 @@ const plans: {
     ],
   },
   {
-    name: "Ultra",
+    name: "Agency",
     price: "$397",
     description: "For agencies and teams managing creative production across multiple clients.",
     popular: false,
@@ -1739,7 +1999,7 @@ function PricingSection() {
               <div
                 className={`relative flex flex-col rounded-2xl p-6 md:p-8 transition-all h-full overflow-visible ${
                   plan.popular
-                    ? "border-0 shadow-xl scale-[1.02] -translate-y-1 md:scale-[1.04] md:-translate-y-2"
+                    ? "border-0 shadow-xl"
                     : "bg-white border border-black/5 hover:shadow-xs"
                 }`}
               >
@@ -1876,8 +2136,16 @@ const faqItems: { q: string; a: string }[] = [
     a: "Yes. Start your free trial in one click. Cancel anytime.",
   },
   {
+    q: "How do credits work?",
+    a: "Each generation uses credits (e.g. one image or one batch counts as one or more credits depending on format). Your plan includes a monthly credit allowance; unused credits don't roll over. Check your plan details for exact usage.",
+  },
+  {
     q: "What formats can I generate?",
     a: "Meta, Google, TikTok, and store-ready formats—including static ads, carousels, and video. All tuned for performance.",
+  },
+  {
+    q: "Do you support teams or agencies?",
+    a: "Yes. Professional and Agency plans support multiple brands and team members. For custom or enterprise needs, book a call and we'll set you up.",
   },
   {
     q: "Is my brand data safe?",
@@ -2029,17 +2297,17 @@ export default function Home() {
           <CompaniesMarqueeSection />
         </div>
         <SectionDivider />
-        <StatsBentoSection />
-        <SectionDivider />
         <VisualDemoSection />
         <SectionDivider />
         <HowItWorksSection />
         <SectionDivider />
-        <WhoItsForSection />
-        <SectionDivider />
         <ValueSection />
         <SectionDivider />
         <AICreativesCarouselSection />
+        <SectionDivider />
+        <CostCalculatorSection />
+        <SectionDivider />
+        <StatsBentoSection />
         <SectionDivider />
         <TestimonialBentoSection />
         <SectionDivider />
