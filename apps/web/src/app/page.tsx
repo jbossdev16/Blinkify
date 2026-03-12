@@ -37,19 +37,10 @@ const DEMO_VIDEO_SRC = "/blinkify-demo.webm";
 function DemoVideoPlayer({ className }: { className?: string }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [playing, setPlaying] = useState(false);
-  const [srcLoaded, setSrcLoaded] = useState(false);
 
   const toggle = useCallback(() => {
     const v = videoRef.current;
     if (!v) return;
-    if (!srcLoaded) {
-      setSrcLoaded(true);
-      v.src = DEMO_VIDEO_SRC;
-      v.load();
-      v.play().catch(() => {});
-      setPlaying(true);
-      return;
-    }
     if (v.paused) {
       v.play().catch(() => {});
       setPlaying(true);
@@ -57,7 +48,7 @@ function DemoVideoPlayer({ className }: { className?: string }) {
       v.pause();
       setPlaying(false);
     }
-  }, [srcLoaded]);
+  }, []);
 
   useEffect(() => {
     const v = videoRef.current;
@@ -73,11 +64,10 @@ function DemoVideoPlayer({ className }: { className?: string }) {
     <div className={cn("relative w-full h-full cursor-pointer group", className)} onClick={toggle}>
       <video
         ref={videoRef}
-        src={srcLoaded ? DEMO_VIDEO_SRC : undefined}
+        src={DEMO_VIDEO_SRC}
         loop
         playsInline
-        preload="none"
-        poster="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 9' fill='%23e2e8f0'%3E%3Crect width='16' height='9'/%3E%3C/svg%3E"
+        preload="metadata"
         className="absolute inset-0 w-full h-full object-cover"
       />
       {!playing && (
@@ -105,6 +95,110 @@ const companyLogos = [
 ];
 
 /* ─────────────────────────────────────────────
+   TYPING SEARCH BAR
+───────────────────────────────────────────── */
+const PLACEHOLDER_SITES = [
+  "yourwebsite.com",
+  "starbucks.com",
+  "instagram.com",
+  "linkedin.com",
+  "acme.com",
+];
+const TYPING_SPEED = 80;
+const HOLD_DURATION = 1000;
+
+function TypingSearchBar() {
+  const [displayText, setDisplayText] = useState("");
+  const [userInput, setUserInput] = useState("");
+  const [isFocused, setIsFocused] = useState(false);
+  const animatingRef = useRef(true);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  useEffect(() => {
+    let idx = 0;
+    let charPos = 0;
+    let deleting = false;
+    animatingRef.current = true;
+
+    function tick() {
+      if (!animatingRef.current) return;
+      const word = PLACEHOLDER_SITES[idx];
+      if (!deleting) {
+        charPos++;
+        setDisplayText(word.slice(0, charPos));
+        if (charPos >= word.length) {
+          deleting = true;
+          timeoutRef.current = setTimeout(tick, HOLD_DURATION);
+          return;
+        }
+      } else {
+        charPos--;
+        setDisplayText(word.slice(0, charPos));
+        if (charPos <= 0) {
+          deleting = false;
+          idx = (idx + 1) % PLACEHOLDER_SITES.length;
+          timeoutRef.current = setTimeout(tick, HOLD_DURATION);
+          return;
+        }
+      }
+      timeoutRef.current = setTimeout(tick, TYPING_SPEED);
+    }
+
+    timeoutRef.current = setTimeout(tick, HOLD_DURATION);
+    return () => {
+      animatingRef.current = false;
+      clearTimeout(timeoutRef.current);
+    };
+  }, []);
+
+  const handleFocus = () => {
+    setIsFocused(true);
+    animatingRef.current = false;
+    clearTimeout(timeoutRef.current);
+    setDisplayText("");
+  };
+
+  const handleBlur = () => {
+    if (!userInput) setIsFocused(false);
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    window.location.href = `${APP_BASE}/signup${userInput ? `?website=${encodeURIComponent(userInput)}` : ""}`;
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="w-full max-w-xl mx-auto">
+      <div className="flex items-center rounded-full border-2 border-black/[0.08] bg-white shadow-lg shadow-black/[0.04] overflow-hidden h-14 pl-5 pr-1.5">
+        <div className="relative flex-1 min-w-0">
+          <input
+            type="text"
+            value={userInput}
+            onChange={(e) => setUserInput(e.target.value)}
+            onFocus={handleFocus}
+            onBlur={handleBlur}
+            className="w-full bg-transparent text-base text-[#000000] outline-none placeholder-transparent"
+            placeholder="yourwebsite.com"
+          />
+          {!isFocused && !userInput && (
+            <span className="pointer-events-none absolute inset-0 flex items-center text-base text-black/40">
+              {displayText}
+              <span className="inline-block w-[2px] h-5 bg-black/40 ml-[1px] animate-pulse" />
+            </span>
+          )}
+        </div>
+        <button
+          type="submit"
+          className="shrink-0 inline-flex items-center justify-center rounded-full bg-[#007aff] hover:bg-[#0066dd] text-white text-base font-semibold px-6 h-10 transition-colors ml-2"
+        >
+          Get Started
+        </button>
+      </div>
+    </form>
+  );
+}
+
+/* ─────────────────────────────────────────────
    HERO SECTION - Centered text over demo video
 ───────────────────────────────────────────── */
 function HeroSection() {
@@ -127,8 +221,8 @@ function HeroSection() {
 
   return (
     <section className="relative flex-none md:flex-1 bg-[#ffffff] overflow-x-hidden">
-      <div className="relative z-10 max-w-[1200px] mx-auto px-4 pt-10 pb-12 lg:pt-14 lg:pb-20">
-        {/* On md+: row with [left pills] [center] [right pills] so pills align with center content */}
+      <div className="relative z-10 max-w-[1200px] mx-auto px-4 pt-18 pb-12 lg:pt-24 lg:pb-28">
+        {/* On md+: row with [left pills] [center] [right pills] */}
         <div className="hidden md:flex md:items-center md:justify-between md:gap-8">
           <div className="flex flex-col gap-3 shrink-0 pointer-events-none z-20 w-[160px] items-end justify-center">
             <MessagePill label={leftMessages[0].label} color={leftMessages[0].color} tilt="-rotate-2 self-end" />
@@ -144,9 +238,6 @@ function HeroSection() {
               <div className="mx-auto h-full w-full max-w-2xl bg-[radial-gradient(ellipse_80%_50%_at_20%_30%,rgba(59,130,246,0.25),_transparent_50%),radial-gradient(ellipse_60%_60%_at_50%_50%,rgba(139,92,246,0.2),_transparent_55%),radial-gradient(ellipse_70%_50%_at_80%_70%,rgba(249,115,22,0.2),_transparent_50%),radial-gradient(ellipse_50%_50%_at_70%_20%,rgba(239,68,68,0.15),_transparent_55%)]" />
             </div>
 
-            <p className="inline-flex items-center rounded-full border border-black/[0.08] bg-white/80 px-3 py-1 text-xs font-medium text-[#000000] shadow-sm mb-4">
-              Feel the future of Ad Creatives.
-            </p>
             <h1 className="text-4xl sm:text-5xl md:text-6xl font-medium leading-tight tracking-tight text-foreground mb-2">
               Better Ad Creatives,
             </h1>
@@ -156,20 +247,7 @@ function HeroSection() {
             <p className="text-base sm:text-lg text-[#000000] max-w-xl mx-auto mb-7 md:mb-8 leading-relaxed">
               Upload once, get scroll-stopping visuals in seconds.
             </p>
-            <div className="flex flex-col sm:inline-flex sm:flex-row sm:items-center sm:justify-center gap-3 sm:gap-4">
-              <Link
-                href="/#how-it-works"
-                className="inline-flex items-center justify-center rounded-md border-2 border-transparent bg-white px-8 h-11 text-base font-semibold text-[#000000] transition-colors hover:bg-slate-50 [background:linear-gradient(white,white)_padding-box,linear-gradient(135deg,#0079d0_0,#9e52d8_32%,#da365c_84%,#d04901_100%)_border-box]"
-              >
-                Learn More
-              </Link>
-              <Button asChild size="lg" className="text-base font-semibold px-8 h-11 rounded-md bg-[#007aff] hover:bg-[#0066dd] border-0 text-white">
-                <a href={`${APP_BASE}/signup`}>
-                  Start Free Trial
-                  <ArrowRight className="ml-2 h-5 w-5" />
-                </a>
-              </Button>
-            </div>
+            <TypingSearchBar />
           </div>
 
           <div className="flex flex-col gap-3 shrink-0 pointer-events-none z-20 w-[160px] items-start justify-center">
@@ -187,9 +265,6 @@ function HeroSection() {
           >
             <div className="mx-auto h-full w-full max-w-2xl bg-[radial-gradient(ellipse_80%_50%_at_20%_30%,rgba(59,130,246,0.25),_transparent_50%),radial-gradient(ellipse_60%_60%_at_50%_50%,rgba(139,92,246,0.2),_transparent_55%),radial-gradient(ellipse_70%_50%_at_80%_70%,rgba(249,115,22,0.2),_transparent_50%),radial-gradient(ellipse_50%_50%_at_70%_20%,rgba(239,68,68,0.15),_transparent_55%)]" />
           </div>
-          <p className="inline-flex items-center rounded-full border border-black/[0.08] bg-white/80 px-3 py-1 text-xs font-medium text-[#000000] shadow-sm mb-4">
-            Feel the future of Ad Creatives.
-          </p>
           <h1 className="text-4xl sm:text-5xl md:text-6xl font-medium leading-tight tracking-tight text-foreground mb-2">
             Better Ad Creatives,
           </h1>
@@ -199,23 +274,11 @@ function HeroSection() {
           <p className="text-base sm:text-lg text-[#000000] max-w-xl mx-auto mb-7 md:mb-8 leading-relaxed">
             Upload once, get scroll-stopping visuals in seconds.
           </p>
-          <div className="flex flex-col sm:inline-flex sm:flex-row sm:items-center sm:justify-center gap-3 sm:gap-4">
-            <Link
-              href="/#how-it-works"
-              className="inline-flex items-center justify-center rounded-md border-2 border-transparent bg-white px-8 h-11 text-base font-semibold text-[#000000] transition-colors hover:bg-slate-50 [background:linear-gradient(white,white)_padding-box,linear-gradient(135deg,#0079d0_0,#9e52d8_32%,#da365c_84%,#d04901_100%)_border-box]"
-            >
-              Learn More
-            </Link>
-            <Button asChild size="lg" className="text-base font-semibold px-8 h-11 rounded-md bg-[#007aff] hover:bg-[#0066dd] border-0 text-white">
-              <a href={`${APP_BASE}/signup`}>
-                Start Free Trial
-                <ArrowRight className="ml-2 h-5 w-5" />
-              </a>
-            </Button>
-          </div>
+          <TypingSearchBar />
         </div>
 
-        <div className="relative mt-8 sm:mt-10 lg:mt-12">
+        {/* Demo video: even spacing from hero content */}
+        <div className="relative mt-18 sm:mt-20 lg:mt-28">
           <div className="relative w-full rounded-xl border border-black/5 bg-slate-100 overflow-hidden aspect-[16/9]">
             <DemoVideoPlayer />
           </div>
@@ -1958,6 +2021,11 @@ export default function Home() {
           <div className="flex-none md:flex-1 flex flex-col min-h-0">
             <HeroSection />
           </div>
+          <div className="hidden md:block">
+            <CompaniesMarqueeSection />
+          </div>
+        </div>
+        <div className="md:hidden">
           <CompaniesMarqueeSection />
         </div>
         <SectionDivider />
