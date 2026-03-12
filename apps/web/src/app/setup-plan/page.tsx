@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ThreeDMarquee } from "@/components/ui/3d-marquee";
@@ -72,6 +72,7 @@ interface Plan {
   name: string;
   price: string;
   priceNum: number;
+  priceAnnual: number;
   description: string;
   popular: boolean;
   benefits: Benefit[];
@@ -83,6 +84,7 @@ const plans: Plan[] = [
     name: "Standard",
     price: "$39",
     priceNum: 39,
+    priceAnnual: 29,
     description: "For small businesses and freelancers.",
     popular: false,
     benefits: [
@@ -100,6 +102,7 @@ const plans: Plan[] = [
     name: "Professional",
     price: "$119",
     priceNum: 119,
+    priceAnnual: 97,
     description: "For brands ready to scale.",
     popular: true,
     benefits: [
@@ -114,9 +117,10 @@ const plans: Plan[] = [
   },
   {
     key: "ultra",
-    name: "Ultra",
+    name: "Agency",
     price: "$397",
     priceNum: 397,
+    priceAnnual: 297,
     description: "For agencies and teams.",
     popular: false,
     benefits: [
@@ -139,14 +143,26 @@ export default function SetupPlanPage() {
   const router = useRouter();
 
   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(professionalPlan);
+  const [billingPeriod, setBillingPeriod] = useState<"monthly" | "annual">("annual");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [checkoutEmbedUrl, setCheckoutEmbedUrl] = useState<string | null>(null);
+  const isFirstBillingRender = useRef(true);
 
   useEffect(() => {
-    createCheckoutSession(professionalPlan);
+    createCheckoutSession(professionalPlan, billingPeriod);
   // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount
   }, []);
+
+  useEffect(() => {
+    if (isFirstBillingRender.current) {
+      isFirstBillingRender.current = false;
+      return;
+    }
+    if (!selectedPlan) return;
+    createCheckoutSession(selectedPlan, billingPeriod);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- only when billing changes
+  }, [billingPeriod]);
 
   useEffect(() => {
     if (!checkoutEmbedUrl) return;
@@ -167,7 +183,7 @@ export default function SetupPlanPage() {
     return () => window.removeEventListener("message", handler);
   }, [checkoutEmbedUrl, router]);
 
-  const createCheckoutSession = useCallback(async (plan: Plan) => {
+  const createCheckoutSession = useCallback(async (plan: Plan, billing: "monthly" | "annual") => {
     setLoading(true);
     setError("");
     try {
@@ -175,7 +191,7 @@ export default function SetupPlanPage() {
       const res = await fetch(`${API_URL}/checkout/create-session`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan: plan.key, email }),
+        body: JSON.stringify({ plan: plan.key, billing, email }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -195,8 +211,8 @@ export default function SetupPlanPage() {
 
   const handlePlanClick = useCallback((plan: Plan) => {
     setSelectedPlan(plan);
-    createCheckoutSession(plan);
-  }, [createCheckoutSession]);
+    createCheckoutSession(plan, billingPeriod);
+  }, [createCheckoutSession, billingPeriod]);
 
   return (
     <div className="relative min-h-screen flex overflow-hidden">
@@ -225,6 +241,40 @@ export default function SetupPlanPage() {
               {error}
             </p>
           )}
+          {/* Billing period toggle — centered; Save 25% to the right of Annual */}
+          <div className="flex shrink-0 justify-center items-center gap-2 mb-4">
+            <div
+              role="group"
+              aria-label="Billing period"
+              className="inline-flex p-1 rounded-full bg-muted border border-border"
+            >
+              <button
+                type="button"
+                onClick={() => setBillingPeriod("monthly")}
+                className={`relative px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                  billingPeriod === "monthly"
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Monthly
+              </button>
+              <button
+                type="button"
+                onClick={() => setBillingPeriod("annual")}
+                className={`relative px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                  billingPeriod === "annual"
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Annual
+              </button>
+            </div>
+            <span className="bg-gradient-brand text-white text-xs font-medium px-3 py-1.5 rounded-lg shadow-md whitespace-nowrap" aria-hidden>
+              Save 25%
+            </span>
+          </div>
           <div className="flex flex-col gap-3 w-full">
             {plans.map((plan) => {
               const isSelected = selectedPlan?.key === plan.key;
@@ -257,7 +307,10 @@ export default function SetupPlanPage() {
                         </span>
                       )}
                     </div>
-                    <span className="text-sm font-bold text-foreground">{plan.price}<span className="text-xs font-normal text-muted-foreground">/mo</span></span>
+                    <span className="text-sm font-bold text-foreground">
+                      ${billingPeriod === "annual" ? plan.priceAnnual : plan.priceNum}
+                      <span className="text-xs font-normal text-muted-foreground">/mo</span>
+                    </span>
                   </button>
                   <div
                     className="grid transition-[grid-template-rows] duration-200 ease-out"
@@ -325,7 +378,10 @@ export default function SetupPlanPage() {
                 <span className="text-[9px] font-semibold text-primary uppercase tracking-wider">Popular</span>
               )}
               <p className="text-sm font-semibold">{plan.name}</p>
-              <p className="text-base font-bold">{plan.price}<span className="text-xs font-normal text-muted-foreground">/mo</span></p>
+              <p className="text-base font-bold">
+                ${billingPeriod === "annual" ? plan.priceAnnual : plan.priceNum}
+                <span className="text-xs font-normal text-muted-foreground">/mo</span>
+              </p>
             </button>
           ))}
         </div>

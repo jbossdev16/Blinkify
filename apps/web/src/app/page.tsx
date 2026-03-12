@@ -502,7 +502,7 @@ function VisualDemoSection() {
     <section className="py-24 bg-[#ffffff] overflow-x-hidden">
       <div className="max-w-[1200px] mx-auto px-4">
         <div className="text-center mb-16">
-          <h2 className="text-h2 text-foreground mb-4 max-w-[700px] mx-auto">
+          <h2 className="text-h2 font-medium text-foreground mb-4 max-w-[700px] mx-auto">
             Create Stunning Visuals{" "}
             <span className="text-gradient-brand">in a Blink</span>
           </h2>
@@ -1881,14 +1881,16 @@ type Benefit = { label: string; included: boolean };
 
 const plans: {
   name: string;
-  price: string;
+  priceMonthly: number;
+  priceAnnual: number;
   description: string;
   popular: boolean;
   benefits: Benefit[];
 }[] = [
   {
     name: "Standard",
-    price: "$39",
+    priceMonthly: 39,
+    priceAnnual: 29,
     description: "For small businesses and freelancers who want better ad creatives without overthinking.",
     popular: false,
     benefits: [
@@ -1907,7 +1909,8 @@ const plans: {
   },
   {
     name: "Professional",
-    price: "$119",
+    priceMonthly: 119,
+    priceAnnual: 97,
     description: "For brands ready to turn ideas into high-converting ad creatives.",
     popular: true,
     benefits: [
@@ -1926,7 +1929,8 @@ const plans: {
   },
   {
     name: "Agency",
-    price: "$397",
+    priceMonthly: 397,
+    priceAnnual: 297,
     description: "For agencies and teams managing creative production across multiple clients.",
     popular: false,
     benefits: [
@@ -1980,17 +1984,80 @@ function LazyPricingVideo() {
   );
 }
 
+function AnimatedPrice({
+  value,
+  className,
+}: {
+  value: number;
+  className?: string;
+}) {
+  return (
+    <motion.span
+      key={value}
+      initial={{ scale: 0.85, opacity: 0.85 }}
+      animate={{ scale: 1, opacity: 1 }}
+      transition={{ duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] }}
+      className={cn("inline-block", className)}
+    >
+      ${value}
+    </motion.span>
+  );
+}
+
 function PricingSection() {
+  const [billingPeriod, setBillingPeriod] = useState<"monthly" | "annual">("annual");
   return (
     <section id="pricing" className="py-24 bg-[#ffffff]">
       <div className="max-w-[1200px] mx-auto px-4">
-        <div className="text-center mb-16 md:mb-20">
-          <h2 className="text-h2 font-medium tracking-tight text-foreground mb-4 max-w-[600px] mx-auto">
-            Predictable Pricing
-          </h2>
-          <p className="text-slate-600 max-w-[520px] mx-auto font-normal">
-            Start small, scale as you grow. No hidden fees. Cancel anytime.
-          </p>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6 mb-16 md:mb-20">
+          <div className="text-left">
+            <h2 className="text-h2 font-medium tracking-tight text-foreground mb-4 max-w-[600px]">
+              Predictable Pricing
+            </h2>
+            <p className="text-slate-600 max-w-[520px] font-normal">
+              Start small, scale as you grow. No hidden fees. Cancel anytime.
+            </p>
+          </div>
+          <div className="flex shrink-0 relative">
+            {/* Save 25% callout – NW of Annual button, like it’s “saying” it */}
+            <div
+              className="absolute bottom-full right-2 mb-2 flex justify-end pointer-events-none"
+              aria-hidden
+            >
+              <span className="bg-gradient-brand text-white text-xs font-medium px-3 py-1.5 rounded-lg shadow-md whitespace-nowrap inline-block">
+                Save 25%
+              </span>
+              <span className="absolute top-full right-6 -mt-px border-[6px] border-transparent border-t-[#0079d0]" />
+            </div>
+            <div
+              role="group"
+              aria-label="Billing period"
+              className="inline-flex p-1 rounded-full bg-muted border border-border"
+            >
+              <button
+                type="button"
+                onClick={() => setBillingPeriod("monthly")}
+                className={`relative px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                  billingPeriod === "monthly"
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Monthly
+              </button>
+              <button
+                type="button"
+                onClick={() => setBillingPeriod("annual")}
+                className={`relative px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                  billingPeriod === "annual"
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Annual
+              </button>
+            </div>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 items-stretch">
@@ -2034,20 +2101,38 @@ function PricingSection() {
                     {plan.description}
                   </p>
                   <div className="mt-5">
-                    <span
-                      className={`text-3xl md:text-4xl font-medium ${
-                        plan.popular ? "text-white" : "text-foreground"
-                      }`}
-                    >
-                      {plan.price}
-                    </span>
-                    <span
-                      className={`text-base font-normal ml-0.5 ${
-                        plan.popular ? "text-white/80" : "text-slate-600"
-                      }`}
-                    >
-                      /month
-                    </span>
+                    {(() => {
+                      const displayPrice =
+                        billingPeriod === "annual" ? plan.priceAnnual : plan.priceMonthly;
+                      const annualTotal = plan.priceAnnual * 12;
+                      return (
+                        <>
+                          <AnimatedPrice
+                            value={displayPrice}
+                            className={cn(
+                              "text-3xl md:text-4xl font-medium",
+                              plan.popular ? "text-white" : "text-foreground"
+                            )}
+                          />
+                          <span
+                            className={`text-base font-normal ml-0.5 ${
+                              plan.popular ? "text-white/80" : "text-slate-600"
+                            }`}
+                          >
+                            /month
+                          </span>
+                          {billingPeriod === "annual" && (
+                            <p
+                              className={`mt-1 text-sm ${
+                                plan.popular ? "text-white/80" : "text-slate-600"
+                              }`}
+                            >
+                              Billed annually at ${annualTotal.toLocaleString()}
+                            </p>
+                          )}
+                        </>
+                      );
+                    })()}
                   </div>
                   <div className="mt-6">
                     <Button

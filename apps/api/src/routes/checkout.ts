@@ -24,6 +24,12 @@ const POLAR_PRODUCT_IDS: Record<string, string | undefined> = {
   ultra: process.env.POLAR_PRODUCT_ID_AGENCY,
 };
 
+const POLAR_PRODUCT_IDS_ANNUAL: Record<string, string | undefined> = {
+  standard: process.env.POLAR_PRODUCT_ID_STANDARD_ANNUAL,
+  professional: process.env.POLAR_PRODUCT_ID_PROFESSIONAL_ANNUAL,
+  ultra: process.env.POLAR_PRODUCT_ID_AGENCY_ANNUAL,
+};
+
 const polar = new Polar({
   accessToken: POLAR_ACCESS_TOKEN,
   ...(POLAR_SANDBOX && { server: "sandbox" }),
@@ -40,13 +46,23 @@ router.post(
 
       const plan = typeof req.body?.plan === "string" ? req.body.plan.trim().toLowerCase() : "";
       const email = typeof req.body?.email === "string" ? req.body.email.trim() : "";
+      const billing = req.body?.billing === "annual" ? "annual" : "monthly";
 
-      if (!plan || !POLAR_PRODUCT_IDS[plan]) {
+      if (!plan) {
         res.status(400).json({ error: "Invalid plan" });
         return;
       }
 
-      const productId = POLAR_PRODUCT_IDS[plan]!;
+      const productIds = billing === "annual" ? POLAR_PRODUCT_IDS_ANNUAL : POLAR_PRODUCT_IDS;
+      const productId = productIds[plan];
+      if (!productId) {
+        res.status(400).json({
+          error: billing === "annual"
+            ? "Annual pricing is not configured for this plan. Check POLAR_PRODUCT_ID_*_ANNUAL in the API .env."
+            : "Invalid plan",
+        });
+        return;
+      }
       const webOrigin = getOriginForRequest(req);
 
       const checkout = await polar.checkouts.create({
