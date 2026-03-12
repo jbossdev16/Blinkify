@@ -21,11 +21,14 @@ Set these in your production environment (e.g. host dashboard, `.env` in the API
 | `CLEANUP_FAILED_GENERATIONS_INTERVAL_MS` | No | Interval in ms for cleanup job (default from code). Optional. |
 | `POLAR_ACCESS_TOKEN` | No | Polar.sh API access token for checkout session creation. Required for billing. |
 | `POLAR_SANDBOX` | No | Set to `true` or `1` to use Polar **Sandbox** API (`sandbox-api.polar.sh`). Use this with sandbox product IDs and a token from the Sandbox dashboard. Omit or leave unset for production. |
-| `POLAR_PRODUCT_ID_STANDARD` | No | Polar product ID for the Standard plan. Create in Polar dashboard. |
-| `POLAR_PRODUCT_ID_PROFESSIONAL` | No | Polar product ID for the Professional plan. Create in Polar dashboard. |
-| `POLAR_PRODUCT_ID_AGENCY` | No | Polar product ID for the Agency plan (top tier). Create in Polar dashboard. |
+| `POLAR_PRODUCT_ID_STANDARD` | No | Polar product ID for the Standard plan (monthly). Create in Polar dashboard. |
+| `POLAR_PRODUCT_ID_STANDARD_ANNUAL` | No | Polar product ID for the Standard plan (annual). Required for annual checkout. |
+| `POLAR_PRODUCT_ID_PROFESSIONAL` | No | Polar product ID for the Professional plan (monthly). |
+| `POLAR_PRODUCT_ID_PROFESSIONAL_ANNUAL` | No | Polar product ID for the Professional plan (annual). Required for annual checkout. |
+| `POLAR_PRODUCT_ID_AGENCY` | No | Polar product ID for the Agency plan (monthly). |
+| `POLAR_PRODUCT_ID_AGENCY_ANNUAL` | No | Polar product ID for the Agency plan (annual). Required for annual checkout. |
 
-**Polar embed (setup-plan):** Checkout is created via the [Checkout API](https://polar.sh/docs/features/checkout/session) and opened with [Embedded Checkout](https://polar.sh/docs/features/checkout/embed). Set `WEB_ORIGIN` to your frontend origin (e.g. `https://app.blinkify.com`) so `embed_origin` is correct. In Polar dashboard **Catalogue**, open each product (Standard Package, Professional Package, Agency Package), use the ⋮ menu → **Copy Product ID**, and set `POLAR_PRODUCT_ID_STANDARD`, `POLAR_PRODUCT_ID_PROFESSIONAL`, `POLAR_PRODUCT_ID_AGENCY` accordingly.
+**Polar embed (setup-plan):** Checkout is created via the [Checkout API](https://polar.sh/docs/features/checkout/session) and opened with [Embedded Checkout](https://polar.sh/docs/features/checkout/embed). Set `WEB_ORIGIN` to your frontend origin (e.g. `https://app.blinkify.com`) so `embed_origin` is correct. In Polar dashboard **Catalogue**, open each product (monthly and annual variants), use the ⋮ menu → **Copy Product ID**, and set all six `POLAR_PRODUCT_ID_*` and `POLAR_PRODUCT_ID_*_ANNUAL` vars. If the API is deployed (e.g. Vercel), add these same vars in the host’s environment; the API does not read a `.env` file in production.
 
 **Checklist**
 

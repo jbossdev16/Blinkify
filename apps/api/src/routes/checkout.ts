@@ -44,7 +44,8 @@ router.post(
         return;
       }
 
-      const plan = typeof req.body?.plan === "string" ? req.body.plan.trim().toLowerCase() : "";
+      const rawPlan = typeof req.body?.plan === "string" ? req.body.plan.trim().toLowerCase() : "";
+      const plan = rawPlan === "agency" ? "ultra" : rawPlan;
       const email = typeof req.body?.email === "string" ? req.body.email.trim() : "";
       const billing = req.body?.billing === "annual" ? "annual" : "monthly";
 
@@ -56,11 +57,11 @@ router.post(
       const productIds = billing === "annual" ? POLAR_PRODUCT_IDS_ANNUAL : POLAR_PRODUCT_IDS;
       const productId = productIds[plan];
       if (!productId) {
-        res.status(400).json({
-          error: billing === "annual"
-            ? "Annual pricing is not configured for this plan. Check POLAR_PRODUCT_ID_*_ANNUAL in the API .env."
-            : "Invalid plan",
-        });
+        const hint =
+          billing === "annual"
+            ? `Annual product ID for plan "${plan}" is missing. Set POLAR_PRODUCT_ID_${plan === "ultra" ? "AGENCY" : plan.toUpperCase()}_ANNUAL in the API .env (or in your host's environment if deployed, e.g. Vercel).`
+            : "Invalid plan";
+        res.status(400).json({ error: hint });
         return;
       }
       const webOrigin = getOriginForRequest(req);
