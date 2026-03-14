@@ -46,14 +46,24 @@ export async function apiClientFetch<T = unknown>(
 
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
-      const message =
-        body && typeof body === "object" && typeof body.error === "string"
-          ? body.error
-          : res.status === 502
-            ? (path.includes("generate-video")
-                ? "Video service unavailable. Check API key and Veo access."
-                : "Image generation failed or timed out. Try again or a different prompt.")
-            : `API error ${res.status}`;
+      let message: string;
+      if (body && typeof body === "object") {
+        if (typeof body.error === "string") {
+          message = body.error;
+        } else if (body.error && typeof body.error === "object" && typeof (body.error as { message?: unknown }).message === "string") {
+          message = (body.error as { message: string }).message;
+        } else if (res.status === 502) {
+          message = path.includes("generate-video")
+            ? "Video service unavailable. Check API key and Veo access."
+            : "Image generation failed or timed out. Try again or a different prompt.";
+        } else if (res.status === 503) {
+          message = typeof body.error === "string" ? body.error : "Service temporarily unavailable. Please try again.";
+        } else {
+          message = `API error ${res.status}`;
+        }
+      } else {
+        message = res.status === 503 ? "Service temporarily unavailable. Please try again." : `API error ${res.status}`;
+      }
       throw new Error(message);
     }
 

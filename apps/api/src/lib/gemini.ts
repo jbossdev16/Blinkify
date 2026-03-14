@@ -896,6 +896,7 @@ export interface BrandSuggestion {
   brand_tone?: string;
   brand_industry?: string;
   primary_font?: string;
+  target_audience?: string;
 }
 
 /** Try to parse JSON from model output; handles truncated or multi-line responses. */
@@ -957,6 +958,7 @@ const BRAND_FROM_WEBSITE_SYSTEM = `You are a brand analyst. Given website metada
 - "brand_guidelines": 2-5 bullet points or short paragraphs covering tone of voice, visual style do's and don'ts, and key messaging. Use the site's tone and content to infer. Plain text, no markdown. Never leave blank.
 - "brand_tone": One short phrase for the brand's voice (e.g. "Premium, Trustworthy", "Playful, Energetic"). Infer from description and content.
 - "brand_industry": One short phrase for the industry or category (e.g. "E-commerce, Fashion", "SaaS, Tech"). Infer from description and content.
+- "target_audience": One short phrase or sentence describing who the brand targets — demographics, interests, or customer segment (e.g. "Fashion-conscious millennials", "Small business owners seeking productivity tools"). Infer from description and content. Max 200 characters.
 - "primary_font": If you can infer a likely main font from the site's style or industry, output one font name (e.g. "Inter", "Playfair Display"). Otherwise omit or use empty string.
 
 Do not output "description" or "suggestedColors" — those are filled from the website meta and logo separately.
@@ -1015,6 +1017,7 @@ export async function suggestBrandFromWebsite(
     brand_guidelines?: string;
     brand_tone?: string;
     brand_industry?: string;
+    target_audience?: string;
     primary_font?: string;
   }>(raw);
 
@@ -1030,6 +1033,7 @@ export async function suggestBrandFromWebsite(
   const suggestedColors = defaultColors;
   const brand_tone = typeof parsed.brand_tone === "string" ? parsed.brand_tone.trim().slice(0, 200) : undefined;
   const brand_industry = typeof parsed.brand_industry === "string" ? parsed.brand_industry.trim().slice(0, 200) : undefined;
+  const target_audience = typeof parsed.target_audience === "string" ? parsed.target_audience.trim().slice(0, 500) : undefined;
   const primary_font = typeof parsed.primary_font === "string" ? parsed.primary_font.trim().slice(0, 120) : undefined;
 
   return {
@@ -1038,6 +1042,7 @@ export async function suggestBrandFromWebsite(
     suggestedColors,
     ...(brand_tone && { brand_tone }),
     ...(brand_industry && { brand_industry }),
+    ...(target_audience && { target_audience }),
     ...(primary_font && { primary_font }),
   };
 }

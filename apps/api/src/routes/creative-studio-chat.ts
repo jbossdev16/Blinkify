@@ -101,7 +101,19 @@ router.post(
 
       res.json({ content, intent });
     } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      const is503 =
+        message.includes("503") ||
+        message.includes("UNAVAILABLE") ||
+        /service is currently unavailable|temporarily unavailable/i.test(message);
       console.error("POST creative-studio-chat error:", err);
+      if (is503) {
+        res.status(503).json({
+          error:
+            "AI is temporarily unavailable. Please select Image, Video, or Email above and try again.",
+        });
+        return;
+      }
       res.status(500).json({
         error: err instanceof Error ? err.message : "Internal error",
       });

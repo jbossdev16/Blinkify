@@ -345,6 +345,65 @@ router.post(
   }
 );
 
+/* ─── PATCH /:workspaceId/projects/:projectId/video-generations/:generationId/cancel ─
+   Mark generation as cancelled so it is not charged or delivered after refresh. */
+
+router.patch(
+  "/:workspaceId/projects/:projectId/video-generations/:generationId/cancel",
+  requireAuth,
+  ensureCurrentUser,
+  async (req: Request, res: Response) => {
+    try {
+      const { workspaceId, projectId, generationId } = req.params;
+      if (!isUuid(workspaceId) || !isUuid(projectId) || !isUuid(generationId)) {
+        res.status(400).json({ error: "Invalid id" });
+        return;
+      }
+      const user = req.user!;
+      const { data: membership } = await supabase
+        .from("workspace_members")
+        .select("role")
+        .eq("workspace_id", workspaceId)
+        .eq("user_id", user.id)
+        .single();
+      if (!membership) {
+        res.status(403).json({ error: "Not a workspace member" });
+        return;
+      }
+      const { data: gen } = await supabase
+        .from("video_generations")
+        .select("id, status")
+        .eq("id", generationId)
+        .eq("project_id", projectId)
+        .eq("workspace_id", workspaceId)
+        .single();
+      if (!gen) {
+        res.status(404).json({ error: "Generation not found" });
+        return;
+      }
+      if (gen.status !== "processing" && gen.status !== "pending") {
+        res.json({ status: gen.status });
+        return;
+      }
+      const { error: updateErr } = await supabase
+        .from("video_generations")
+        .update({ status: "cancelled" })
+        .eq("id", generationId);
+      if (updateErr) {
+        console.error("PATCH video-generations cancel error:", updateErr);
+        res.status(500).json({ error: "Failed to cancel" });
+        return;
+      }
+      res.json({ status: "cancelled" });
+    } catch (err: unknown) {
+      console.error("PATCH video-generations cancel error:", err);
+      res.status(500).json({
+        error: err instanceof Error ? err.message : "Internal error",
+      });
+    }
+  }
+);
+
 /* ─── GET /:workspaceId/projects/:projectId/video-generations/:generationId/status ─
    Poll for status and progress. When done, returns videoUrl. */
 
@@ -407,6 +466,11 @@ router.get(
         return;
       }
 
+      if (gen.status === "cancelled") {
+        res.json({ status: "cancelled" });
+        return;
+      }
+
       if (!gen.operation_name) {
         res.json({ status: "processing", progress: 0 });
         return;
@@ -440,6 +504,15 @@ router.get(
       const progress = typeof metadata?.progress === "number" ? metadata.progress : undefined;
 
       if (op.done === true) {
+        const { data: genRecheck } = await supabase
+          .from("video_generations")
+          .select("status")
+          .eq("id", generationId)
+          .single();
+        if (genRecheck?.status === "cancelled") {
+          res.json({ status: "cancelled" });
+          return;
+        }
         if (op.error) {
           const errMsg = typeof op.error === "object" && op.error !== null && "message" in op.error
             ? String((op.error as { message?: unknown }).message)
@@ -588,6 +661,16 @@ router.get(
             progress: 50,
             message: `Extending video (${VIDEO_INITIAL_SECONDS + (currentExtendIndex + 1) * 7}s)…`,
           });
+          return;
+        }
+
+        const { data: genBeforeSave } = await supabase
+          .from("video_generations")
+          .select("status")
+          .eq("id", generationId)
+          .single();
+        if (genBeforeSave?.status === "cancelled") {
+          res.json({ status: "cancelled" });
           return;
         }
 

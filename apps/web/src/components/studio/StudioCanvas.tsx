@@ -370,7 +370,7 @@ export function StudioCanvas() {
   );
 
   return (
-    <div ref={containerRef} className="w-full h-full bg-[#f5f5f5] flex items-center justify-center">
+    <div ref={containerRef} className="w-full h-full bg-[#ffffff] flex items-center justify-center">
       <Stage
         width={size.width}
         height={size.height}

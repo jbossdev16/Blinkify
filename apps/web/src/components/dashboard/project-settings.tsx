@@ -265,6 +265,7 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
     setAppliedLogoUrl(null);
     setName(project.name);
     setDescription(project.description ?? "");
+    setTargetAudience(project.target_audience ?? "");
     const c = project.brand_colors ?? [];
     setBrandColors(
       brandMode
@@ -291,6 +292,7 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
     brandMode,
     project.name,
     project.description,
+    project.target_audience,
     project.brand_colors,
     project.brand_fonts,
     project.font_styles,
@@ -529,6 +531,7 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
       setBrandGuidelines(guidelinesText);
       if (typeof suggestions.brand_tone === "string" && suggestions.brand_tone.trim()) setBrandTone(suggestions.brand_tone.trim());
       if (typeof suggestions.brand_industry === "string" && suggestions.brand_industry.trim()) setBrandIndustry(suggestions.brand_industry.trim());
+      if (typeof suggestions.target_audience === "string" && suggestions.target_audience.trim()) setTargetAudience(suggestions.target_audience.trim().slice(0, 500));
       const primaryFont = suggestions.primary_font ?? extract.primaryFont;
       if (typeof primaryFont === "string" && primaryFont.trim()) {
         setBrandFonts([{ name: primaryFont.trim(), type: "preset" }]);
@@ -568,9 +571,9 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
           )}
 
           {/* Website link + Apply Brand */}
-          <div className="w-full max-w-6xl mx-auto mb-8 rounded-2xl border border-border bg-card p-6 sm:p-8">
+          <div className="w-full max-w-6xl mx-auto mb-8 rounded-2xl border border-border bg-card p-6 sm:p-8 shadow-sm">
             <div className="flex items-center gap-2 mb-1">
-              <Link className="size-4 text-muted-foreground shrink-0" />
+              <Link className="size-4 text-foreground shrink-0" />
               <h3 className="text-base font-semibold text-foreground">Website link</h3>
             </div>
             <p className="text-sm text-muted-foreground mb-4">
@@ -582,7 +585,7 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
                 value={websiteUrl}
                 onChange={(e) => setWebsiteUrl(e.target.value)}
                 placeholder="https://yourstore.com"
-                className="flex-1 min-w-[220px] max-w-xl rounded-xl border border-input bg-background px-4 py-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                className="flex-1 min-w-[220px] max-w-xl rounded-xl border border-input bg-background px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
                 disabled={applyingBrand}
               />
               <button
@@ -636,7 +639,7 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
               }
             >
               {(logoUrl || logoPreview || appliedLogoUrl) ? (
-                <div className="flex-1 min-h-0 flex items-center justify-center rounded-xl bg-secondary/60 overflow-hidden p-2">
+                <div className="flex-1 min-h-0 flex items-center justify-center rounded-xl bg-[#ffffff] dark:bg-[#000000] overflow-hidden p-2">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={logoPreview ?? appliedLogoUrl ?? logoUrl ?? ""}
@@ -670,16 +673,15 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
             </BrandCard>
 
             {/* Row 4: Brand Name (cols 1-2) */}
-            <BrandCard label="Brand Name" className="col-start-1 col-end-3 row-start-4">
+            <BrandCard label="Brand Name" className="col-start-1 col-end-3 row-start-4" footerRight={`${name.length}/100`}>
               <input
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full bg-transparent text-xl font-semibold placeholder:text-muted-foreground focus:outline-none py-1"
+                className="w-full bg-transparent text-xl font-semibold text-foreground placeholder:text-muted-foreground focus:outline-none py-1"
                 placeholder="Your brand name"
                 maxLength={100}
               />
-              <p className="text-sm text-muted-foreground mt-2">{name.length}/100</p>
             </BrandCard>
 
             {/* Row 4: Website link for email CTAs (cols 3-5) */}
@@ -689,7 +691,7 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
                 value={websiteUrl}
                 onChange={(e) => setWebsiteUrl(e.target.value)}
                 placeholder="https://yourstore.com"
-                className="w-full bg-transparent text-sm placeholder:text-muted-foreground focus:outline-none py-1 border-b border-transparent hover:border-border focus:border-primary/50 transition-colors"
+                className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none py-1 border-b border-transparent hover:border-border focus:border-primary/50 transition-colors"
               />
               <p className="text-xs text-muted-foreground mt-2">Used for link and CTA buttons in marketing emails. Save changes to apply.</p>
             </BrandCard>
@@ -704,7 +706,7 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
                 ].map(({ label, color, setColor, slotIndex }) => (
                   <div key={slotIndex} className="shrink-0 space-y-3">
                     <div className="flex items-center justify-between gap-3">
-                      <span className="text-xs font-medium text-muted-foreground dark:text-white shrink-0">{label}</span>
+                      <span className="text-xs font-medium text-foreground shrink-0">{label}</span>
                       <div className="flex gap-1.5 shrink-0">
                         <button
                           type="button"
@@ -837,14 +839,14 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
             >
               <div className="flex flex-col gap-4 min-h-0 flex-1 overflow-y-auto">
                 <div className="space-y-2">
-                  <span className="text-xs font-medium text-muted-foreground block">Font</span>
+                  <span className="text-xs font-medium text-foreground block">Font</span>
                   <select
                     value={brandFonts[0]?.type === "preset" ? brandFonts[0].name : ""}
                     onChange={(e) => {
                       const v = e.target.value;
                       setBrandFonts(v ? [{ name: v, type: "preset" }] : []);
                     }}
-                    className="h-10 w-full rounded-lg border border-input bg-background px-3 pr-9 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    className="h-10 w-full rounded-lg border border-input bg-background px-3 pr-9 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   >
                     <option value="">Select font…</option>
                     {((() => {
@@ -869,7 +871,7 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
                   value={brandGuidelines}
                   onChange={(e) => setBrandGuidelines(e.target.value)}
                   maxLength={500}
-                  className="flex-1 min-h-[10rem] w-full bg-transparent text-sm placeholder:text-muted-foreground focus:outline-none resize-y py-1"
+                  className="flex-1 min-h-[10rem] w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none resize-y py-1"
                 />
               </div>
             </BrandCard>
@@ -882,7 +884,7 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
                   onChange={(e) => setDescription(e.target.value)}
                   maxLength={500}
                   rows={3}
-                  className="flex-1 w-full bg-transparent text-sm placeholder:text-muted-foreground focus:outline-none resize-y py-1 min-h-0"
+                  className="flex-1 w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none resize-y py-1 min-h-0"
                   placeholder="What your brand does and who it’s for…"
                 />
               </div>
@@ -891,23 +893,23 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
               <p className="text-xs text-muted-foreground mb-4">Helps AI match voice and style to your brand.</p>
               <div className="space-y-4">
                 <div>
-                  <label className="text-xs font-medium text-muted-foreground block mb-1.5">Tone</label>
+                  <label className="text-xs font-medium text-foreground block mb-1.5">Tone</label>
                   <input
                     type="text"
                     value={brandTone}
                     onChange={(e) => setBrandTone(e.target.value)}
                     placeholder="e.g. Premium, Trustworthy, Playful"
-                    className="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    className="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-muted-foreground block mb-1.5">Industry</label>
+                  <label className="text-xs font-medium text-foreground block mb-1.5">Industry</label>
                   <input
                     type="text"
                     value={brandIndustry}
                     onChange={(e) => setBrandIndustry(e.target.value)}
                     placeholder="e.g. E-commerce, Fashion, Tech"
-                    className="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    className="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                 </div>
               </div>
@@ -1389,14 +1391,14 @@ function BrandCard({
   return (
     <div
       className={cn(
-        "rounded-2xl border border-border bg-card overflow-hidden flex flex-col min-h-[160px]",
+        "rounded-2xl border border-border bg-card overflow-hidden flex flex-col min-h-[160px] shadow-sm",
         className
       )}
     >
       <div className="flex-1 p-5 min-h-0 flex flex-col">{children}</div>
-      <div className="flex items-center justify-between px-5 pb-4 pt-1 border-t border-border/50">
+      <div className="flex items-center justify-between px-5 pb-4 pt-1">
         <p className="text-sm font-medium text-foreground">{label}</p>
-        {footerRight != null ? <span className="text-sm text-muted-foreground dark:text-white/70 text-right">{footerRight}</span> : null}
+        {footerRight != null ? <span className="text-sm text-muted-foreground text-right">{footerRight}</span> : null}
       </div>
     </div>
   );

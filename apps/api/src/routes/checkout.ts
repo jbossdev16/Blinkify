@@ -1,5 +1,8 @@
 import { Router, Request, Response } from "express";
 import { Polar } from "@polar-sh/sdk";
+import { requireAuth } from "../middleware/auth.js";
+import { ensureCurrentUser } from "../middleware/currentUser.js";
+import { supabase } from "../lib/supabase.js";
 
 const router = Router();
 
@@ -66,14 +69,14 @@ router.post(
       }
       const webOrigin = getOriginForRequest(req);
 
+      const skipTrial = req.body?.skipTrial === true;
       const checkout = await polar.checkouts.create({
         products: [productId],
         ...(email && { customerEmail: email }),
         embedOrigin: webOrigin,
         successUrl: `${webOrigin}/signin?verified=true`,
-        returnUrl: `${webOrigin}/setup-plan`,
-        trialInterval: "day",
-        trialIntervalCount: 3,
+        returnUrl: skipTrial ? `${webOrigin}/billing` : `${webOrigin}/setup-plan`,
+        ...(skipTrial ? {} : { trialInterval: "day", trialIntervalCount: 3 }),
       });
 
       res.json({ url: checkout.url });
@@ -112,6 +115,67 @@ router.post(
       console.error("POST /checkout/create-session error:", err);
       res.status(statusCode >= 400 && statusCode < 600 ? statusCode : 500).json({
         error: err instanceof Error ? err.message : "Failed to create checkout session",
+      });
+    }
+  }
+);
+
+// ─── POST /checkout/cancel-subscription ─────────────────────────────────────
+// Cancels the current user's Polar subscription at period end. Requires auth.
+// Uses workspace.stripe_subscription_id as the Polar subscription ID (set by webhook or success flow).
+router.post(
+  "/cancel-subscription",
+  requireAuth,
+  ensureCurrentUser,
+  async (req: Request, res: Response) => {
+    try {
+      if (!POLAR_ACCESS_TOKEN) {
+        res.status(503).json({ error: "Billing is not configured" });
+        return;
+      }
+
+      const user = (req as Request & { user: { id: string } }).user;
+
+      const { data: memberships, error: memError } = await supabase
+        .from("workspace_members")
+        .select("workspace_id, workspaces(stripe_subscription_id)")
+        .eq("user_id", user.id);
+
+      if (memError) {
+        console.error("POST /checkout/cancel-subscription: workspace query error", memError);
+        res.status(500).json({ error: "Failed to resolve workspace" });
+        return;
+      }
+
+      type Row = { workspace_id: string; workspaces: { stripe_subscription_id?: string | null } | null };
+      const rows = (memberships ?? []) as unknown as Row[];
+      const subscriptionId = rows
+        .map((r) => r.workspaces?.stripe_subscription_id)
+        .find((id): id is string => typeof id === "string" && id.length > 0);
+
+      if (!subscriptionId) {
+        res.status(400).json({ error: "No active subscription found" });
+        return;
+      }
+
+      await polar.subscriptions.update({
+        id: subscriptionId,
+        subscriptionUpdate: { cancelAtPeriodEnd: true },
+      });
+
+      res.json({ ok: true });
+    } catch (err: unknown) {
+      const statusCode = typeof (err as { statusCode?: number })?.statusCode === "number"
+        ? (err as { statusCode: number }).statusCode
+        : 500;
+      const body = err as { body?: string };
+      if (statusCode === 404 || (typeof body?.body === "string" && body.body.toLowerCase().includes("not found"))) {
+        res.status(400).json({ error: "Subscription not found or already canceled" });
+        return;
+      }
+      console.error("POST /checkout/cancel-subscription error:", err);
+      res.status(statusCode >= 400 && statusCode < 600 ? statusCode : 500).json({
+        error: err instanceof Error ? err.message : "Failed to cancel subscription",
       });
     }
   }

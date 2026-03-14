@@ -32,3 +32,21 @@ export const PLAN_FEATURES: Record<string, PlanFeatures> = {
 export function getPlanFeatures(plan: string): PlanFeatures {
   return PLAN_FEATURES[plan.toLowerCase()] ?? PLAN_FEATURES["trial"]!;
 }
+
+/** Credit cost per image by size (must match API). */
+export function imageCreditCost(imageSize: "1K" | "4K"): number {
+  return imageSize === "4K" ? 25 : 10;
+}
+
+/** Credit cost for email marketing: (imageSize, numberOfImages) → total (must match API). */
+export function emailCreditCost(imageSize: "1K" | "4K", numberOfImages: 1 | 2 | 3): number {
+  if (imageSize === "1K") {
+    return numberOfImages === 1 ? 15 : numberOfImages === 2 ? 30 : 50;
+  }
+  return numberOfImages === 1 ? 30 : numberOfImages === 2 ? 60 : 100;
+}
+
+/** Credit cost for video by resolution (must match API). */
+export function videoCreditCost(resolution: "1080p" | "4k"): number {
+  return resolution === "4k" ? 150 : 100;
+}

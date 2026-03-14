@@ -291,4 +291,115 @@ router.get(
   }
 );
 
+// ─── GET /workspaces/:id/usage ───────────────────────────────────────────────
+// Daily credit usage for the workspace (generations + video_generations).
+// Query: ?days=28 (default) or ?start=YYYY-MM-DD&end=YYYY-MM-DD
+router.get(
+  "/:id/usage",
+  requireAuth,
+  ensureCurrentUser,
+  async (req: Request, res: Response) => {
+    try {
+      const workspaceId = req.params.id;
+      if (!isUuid(workspaceId)) {
+        res.status(400).json({ error: "Invalid workspace id" });
+        return;
+      }
+
+      const user = (req as Request & { user: { id: string } }).user;
+
+      const { data: membership } = await supabase
+        .from("workspace_members")
+        .select("role")
+        .eq("workspace_id", workspaceId)
+        .eq("user_id", user.id)
+        .single();
+
+      if (!membership) {
+        res.status(404).json({ error: "Workspace not found" });
+        return;
+      }
+
+      const now = new Date();
+      now.setHours(23, 59, 59, 999);
+      let startDate: Date;
+      let endDate: Date;
+
+      const startParam = typeof req.query?.start === "string" ? req.query.start.trim() : "";
+      const endParam = typeof req.query?.end === "string" ? req.query.end.trim() : "";
+      if (startParam && endParam) {
+        startDate = new Date(startParam + "T00:00:00");
+        endDate = new Date(endParam + "T23:59:59");
+        if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+          res.status(400).json({ error: "Invalid start or end date" });
+          return;
+        }
+      } else {
+        const days = Math.min(365, Math.max(1, Number(req.query?.days) || 28));
+        endDate = new Date(now);
+        startDate = new Date(now);
+        startDate.setDate(startDate.getDate() - days + 1);
+        startDate.setHours(0, 0, 0, 0);
+      }
+
+      const startStr = startDate.toISOString();
+      const endStr = endDate.toISOString();
+
+      const [genRes, videoRes] = await Promise.all([
+        supabase
+          .from("generations")
+          .select("created_at, credits_used")
+          .eq("workspace_id", workspaceId)
+          .gte("created_at", startStr)
+          .lte("created_at", endStr)
+          .in("status", ["completed"]),
+        supabase
+          .from("video_generations")
+          .select("created_at, credits_used")
+          .eq("workspace_id", workspaceId)
+          .gte("created_at", startStr)
+          .lte("created_at", endStr)
+          .in("status", ["completed"]),
+      ]);
+
+      const rows: { created_at: string; credits_used: number }[] = [];
+      if (genRes.data) {
+        for (const r of genRes.data as { created_at: string; credits_used: number }[]) {
+          rows.push({ created_at: r.created_at, credits_used: r.credits_used ?? 0 });
+        }
+      }
+      if (videoRes.data) {
+        for (const r of videoRes.data as { created_at: string; credits_used: number }[]) {
+          rows.push({ created_at: r.created_at, credits_used: r.credits_used ?? 0 });
+        }
+      }
+
+      const byDate: Record<string, number> = {};
+      for (const row of rows) {
+        const d = new Date(row.created_at);
+        const ymd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        byDate[ymd] = (byDate[ymd] ?? 0) + row.credits_used;
+      }
+
+      const daily: { date: string; credits: number }[] = [];
+      const walk = new Date(startDate);
+      walk.setHours(0, 0, 0, 0);
+      const endDay = new Date(endDate);
+      endDay.setHours(0, 0, 0, 0);
+      while (walk.getTime() <= endDay.getTime()) {
+        const ymd = walk.toISOString().slice(0, 10);
+        daily.push({ date: ymd, credits: byDate[ymd] ?? 0 });
+        walk.setDate(walk.getDate() + 1);
+      }
+
+      res.json({ daily });
+    } catch (err: unknown) {
+      console.error("GET /workspaces/:id/usage error:", err);
+      res.status(500).json({
+        error: err instanceof Error ? err.message : "Internal error",
+      });
+    }
+  }
+);
+
 export default router;

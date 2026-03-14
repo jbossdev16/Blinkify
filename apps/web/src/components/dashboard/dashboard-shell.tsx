@@ -55,7 +55,7 @@ export function DashboardShell({ user, plan, credits, isAdmin, children }: Dashb
       />
       <main
         className={cn(
-          "flex flex-col min-h-screen pt-14 lg:pt-0 bg-[#f5f5f5] dark:bg-background",
+          "flex flex-col min-h-screen pt-14 lg:pt-0 bg-[#ffffff] dark:bg-background",
           collapsed ? "lg:pl-20" : "lg:pl-72"
         )}
       >

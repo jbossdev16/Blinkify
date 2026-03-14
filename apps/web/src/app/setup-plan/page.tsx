@@ -143,14 +143,14 @@ export default function SetupPlanPage() {
   const router = useRouter();
 
   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(professionalPlan);
-  const [billingPeriod, setBillingPeriod] = useState<"monthly" | "annual">("annual");
+  const [billingPeriod, setBillingPeriod] = useState<"monthly" | "annual">("monthly");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [checkoutEmbedUrl, setCheckoutEmbedUrl] = useState<string | null>(null);
   const isFirstBillingRender = useRef(true);
 
   useEffect(() => {
-    createCheckoutSession(professionalPlan, billingPeriod);
+    createCheckoutSession(professionalPlan, "monthly");
   // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount
   }, []);
 
@@ -229,6 +229,7 @@ export default function SetupPlanPage() {
       <div className="relative z-10 w-full lg:w-1/2 min-h-screen flex items-center justify-center">
         <div className="absolute inset-0 bg-[#fff]" />
         <div className="relative z-10 w-full max-w-[400px] px-8">
+          <p className="text-center text-sm mb-3" style={{ color: "#000000" }}>Cancel Any Time For FREE</p>
           <Link href="/" className="block w-full h-[50px] mb-8">
             <img
               src="/logo/blinkify-logo-color.svg"

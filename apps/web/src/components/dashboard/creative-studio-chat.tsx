@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   Send,
   SlidersHorizontal,
@@ -32,7 +32,7 @@ import type { Project } from "@/lib/api";
 import { apiClientFetch } from "@/lib/api-client";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { renderContentWithBold } from "@/lib/render-content-with-bold";
-import { getPlanFeatures } from "@/lib/constants";
+import { getPlanFeatures, imageCreditCost, emailCreditCost, videoCreditCost } from "@/lib/constants";
 import { toast } from "sonner";
 import { isEmailTemplateId, type EmailTemplateId } from "@/lib/email-templates";
 
@@ -401,6 +401,7 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
   const [replyingTo, setReplyingTo] = useState<{ messageIndex: number } | null>(null);
 
   const pathname = usePathname();
+  const router = useRouter();
   const pathnameRef = useRef(pathname);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -581,10 +582,14 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
               if (!r) return m;
               const { status, videoUrl, error } = r.res;
               if (status === "completed" && videoUrl) {
+                router.refresh();
                 return { ...m, videoUrl, generating: false };
               }
               if (status === "failed") {
                 return { ...m, content: error ? `Error: ${error}` : "Video generation failed.", generating: false };
+              }
+              if (status === "cancelled") {
+                return { ...m, content: "Generation cancelled.", generating: false };
               }
               return { ...m, generating: false, content: m.content || "Video was still processing. It may have completed—check Asset Collection or generate again." };
             })
@@ -593,7 +598,7 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
       }
     });
     return () => { cancelled = true; };
-  }, [workspaceId, projectId]);
+  }, [workspaceId, projectId, router]);
 
   // Refetch image/video URLs when user returns to tab (signed URLs expire after 1h).
   useEffect(() => {
@@ -1072,6 +1077,7 @@ ${bodyRows}
           queueMicrotask(() => flushSave(n));
           return n;
         });
+        router.refresh();
       } else if (intent === "video") {
         if (!videoEnabled) {
           setMessages((prev) => {
@@ -1168,6 +1174,7 @@ ${bodyRows}
           return n;
         });
         setGenerating(false);
+        router.refresh();
       } else {
         setMessages((prev) => {
           const n = [...prev];
@@ -1181,11 +1188,16 @@ ${bodyRows}
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : "Request failed";
       const wasCancelled = errMsg === "Generation cancelled.";
+      const displayMsg = wasCancelled
+        ? "Generation cancelled."
+        : errMsg.includes("Please select") || errMsg.includes("try again")
+          ? errMsg
+          : `Error: ${errMsg}`;
       setMessages((prev) => {
         const n = [...prev];
         const m = n[placeholderIndex];
         if (m && m.role === "assistant") {
-          n[placeholderIndex] = { ...m, content: wasCancelled ? "Generation cancelled." : `Error: ${errMsg}`, generating: false };
+          n[placeholderIndex] = { ...m, content: displayMsg, generating: false };
         }
         return n;
       });
@@ -1236,6 +1248,12 @@ ${bodyRows}
             (m.tool === "video" && !!m.videoUrl) ||
             (m.tool === "email" && !!m.emailPayload);
           if (hasFinalOutput) return m;
+          if (m.tool === "video" && m.generationId) {
+            apiClientFetch(
+              `/workspaces/${workspaceId}/projects/${projectId}/video-generations/${m.generationId}/cancel`,
+              { method: "PATCH" }
+            ).catch(() => {});
+          }
           return { ...m, content: "Generation cancelled.", generating: false };
         });
         queueMicrotask(() => flushSave(next));
@@ -1243,7 +1261,7 @@ ${bodyRows}
       });
       setGenerating(false);
     },
-    [flushSave]
+    [flushSave, workspaceId, projectId]
   );
 
   useEffect(() => {
@@ -1276,6 +1294,7 @@ ${bodyRows}
             return next;
           });
           setGenerating(false);
+          router.refresh();
           return;
         }
 
@@ -1289,6 +1308,20 @@ ${bodyRows}
                 content: `Error: ${res.error ?? "Generation failed"}`,
                 generating: false,
               };
+            }
+            queueMicrotask(() => flushSave(next));
+            return next;
+          });
+          setGenerating(false);
+          return;
+        }
+
+        if (res.status === "cancelled") {
+          setMessages((prev) => {
+            const next = [...prev];
+            const m = next[msgIndex];
+            if (m && m.role === "assistant") {
+              next[msgIndex] = { ...m, content: "Generation cancelled.", generating: false };
             }
             queueMicrotask(() => flushSave(next));
             return next;
@@ -1327,7 +1360,7 @@ ${bodyRows}
         setGenerating(false);
       }
     },
-    [workspaceId, projectId, flushSave]
+    [workspaceId, projectId, flushSave, router]
   );
 
   async function handleSend() {
@@ -1601,11 +1634,16 @@ ${bodyRows}
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : "Request failed";
         const wasCancelled = errMsg === "Generation cancelled.";
+        const displayMsg = wasCancelled
+          ? "Generation cancelled."
+          : errMsg.includes("Please select") || errMsg.includes("try again")
+            ? errMsg
+            : `Error: ${errMsg}`;
         setMessages((prev) => {
           const next = [...prev];
           const m = next[msgIndex];
           if (m && m.role === "assistant") {
-            next[msgIndex] = { ...m, content: wasCancelled ? "Generation cancelled." : `Error: ${errMsg}`, generating: false };
+            next[msgIndex] = { ...m, content: displayMsg, generating: false };
           }
           return next;
         });
@@ -1728,6 +1766,7 @@ ${bodyRows}
           return next;
         });
         setPendingFiles([]);
+        router.refresh();
       } else if (selectedTool === "video") {
         const continuationForApi = continuationPrompts
           .slice(0, continuationSlots)
@@ -1823,6 +1862,7 @@ ${bodyRows}
           queueMicrotask(() => flushSave(next));
           return next;
         });
+        router.refresh();
       }
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : "Request failed";
@@ -1851,6 +1891,15 @@ ${bodyRows}
     imageOptions.numberOfImages < 2 ||
     imageSlidePrompts.slice(0, imageOptions.numberOfImages).every((p) => p.trim().length > 0);
   const hasCreateTool = selectedTool === "image" || selectedTool === "video" || selectedTool === "email";
+  const generationCost =
+    selectedTool === "image"
+      ? imageCreditCost(imageOptions.resolution) *
+        (imageOptions.carousel && imageOptions.numberOfImages >= 2 ? imageOptions.numberOfImages : 1)
+      : selectedTool === "video"
+        ? videoCreditCost(videoOptions.resolution)
+        : selectedTool === "email"
+          ? emailCreditCost(emailOptions.imageQuality, emailOptions.numberOfImages)
+          : 0;
   const canSend =
     prompt.trim().length > 0 &&
     (hasCreateTool
@@ -2346,6 +2395,11 @@ ${bodyRows}
           </div>
         )}
       </div>
+      {hasCreateTool && generationCost > 0 && (
+        <span className="text-xs font-medium shrink-0 text-[#000000] dark:text-white">
+          Generation Cost: {generationCost}
+        </span>
+      )}
       <button
         type="button"
         onClick={handleSend}
@@ -2369,11 +2423,11 @@ ${bodyRows}
               <h1 className="text-2xl lg:text-3xl font-bold tracking-tight mb-2">
                 <span className="text-gradient-brand">Creative Studio</span>
               </h1>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-[#000000] dark:text-white">
                 Chat about ad creatives, social media, and marketing — or choose a tool to create images or videos.
               </p>
             </div>
-            <div className="relative overflow-visible flex flex-col rounded-2xl border border-border bg-card shadow-none flex flex-col">
+            <div className="relative overflow-visible flex flex-col rounded-2xl border border-border bg-card shadow-sm flex flex-col">
               <div className="absolute inset-0 rounded-[inherit] z-10 pointer-events-none">
                 <BorderBeam size={80} duration={8} />
               </div>
@@ -2634,16 +2688,15 @@ ${bodyRows}
                                     {p.closingCopy && <div className="px-5 py-3 text-[15px] leading-relaxed text-muted-foreground whitespace-pre-wrap" style={{ fontFamily }}>{p.closingCopy}</div>}
                                     {p.ctaUrl && p.ctaUrl !== "#" && <div className="px-5 pb-4 text-center"><a href={p.ctaUrl} target="_blank" rel="noopener noreferrer" className="inline-block px-6 py-3 rounded-md text-white font-semibold text-sm" style={{ backgroundColor: ctaBg, fontFamily }}>{p.ctaText || "Shop Now"}</a></div>}
                                     {renderImageSlot(urls[1], 1, genIdForSlot(1))}
-                                    {p.closingCopy && <div className="px-5 py-3 text-[15px] leading-relaxed text-muted-foreground whitespace-pre-wrap" style={{ fontFamily }}>{p.closingCopy}</div>}
                                     {p.ctaUrl && p.ctaUrl !== "#" && <div className="px-5 pb-4 text-center"><a href={p.ctaUrl} target="_blank" rel="noopener noreferrer" className="inline-block px-6 py-3 rounded-md text-white font-semibold text-sm" style={{ backgroundColor: ctaBg, fontFamily }}>{p.ctaText || "Shop Now"}</a></div>}
                                   </>
                                 )}
                                 {n === 3 && (
                                   <>
                                     {renderImageSlot(urls[0], 0, genIdForSlot(0))}
+                                    {p.closingCopy && <div className="px-5 py-3 text-[15px] leading-relaxed text-muted-foreground whitespace-pre-wrap" style={{ fontFamily }}>{p.closingCopy}</div>}
                                     {p.ctaUrl && p.ctaUrl !== "#" && <div className="px-5 pb-4 text-center"><a href={p.ctaUrl} target="_blank" rel="noopener noreferrer" className="inline-block px-6 py-3 rounded-md text-white font-semibold text-sm" style={{ backgroundColor: ctaBg, fontFamily }}>{p.ctaText || "Shop Now"}</a></div>}
                                     {renderImageSlot(urls[1], 1, genIdForSlot(1))}
-                                    {p.closingCopy && <div className="px-5 py-3 text-[15px] leading-relaxed text-muted-foreground whitespace-pre-wrap" style={{ fontFamily }}>{p.closingCopy}</div>}
                                     {renderImageSlot(urls[2], 2, genIdForSlot(2))}
                                     {p.ctaUrl && p.ctaUrl !== "#" && <div className="px-5 pb-4 text-center"><a href={p.ctaUrl} target="_blank" rel="noopener noreferrer" className="inline-block px-6 py-3 rounded-md text-white font-semibold text-sm" style={{ backgroundColor: ctaBg, fontFamily }}>{p.ctaText || "Shop Now"}</a></div>}
                                   </>
@@ -2912,7 +2965,7 @@ ${bodyRows}
       {/* Input bar at bottom — sticky so it stays visible while scrolling */}
       <div className="sticky bottom-0 z-10 shrink-0 pt-2 pb-4 w-full max-w-2xl mx-auto">
         <div className="w-full">
-          <div className="relative overflow-visible flex flex-col rounded-2xl border border-border bg-card shadow-none">
+          <div className="relative overflow-visible flex flex-col rounded-2xl border border-border bg-card shadow-sm">
             <div className="absolute inset-0 rounded-[inherit] z-10 pointer-events-none">
               <BorderBeam size={80} duration={8} />
             </div>

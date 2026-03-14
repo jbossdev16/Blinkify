@@ -11,7 +11,6 @@ import {
   Coins,
   PanelLeftClose,
   CreditCard,
-  Info,
   LogOut,
   Bookmark,
   Settings,
@@ -152,7 +151,7 @@ export function Sidebar({
             {/* Collapse button */}
             <button
               onClick={onToggleCollapse}
-              className="size-8 flex items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary/50 hover:text-foreground transition-colors cursor-pointer"
+              className="size-8 flex items-center justify-center rounded-lg text-foreground hover:bg-secondary/50 transition-colors cursor-pointer"
               title="Close sidebar"
             >
               <PanelLeftClose className="size-[18px]" />
@@ -177,12 +176,12 @@ export function Sidebar({
                     "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-normal transition-colors cursor-pointer",
                     active
                       ? "text-foreground"
-                      : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
+                      : "text-foreground hover:bg-secondary/50"
                   )}
                 >
                   <item.icon className={cn("size-[18px] shrink-0", active && "icon-gradient-brand")} />
                   <span className={cn("flex-1 text-left", active && "text-foreground font-medium")}>{item.label}</span>
-                  <ChevronDownIcon className={cn("size-3.5 transition-transform text-muted-foreground", brandDropdownOpen && "rotate-180")} />
+                  <ChevronDownIcon className={cn("size-3.5 transition-transform text-foreground", brandDropdownOpen && "rotate-180")} />
                 </button>
                 {brandDropdownOpen && (
                   <div className="ml-9 mt-0.5 space-y-0.5">
@@ -196,7 +195,7 @@ export function Sidebar({
                             "block px-3 py-1.5 rounded-lg text-xs font-normal transition-colors truncate",
                             projActive
                               ? "text-foreground bg-secondary/50 font-medium"
-                              : "text-muted-foreground hover:bg-secondary/40 hover:text-foreground"
+                              : "text-black dark:text-foreground hover:bg-secondary/40 hover:text-foreground"
                           )}
                         >
                           {p.name}
@@ -229,7 +228,7 @@ export function Sidebar({
                   : "gap-3 px-3 py-2.5",
                 active
                   ? "text-foreground"
-                  : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
+                  : "text-foreground hover:bg-secondary/50"
               )}
             >
               <item.icon
@@ -268,7 +267,7 @@ export function Sidebar({
           <SidebarTooltip label={`${credits} credits`} side="right" enabled>
             <Link
               href="/billing"
-              className="flex justify-center py-2.5 rounded-xl text-[#000000] dark:text-white hover:bg-secondary/60 transition-colors"
+              className="flex justify-center py-2.5 rounded-xl text-[#007aff] dark:text-[#007aff] hover:bg-secondary/60 transition-colors"
             >
               <Coins className="size-[18px]" />
             </Link>
@@ -338,7 +337,7 @@ export function Sidebar({
           "h-screen w-64 bg-background border-r border-border",
           mobileOpen ? "translate-x-0 left-0 top-0" : "-translate-x-full left-0 top-0",
           /* Desktop: detached inset, solid card look */
-          "lg:left-4 lg:top-4 lg:bottom-4 lg:h-[calc(100vh-2rem)] lg:rounded-2xl lg:border lg:border-border lg:bg-card lg:shadow-none",
+          "lg:left-4 lg:top-4 lg:bottom-4 lg:h-[calc(100vh-2rem)] lg:rounded-2xl lg:border lg:border-border lg:bg-card lg:shadow-md",
           collapsed ? "lg:translate-x-0 lg:w-16" : "lg:translate-x-0 lg:w-64"
         )}
       >
@@ -465,21 +464,12 @@ function SidebarCreditsCard({ credits, plan }: { credits: number; plan: string }
         </div>
       )}
       <div className="flex items-center justify-between gap-2 mb-3">
-        <div className="min-w-0">
-          <p className="text-base font-semibold tracking-tight text-foreground">
-            {credits}
-            <span className="font-normal text-muted-foreground"> credits left</span>
-          </p>
-        </div>
-        <SidebarTooltip label={`Current Plan: ${plan.charAt(0).toUpperCase() + plan.slice(1)}`} side="top">
-          <button
-            type="button"
-            className="size-8 flex items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary/60 hover:text-foreground transition-colors cursor-pointer shrink-0"
-            aria-label="Credits info"
-          >
-            <Info className="size-4" />
-          </button>
-        </SidebarTooltip>
+        <span className="text-base font-medium text-foreground">
+          Credits Left:
+        </span>
+        <span className="text-base font-semibold tracking-tight text-foreground tabular-nums">
+          {credits}
+        </span>
       </div>
       <div className="h-1.5 w-full rounded-full bg-secondary/60 overflow-hidden mb-3">
         <div
@@ -487,12 +477,6 @@ function SidebarCreditsCard({ credits, plan }: { credits: number; plan: string }
           style={{ width: `${Math.min(100, remainingPct)}%` }}
         />
       </div>
-      <Link
-        href="/billing"
-        className="flex items-center justify-center w-full h-10 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity"
-      >
-        Upgrade
-      </Link>
     </div>
   );
 }

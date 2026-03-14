@@ -114,9 +114,9 @@ export async function middleware(request: NextRequest) {
       },
     });
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    let user: { id: string } | null = null;
+    const getUserResult = await supabase.auth.getUser().catch(() => ({ data: { user: null }, error: null }));
+    user = getUserResult.data?.user ?? null;
 
     const protectedPaths = [
       "/creative-studio",

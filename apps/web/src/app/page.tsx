@@ -2158,7 +2158,7 @@ function PricingSection() {
                     {plan.benefits.map((b) => (
                       <li
                         key={b.label}
-                        className="flex items-center gap-3 text-sm font-normal"
+                        className="flex items-center gap-3 text-sm font-medium"
                       >
                         {b.included ? (
                           <Check
