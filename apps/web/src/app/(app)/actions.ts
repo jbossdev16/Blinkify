@@ -135,6 +135,7 @@ export interface AnalyzeWebsiteResult {
     suggestedColors: string[];
     brand_tone?: string;
     brand_industry?: string;
+    target_audience?: string;
     primary_font?: string;
   };
 }
