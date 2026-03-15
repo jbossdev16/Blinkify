@@ -32,6 +32,11 @@ const nextConfig: NextConfig = {
         hostname: "tcbziypuirgizkqlslzw.supabase.co",
         pathname: "/storage/**",
       },
+      {
+        protocol: "https",
+        hostname: "ui-avatars.com",
+        pathname: "/api/**",
+      },
     ],
     // Serve 320w for ~320px slots (demo cards) and 378w for bento to reduce payload vs default 640w
     deviceSizes: [320, 378, 640, 750, 828, 1080, 1200, 1920, 2048],

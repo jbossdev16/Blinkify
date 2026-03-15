@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { ThreeDMarquee } from "@/components/ui/3d-marquee";
 import { cn } from "@/lib/utils";
@@ -144,7 +145,7 @@ export default function WaitlistPage() {
 
         <div className="relative z-10 w-full max-w-[400px] px-8">
           <Link href="/" className="block w-full h-[50px] mb-8">
-            <img src="/logo/blinkify-logo-color.svg" alt="Blinkify" className="w-full h-full object-contain" />
+            <Image src="/logo/blinkify-logo-color.svg" alt="Blinkify" width={200} height={50} className="w-full h-full object-contain" />
           </Link>
 
           {submitted ? (
@@ -211,12 +212,12 @@ export default function WaitlistPage() {
             <div className="flex w-max animate-marquee items-center h-full">
               {companyLogos.map((company) => (
                 <div key={company.name} className="shrink-0 w-[140px] h-6 flex items-center justify-center mx-3">
-                  <img src={company.src} alt={company.name} className="h-full w-full object-contain opacity-40 grayscale" />
+                  <Image src={company.src} alt={company.name} width={140} height={24} className="h-full w-full object-contain opacity-40 grayscale" />
                 </div>
               ))}
               {companyLogos.map((company) => (
                 <div key={`${company.name}-dup`} className="shrink-0 w-[140px] h-6 flex items-center justify-center mx-3">
-                  <img src={company.src} alt={company.name} className="h-full w-full object-contain opacity-40 grayscale" />
+                  <Image src={company.src} alt={company.name} width={140} height={24} className="h-full w-full object-contain opacity-40 grayscale" />
                 </div>
               ))}
             </div>

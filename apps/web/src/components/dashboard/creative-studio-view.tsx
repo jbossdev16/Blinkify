@@ -1,7 +1,20 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import type { Project } from "@/lib/api";
-import { CreativeStudioChat } from "./creative-studio-chat";
+import { Spinner } from "@/components/ui/spinner";
+
+const CreativeStudioChat = dynamic(
+  () => import("./creative-studio-chat").then((m) => ({ default: m.CreativeStudioChat })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex flex-1 items-center justify-center min-h-0 p-8">
+        <Spinner size="lg" className="text-muted-foreground" />
+      </div>
+    ),
+  }
+);
 
 interface CreativeStudioViewProps {
   workspaceId: string;

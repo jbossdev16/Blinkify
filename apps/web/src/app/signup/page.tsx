@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { ThreeDMarquee } from "@/components/ui/3d-marquee";
 import { cn } from "@/lib/utils";
@@ -324,7 +325,7 @@ export default function SignupPage() {
     return (
       <div className="relative z-10 w-full max-w-[400px] px-8">
         <Link href="/" className="block w-full h-[50px] mb-8">
-          <img src="/logo/blinkify-logo-color.svg" alt="Blinkify" className="w-full h-full object-contain" />
+          <Image src="/logo/blinkify-logo-color.svg" alt="Blinkify" width={200} height={50} className="w-full h-full object-contain" />
         </Link>
 
         {/* Form */}
@@ -567,13 +568,13 @@ export default function SignupPage() {
           <div className="relative overflow-hidden h-8">
             <div className="group flex w-max animate-marquee items-center h-full">
               {companyLogos.map((company) => (
-                <div key={company.name} className="group/logo shrink-0 w-[140px] h-6 flex items-center justify-center mx-3 cursor-default">
-                  <img src={company.src} alt={company.name} className="h-full w-full object-contain opacity-100 grayscale-0 group-hover:opacity-40 group-hover:grayscale group-hover/logo:opacity-100 group-hover/logo:grayscale-0" />
+                <div key={company.name} className="group/logo shrink-0 w-[140px] h-6 flex items-center justify-center mx-3 cursor-default relative">
+                  <Image src={company.src} alt={company.name} width={140} height={24} className="h-full w-full object-contain opacity-100 grayscale-0 group-hover:opacity-40 group-hover:grayscale group-hover/logo:opacity-100 group-hover/logo:grayscale-0" />
                 </div>
               ))}
               {companyLogos.map((company) => (
-                <div key={`${company.name}-dup`} className="group/logo shrink-0 w-[140px] h-6 flex items-center justify-center mx-3 cursor-default">
-                  <img src={company.src} alt={company.name} className="h-full w-full object-contain opacity-100 grayscale-0 group-hover:opacity-40 group-hover:grayscale group-hover/logo:opacity-100 group-hover/logo:grayscale-0" />
+                <div key={`${company.name}-dup`} className="group/logo shrink-0 w-[140px] h-6 flex items-center justify-center mx-3 cursor-default relative">
+                  <Image src={company.src} alt={company.name} width={140} height={24} className="h-full w-full object-contain opacity-100 grayscale-0 group-hover:opacity-40 group-hover:grayscale group-hover/logo:opacity-100 group-hover/logo:grayscale-0" />
                 </div>
               ))}
             </div>

@@ -1,4 +1,4 @@
--- Add overlay_storage_path to store the Remotion-rendered version with overlays.
+-- Add overlay_storage_path to store the video overlay version (with overlays applied).
 ALTER TABLE public.video_generations
   ADD COLUMN IF NOT EXISTS overlay_storage_path text;
 

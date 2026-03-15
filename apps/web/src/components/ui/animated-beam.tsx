@@ -32,7 +32,7 @@ export const AnimatedBeam: React.FC<AnimatedBeamProps> = ({
   toRef,
   curvature = 0,
   reverse = false, // Include the reverse prop
-  duration = Math.random() * 3 + 4,
+  duration = 5,
   delay = 0,
   pathColor = "gray",
   pathWidth = 2,
@@ -47,6 +47,8 @@ export const AnimatedBeam: React.FC<AnimatedBeamProps> = ({
   const id = useId()
   const [pathD, setPathD] = useState("")
   const [svgDimensions, setSvgDimensions] = useState({ width: 0, height: 0 })
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
 
   // Calculate the gradient coordinates based on the reverse prop
   const gradientCoordinates = reverse
@@ -119,6 +121,24 @@ export const AnimatedBeam: React.FC<AnimatedBeamProps> = ({
     endXOffset,
     endYOffset,
   ])
+
+  // Avoid hydration mismatch: gradient id can differ between server and client (motion/useId).
+  // Render beam content only after mount so server and initial client render match (empty SVG).
+  if (!mounted) {
+    return (
+      <svg
+        fill="none"
+        width={0}
+        height={0}
+        xmlns="http://www.w3.org/2000/svg"
+        className={cn(
+          "pointer-events-none absolute top-0 left-0 transform-gpu stroke-2",
+          className
+        )}
+        aria-hidden
+      />
+    )
+  }
 
   return (
     <svg
