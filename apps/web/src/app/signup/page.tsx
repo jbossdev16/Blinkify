@@ -246,6 +246,9 @@ export default function SignupPage() {
       // Store email for plan setup page, then redirect
       if (typeof window !== "undefined") {
         sessionStorage.setItem("signup_email", email.trim());
+        if (typeof (window as unknown as { gtag?: (...a: unknown[]) => void }).gtag === "function") {
+          (window as unknown as { gtag: (...a: unknown[]) => void }).gtag("event", "signup_complete", { method: "email" });
+        }
       }
       router.push("/setup-plan");
     } catch {

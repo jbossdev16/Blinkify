@@ -13,6 +13,8 @@ import videoGenerationRoutes from "./routes/video-generations";
 import assetCollectionRoutes from "./routes/asset-collection";
 import creativeStudioChatRoutes from "./routes/creative-studio-chat";
 import cleanupFailedGenerationsRoutes from "./routes/cleanup-failed-generations";
+import campaignRoutes from "./routes/campaign";
+import adStylesRoutes from "./routes/ad-styles.js";
 import adminRoutes from "./routes/admin";
 import checkoutRoutes from "./routes/checkout";
 import waitlistRoutes from "./routes/waitlist";
@@ -64,6 +66,8 @@ app.get("/health", (_req, res) => {
   res.json({ status: "ok" });
 });
 
+app.use("/ad-styles", adStylesRoutes);
+
 // ─── Auth routes (public) ─────────────────────────────────────────────────────
 
 app.use("/auth", authRoutes);
@@ -84,6 +88,7 @@ app.use("/workspaces", videoGenerationRoutes);
 app.use("/workspaces", assetCollectionRoutes);
 app.use("/workspaces", creativeStudioChatRoutes);
 app.use("/workspaces", cleanupFailedGenerationsRoutes);
+app.use("/workspaces", campaignRoutes);
 app.use("/admin", adminRoutes);
 
 // ─── Error handler ───────────────────────────────────────────────────────────
@@ -108,7 +113,14 @@ export default app;
 if (!process.env.VERCEL) {
   app.listen(PORT, () => {
     console.log(`API running on http://localhost:${PORT}`);
-    ensureEmailAssetsBucket().catch((err) => console.error("ensureEmailAssetsBucket error:", err));
+    ensureEmailAssetsBucket().catch((err: unknown) => {
+      const code = (err as { cause?: { code?: string }; originalError?: { cause?: { code?: string } } })?.cause?.code
+        ?? (err as { originalError?: { cause?: { code?: string } } })?.originalError?.cause?.code;
+      const msg = code === "UND_ERR_CONNECT_TIMEOUT"
+        ? "Supabase Storage unreachable (connect timeout). Email-assets bucket not ensured."
+        : (err as Error)?.message ?? String(err);
+      console.warn("ensureEmailAssetsBucket:", msg);
+    });
     if (CLEANUP_INTERVAL_MS > 0) {
       setInterval(() => {
         runCleanupFailedGenerations()

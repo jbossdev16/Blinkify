@@ -1,0 +1,110 @@
+{
+  "styles": {
+    "luxury_editorial": {
+      "id": "luxury_editorial",
+      "name": "Luxury Editorial",
+      "description": "Premium studio CGI aesthetic. Products float on clean gradient backgrounds with geometric frame overlays and elegant typography. Best for: skincare, cosmetics, perfume, premium fashion accessories.",
+      "visual_language": {
+        "background": "Smooth gradient background using brand primary and secondary colors. Gradient flows from top-left light source to bottom-right darker tone. Clean, uncluttered — no textures or patterns.",
+        "lighting": "Soft diffused studio lighting from top-left at 45 degrees. Subtle light beam or glow emanating from behind the product. Products have gentle specular highlights on edges. Reflective mirror surface below products showing soft reflection.",
+        "composition": "Products arranged in a triangular cluster — one tall product standing right-of-center, one shorter product left-of-center, one small product in foreground. Slight depth of field separation. Products overlap naturally.",
+        "overlay_elements": "Thin white rectangular frame outline positioned behind products, slightly rotated 2-3 degrees. Frame does not contain products — it sits in the background as a design element.",
+        "color_treatment": "Brand primary color dominates the gradient. Secondary color appears in lighter areas. Products match or complement the color palette. Monochromatic harmony throughout.",
+        "photography_style": "CGI photorealistic rendering. Ultra sharp product details. Clean edges. No noise or grain. Commercial cosmetics photography aesthetic.",
+        "text_style": "Serif headline font for main message. Small sans-serif label/badge for secondary text. High contrast white text on darker areas."
+      },
+      "nano_banana_suffix": "Ultra high resolution commercial product photography. CGI rendered. Luxury cosmetics advertisement. Clean studio environment. Professional retouching. No people. Product focused.",
+      "best_aspect_ratios": ["1:1", "4:5", "9:16"],
+      "campaign_goals": ["new_launch", "brand_awareness", "seasonal_promo"]
+    },
+    "element_explosion": {
+      "id": "element_explosion",
+      "name": "Element Explosion",
+      "description": "Dynamic product shot surrounded by liquid, splash, or ingredient elements that explode outward. High drama, high energy. Best for: skincare serums, beverages, supplements, beauty products with key ingredients to highlight.",
+      "visual_language": {
+        "background": "Gradient background from deep brand primary color at edges to lighter tone at center where product sits. Background has subtle bokeh light dots scattered throughout — soft circular out-of-focus light points in varying sizes.",
+        "lighting": "Dramatic high-contrast studio lighting. Strong key light from above-right creating bold specular highlights on product surfaces and liquid elements. Rim lighting on product edges. Dynamic shadows.",
+        "composition": "Product stands perfectly centered and upright. Dynamic liquid, water, or ingredient elements swirl and splash around the product in a circular motion — like a freeze-frame explosion radiating outward from the product. Elements at varying distances and scales create depth. Some elements in sharp focus, others slightly blurred.",
+        "overlay_elements": "Sparkle/star flare elements at points where light hits liquid or product surfaces. Small floating particle dots scattered throughout. Gradient color overlay at 20% opacity matching brand colors.",
+        "color_treatment": "Product retains its natural colors. Liquid/splash elements take on brand primary color with transparency. Background gradient uses secondary color. High saturation and contrast throughout.",
+        "photography_style": "Composite photography with CGI elements. Freeze-frame liquid physics. Dramatic product hero. High contrast commercial advertising aesthetic. Silver/chrome metallic accents.",
+        "text_style": "Bold sans-serif for headline. High contrast against dark areas. Drop shadow on text."
+      },
+      "nano_banana_suffix": "Dynamic product advertisement photography. Liquid splash elements in motion freeze-frame. Dramatic studio lighting. Commercial advertising aesthetic. CGI composite. Ultra sharp product. No people.",
+      "best_aspect_ratios": ["1:1", "4:5", "16:9"],
+      "campaign_goals": ["flash_sale", "new_launch", "seasonal_promo"]
+    },
+    "product_in_action": {
+      "id": "product_in_action",
+      "name": "Product In Action",
+      "description": "Real product placed center-stage with its key ingredients or use-context elements orbiting dramatically around it. Feels energetic and ingredient-authentic. Best for: food, beverages, supplements, energy products, anything with visible natural ingredients.",
+      "visual_language": {
+        "background": "Deep dark background — near black or very dark brand primary color. Creates maximum contrast with product and elements. Subtle radial gradient from slightly lighter center to very dark edges (vignette effect).",
+        "lighting": "Product is brightly lit from front-above. Dramatic rim lighting creates strong separation from dark background. Ingredient elements have their own natural lighting — fruits look freshly photographed, liquids are translucent with light passing through.",
+        "composition": "Product stands centered and dominant — takes up 40-50% of frame height. Ingredient/context elements are scattered in an asymmetric orbit around the product — some above, some below, some to sides at varying distances. Liquid splash elements erupt from the base of the product upward. Elements overlap product edges slightly.",
+        "overlay_elements": "Liquid splash rising from product base. Fine mist/spray particles around splash impact points. Ingredient elements (fruits, leaves, herbs etc) at varying sizes — largest closest to product, smaller toward edges.",
+        "color_treatment": "Product retains exact real-world colors. Ingredients retain their natural colors — no color grading applied to them. Liquid splash takes on the product's liquid color. Background is neutral dark to let colors pop.",
+        "photography_style": "Composite product photography. Real ingredient photos composited with product. Dramatic advertising aesthetic. High resolution with visible product label details.",
+        "text_style": "Bold condensed sans-serif. White or brand accent color. Positioned in a clear area — usually top or bottom third."
+      },
+      "nano_banana_suffix": "Dramatic product advertisement with ingredient explosion. Dark background. Commercial food and beverage photography. High contrast. Ultra sharp product details with visible label. Dynamic composition. No people.",
+      "best_aspect_ratios": ["1:1", "4:5", "9:16"],
+      "campaign_goals": ["new_launch", "flash_sale", "brand_awareness"]
+    }
+  },
+  "video_styles": {
+    "product_commercial": {
+      "id": "product_commercial",
+      "name": "Product Commercial",
+      "description": "Cinematic product advertisement. Animates the product photo with elegant camera movement and atmospheric motion elements.",
+      "veo_prompt_template": "Cinematic product advertisement. [PRODUCT_DESCRIPTION]. Slow elegant [CAMERA_MOVEMENT] camera movement. [ATMOSPHERE_ELEMENT] moving naturally in the scene. [LIGHTING_DESCRIPTION] lighting. [MOOD] mood. Professional commercial cinematography. Ultra high definition. No people. Product focused.",
+      "camera_movements": [
+        "slow push-in toward",
+        "gentle orbital around",
+        "slow pull-back from",
+        "subtle parallax across"
+      ],
+      "atmosphere_elements": {
+        "beverage": "Steam rising from product surface",
+        "skincare": "Soft bokeh particles floating",
+        "food": "Subtle ingredient particles drifting",
+        "fashion": "Fabric texture subtly shifting",
+        "default": "Soft light rays sweeping across scene"
+      },
+      "mood_by_goal": {
+        "new_launch": "exciting and premium",
+        "flash_sale": "urgent and dynamic",
+        "seasonal_promo": "warm and celebratory",
+        "brand_awareness": "aspirational and elevated"
+      },
+      "veo_config": {
+        "aspectRatio": "16:9",
+        "resolution": "1080p",
+        "durationSeconds": 8,
+        "model": "standard",
+        "useImageToVideo": true
+      },
+      "vertical_variant": {
+        "aspectRatio": "9:16",
+        "description": "Same prompt adapted for vertical TikTok/Reels format"
+      }
+    },
+    "ugc_style": {
+      "id": "ugc_style",
+      "name": "UGC Style",
+      "description": "User-generated content aesthetic. Handheld feel, authentic lighting, intimate casual tone. NOTE: Requires Kling integration for proper implementation. Current Veo fallback produces a cinematic version.",
+      "status": "partial",
+      "kling_required": true,
+      "veo_fallback_prompt": "Authentic handheld smartphone video aesthetic. [PRODUCT_DESCRIPTION] held naturally in frame. Casual indoor lighting. Slight natural camera shake as if handheld. Intimate close-up framing. Authentic unpolished feel. Natural shadows. Real-world environment background slightly out of focus. First-person perspective.",
+      "full_ugc_pipeline": {
+        "step_1_model": "higgsfield_soul or equivalent",
+        "step_1_prompt": "Photorealistic [GENDER] person, [AGE_RANGE] years old, [ETHNICITY] appearance, natural makeup, [HAIR_DESCRIPTION]. Wearing casual [OUTFIT_DESCRIPTION]. Holding a [PRODUCT_CATEGORY] product. Mirror selfie angle OR direct camera angle. Soft natural indoor lighting. Bathroom or bedroom setting. Authentic skin texture — visible pores, natural blush, no retouching. Natural hair movement. Candid expression. High resolution smartphone photography aesthetic. Ultra realistic, indistinguishable from a real photograph.",
+        "step_2_model": "nano_banana_pro",
+        "step_2_prompt": "Edit the person image to hold [SPECIFIC_PRODUCT_NAME] in their hand. Match the exact pose and framing of the reference image. Replace the generic product with [PRODUCT_DESCRIPTION]. Preserve exact identity, facial features, skin texture, hair, and lighting from the original image. Maintain photographic realism. No smoothing or beauty filters. Natural hand positioning around the product.",
+        "step_3_model": "veo_3.1",
+        "step_3_prompt": "Handheld smartphone video of a person in a [SETTING] environment. The person is stationary, holding [PRODUCT_DESCRIPTION] naturally. Subtle breathing micro-movement only. Soft overhead ambient lighting. Natural camera stillness with slight handheld feel. Authentic casual framing from mid-torso to head. Intimate and believable smartphone video physics. Skin texture preserved in high fidelity. No artificial smoothing. Real-world background slightly out of focus.",
+        "lip_sync_note": "For lip sync, use Veo 3.1 with audio prompt describing speech cadence. Veo 3.1 finds best for lip sync when face is close to camera and well lit."
+      }
+    }
+  }
+}

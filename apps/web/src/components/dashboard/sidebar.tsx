@@ -10,7 +10,6 @@ import {
   X,
   Coins,
   PanelLeftClose,
-  CreditCard,
   LogOut,
   Bookmark,
   Settings,
@@ -49,7 +48,6 @@ const baseNav = [
   { label: "Creative Studio", href: "/creative-studio", icon: Sparkles },
   { label: "Brand", href: "/brand", icon: Palette },
   { label: "Asset Collection", href: "/asset-collection", icon: Bookmark },
-  { label: "Billing", href: "/billing", icon: CreditCard },
 ];
 
 /* ─── Component ───────────────────────────────────────────────────────── */
@@ -70,6 +68,7 @@ export function Sidebar({
   const [mobileOpen, setMobileOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
+  const [settingsInitialTab, setSettingsInitialTab] = useState<"general" | "security" | "account" | "plan" | undefined>(undefined);
   const profileRef = useRef<HTMLDivElement>(null);
 
   const planFeatures = getPlanFeatures(plan ?? "trial");
@@ -117,8 +116,9 @@ export function Sidebar({
     setProfileOpen(false);
   }, [pathname]);
 
-  function openSettings() {
+  function openSettings(initialTab?: "general" | "security" | "account" | "plan") {
     setProfileOpen(false);
+    setSettingsInitialTab(initialTab);
     setSettingsModalOpen(true);
   }
 
@@ -264,13 +264,14 @@ export function Sidebar({
           <SidebarCreditsCard credits={credits} plan={plan ?? "trial"} />
         )}
         {credits !== null && collapsed && (
-          <SidebarTooltip label={`${credits} credits`} side="right" enabled>
-            <Link
-              href="/billing"
-              className="flex justify-center py-2.5 rounded-xl text-[#007aff] dark:text-[#007aff] hover:bg-secondary/60 transition-colors"
+          <SidebarTooltip label={`${credits} credits · Manage plan`} side="right" enabled>
+            <button
+              type="button"
+              onClick={() => openSettings("plan")}
+              className="flex justify-center w-full py-2.5 rounded-xl text-[#007aff] dark:text-[#007aff] hover:bg-secondary/60 transition-colors cursor-pointer"
             >
               <Coins className="size-[18px]" />
-            </Link>
+            </button>
           </SidebarTooltip>
         )}
 
@@ -326,19 +327,22 @@ export function Sidebar({
       )}
 
       {settingsModalOpen && (
-        <SettingsModal onClose={() => setSettingsModalOpen(false)} />
+        <SettingsModal
+          onClose={() => { setSettingsModalOpen(false); setSettingsInitialTab(undefined); }}
+          plan={plan}
+          credits={credits}
+          initialTab={settingsInitialTab}
+        />
       )}
 
-      {/* Sidebar — mobile full width; desktop detached with card style (no floaty blur/shadow) */}
+      {/* Sidebar — mobile full width; desktop flush left, full height */}
       <aside
         className={cn(
           "fixed z-40 flex flex-col transition-all duration-200",
-          /* Mobile: full height, slide in/out */
-          "h-screen w-64 bg-background border-r border-border",
-          mobileOpen ? "translate-x-0 left-0 top-0" : "-translate-x-full left-0 top-0",
-          /* Desktop: detached inset, solid card look */
-          "lg:left-4 lg:top-4 lg:bottom-4 lg:h-[calc(100vh-2rem)] lg:rounded-2xl lg:border lg:border-border lg:bg-card lg:shadow-md",
-          collapsed ? "lg:translate-x-0 lg:w-16" : "lg:translate-x-0 lg:w-64"
+          "left-0 top-0 h-screen w-56 bg-background border-r border-border",
+          mobileOpen ? "translate-x-0" : "-translate-x-full",
+          "lg:translate-x-0",
+          collapsed ? "lg:w-16" : "lg:w-56"
         )}
       >
         {sidebarContent}

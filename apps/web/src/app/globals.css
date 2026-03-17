@@ -153,6 +153,15 @@
   html {
     scroll-behavior: smooth;
   }
+  /* Dashboard app: single scroll region only; prevent document/html scroll */
+  html[data-dashboard="true"] {
+    height: 100%;
+    overflow: hidden;
+  }
+  html[data-dashboard="true"] body {
+    height: 100%;
+    overflow: hidden;
+  }
   body {
     @apply bg-background text-foreground;
     font-family: var(--font-manrope), system-ui, sans-serif;
@@ -318,6 +327,17 @@
       #da365c 84%,
       #d04901 100%
     );
+  }
+
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    20% { transform: translateX(-4px); }
+    40% { transform: translateX(4px); }
+    60% { transform: translateX(-2px); }
+    80% { transform: translateX(2px); }
+  }
+  .animate-shake {
+    animation: shake 0.4s ease-in-out;
   }
 
   /* Gradient brand color for Lucide (stroke-based) SVG icons – same in light and dark */

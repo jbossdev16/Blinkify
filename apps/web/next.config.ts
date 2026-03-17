@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import path from "path";
 
 // Required for app.blinkify.ai: rewrites proxy /auth, /workspaces, etc. to the API.
 // If API_BACKEND_URL is missing at build time, rewrites are empty → signup/login/API calls 404.
@@ -6,6 +7,8 @@ const apiBackend = process.env.API_BACKEND_URL;
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  // Use monorepo root for file tracing so Next doesn't infer a wrong root (e.g. parent lockfile)
+  outputFileTracingRoot: path.join(__dirname, ".."),
   async redirects() {
     return [
       { source: "/favicon.ico", destination: "/icon", permanent: false },
@@ -38,8 +41,8 @@ const nextConfig: NextConfig = {
         pathname: "/api/**",
       },
     ],
-    // Serve 320w for ~320px slots (demo cards) and 378w for bento to reduce payload vs default 640w
-    deviceSizes: [320, 378, 640, 750, 828, 1080, 1200, 1920, 2048],
+    // Serve 320w/378w/560w for common slots to reduce payload; 560 avoids 640 for ~557px display
+    deviceSizes: [320, 378, 560, 640, 750, 828, 1080, 1200, 1920, 2048],
     imageSizes: [16, 32, 48, 64, 96, 128, 256],
   },
   experimental: {

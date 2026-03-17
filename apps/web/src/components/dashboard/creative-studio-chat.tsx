@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, Fragment } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Send,
@@ -23,11 +23,11 @@ import {
   Palette,
   Check,
   Hammer,
+  Zap,
 } from "lucide-react";
 import { BlinkifyLogo } from "@/components/blinkify-logo";
 import { cn } from "@/lib/utils";
 import { Spinner } from "@/components/ui/spinner";
-import { BorderBeam } from "@/components/ui/border-beam";
 import type { Project } from "@/lib/api";
 import { apiClientFetch } from "@/lib/api-client";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
@@ -38,10 +38,12 @@ import { isEmailTemplateId, type EmailTemplateId } from "@/lib/email-templates";
 
 /* ─── Types ───────────────────────────────────────────────────────────── */
 
-type CreativeTool = "image" | "video" | "email" | null;
+type CreativeTool = "image" | "video" | "email" | "full" | null;
 
 type ImageAspectRatio = "1:1" | "2:3" | "3:2" | "3:4" | "4:3" | "4:5" | "5:4" | "9:16" | "16:9" | "21:9";
 type ImageResolution = "1K" | "4K";
+
+type AdStyleId = "none" | "luxury_editorial" | "element_explosion" | "product_in_action";
 
 interface ImageOptions {
   aspectRatio: ImageAspectRatio;
@@ -49,6 +51,7 @@ interface ImageOptions {
   temperature: number;
   numberOfImages: number;
   carousel: boolean;
+  adStyle: AdStyleId;
 }
 
 type VideoModelKey = "standard" | "fast";
@@ -113,24 +116,19 @@ interface CreativeMessage {
   signedImageUrls?: string[];
   /** Data URLs of images attached to this user message (not persisted). */
   attachedImageUrls?: string[];
+  /** User message was sent from Full Campaign form; show follow-up chips below next assistant reply. */
+  fullCampaignRequest?: boolean;
 }
 
 const IMAGE_ASPECT_RATIOS: { value: ImageAspectRatio; label: string }[] = [
   { value: "1:1", label: "Square (1:1)" },
-  { value: "4:5", label: "Instagram Feed (4:5)" },
-  { value: "5:4", label: "Landscape Photo (5:4)" },
-  { value: "3:4", label: "Portrait (3:4)" },
-  { value: "4:3", label: "Presentation (4:3)" },
-  { value: "2:3", label: "Tall Portrait (2:3)" },
-  { value: "3:2", label: "Photo Print (3:2)" },
-  { value: "9:16", label: "Story / Reel (9:16)" },
+  { value: "9:16", label: "Story (9:16)" },
   { value: "16:9", label: "Landscape Ad (16:9)" },
-  { value: "21:9", label: "Banner (21:9)" },
 ];
 
-const IMAGE_RESOLUTIONS: { value: ImageResolution; label: string }[] = [
+const IMAGE_RESOLUTIONS: { value: ImageResolution; label: string; note?: string }[] = [
   { value: "1K", label: "Standard (1K)" },
-  { value: "4K", label: "Ultra (4K)" },
+  { value: "4K", label: "Ultra (4K)", note: "Uses 2.5× credits" },
 ];
 
 const VIDEO_MODELS: { value: VideoModelKey; label: string }[] = [
@@ -139,9 +137,16 @@ const VIDEO_MODELS: { value: VideoModelKey; label: string }[] = [
 ];
 
 const VIDEO_ASPECT_RATIOS: { value: VideoAspectRatio; label: string }[] = [
-  { value: "16:9", label: "16:9 Landscape" },
-  { value: "9:16", label: "9:16 Portrait" },
+  { value: "16:9", label: "Landscape (YouTube / Meta)" },
+  { value: "9:16", label: "Vertical (TikTok / Reels / Stories)" },
 ];
+
+const VIDEO_DURATIONS = [
+  { value: 5, label: "5s" },
+  { value: 10, label: "10s" },
+  { value: 15, label: "15s" },
+  { value: 30, label: "30s" },
+] as const;
 
 const VIDEO_RESOLUTIONS: { value: VideoResolution; label: string }[] = [
   { value: "1080p", label: "Standard" },
@@ -154,9 +159,9 @@ const EMAIL_NUMBER_OF_IMAGES: { value: EmailNumberOfImages; label: string }[] = 
   { value: 3, label: "3 images" },
 ];
 
-const EMAIL_IMAGE_QUALITIES: { value: EmailImageQuality; label: string }[] = [
+const EMAIL_IMAGE_QUALITIES: { value: EmailImageQuality; label: string; note?: string }[] = [
   { value: "1K", label: "Standard (1K)" },
-  { value: "4K", label: "Ultra (4K)" },
+  { value: "4K", label: "Ultra (4K)", note: "Uses 2.5× credits" },
 ];
 
 const POLL_INTERVAL_MS = 5000;
@@ -198,6 +203,9 @@ interface StoredCreativeMessage {
   hasImage?: boolean;
   emailPayload?: EmailPayload;
   signedImageUrls?: string[];
+  fullCampaignRequest?: boolean;
+  /** User message image attachments (data URLs) so they persist across refresh */
+  attachedImageUrls?: string[];
 }
 
 function defaultImageOptions(): ImageOptions {
@@ -205,8 +213,9 @@ function defaultImageOptions(): ImageOptions {
     aspectRatio: "1:1",
     resolution: "1K",
     temperature: TEMPERATURE_DEFAULT,
-    numberOfImages: 1,
+    numberOfImages: 2,
     carousel: false,
+    adStyle: "none",
   };
 }
 
@@ -225,12 +234,66 @@ function defaultEmailOptions(): EmailOptions {
   return { aspectRatio: "1:1", numberOfImages: 1, imageQuality: "1K" };
 }
 
+function buildImagePromptWithAdStyle(
+  userPrompt: string,
+  imageOptions: ImageOptions,
+  adStylesConfig: { styles: Record<string, { name: string; nano_banana_suffix: string }> } | null,
+  primaryColorHex: string,
+  secondaryColorHex: string
+): string {
+  if (imageOptions.adStyle === "none" || !adStylesConfig?.styles?.[imageOptions.adStyle]) {
+    return userPrompt;
+  }
+  const style = adStylesConfig.styles[imageOptions.adStyle];
+  if (!style?.nano_banana_suffix) return userPrompt;
+  return `${userPrompt}\n\n${style.nano_banana_suffix}\n\nAspect ratio: ${imageOptions.aspectRatio}. Brand primary color: ${primaryColorHex}. Brand secondary color: ${secondaryColorHex}.`;
+}
+
 function continuationSlotsForDuration(seconds: number): number {
   if (seconds <= 8) return 0;
   return Math.min(20, Math.ceil((seconds - 8) / 7));
 }
 
 const PREFERENCE_SNIPPETS_MAX = 10;
+
+const SUGGESTED_PROMPT_CHIPS = [
+  "Create a Meta ad for my best seller",
+  "Generate a product launch email",
+  "Make a TikTok video for this product",
+  "Create an Instagram carousel for my product",
+];
+
+const FULL_CAMPAIGN_GOALS = ["New launch", "Flash sale", "Seasonal promo", "Brand awareness"] as const;
+const FULL_CAMPAIGN_PLATFORMS = ["Meta feed", "Stories / Reels", "TikTok", "Email", "Pinterest"] as const;
+const FULL_CAMPAIGN_FOLLOWUP_CHIPS = [
+  "↻ Regenerate creatives",
+  "✏️ Change campaign goal",
+  "📐 Add more formats",
+];
+
+type FullCampaignStepStatus = "pending" | "in_progress" | "done" | "failed";
+interface FullCampaignStepState {
+  id: string;
+  label: string;
+  subLabel: string;
+  status: FullCampaignStepStatus;
+  timeTaken?: number;
+  credits: number;
+  progress?: number;
+}
+const FULL_CAMPAIGN_STEPS: Omit<FullCampaignStepState, "status" | "timeTaken">[] = [
+  { id: "claude_json", label: "Campaign intelligence", subLabel: "Claude Sonnet — prompts + copy", credits: 5 },
+  { id: "meta_feed_image_1", label: "Feed image 1 (1:1)", subLabel: "Nano Banana · 1K resolution", credits: 10 },
+  { id: "meta_feed_image_2", label: "Feed image 2 (1:1)", subLabel: "Nano Banana · 1K resolution", credits: 10 },
+  { id: "meta_feed_image_3", label: "Feed image 3 (1:1)", subLabel: "Nano Banana · 1K resolution", credits: 10 },
+  { id: "story_image_1", label: "Story image 1 (9:16)", subLabel: "Nano Banana · vertical format", credits: 10 },
+  { id: "story_image_2", label: "Story image 2 (9:16)", subLabel: "Nano Banana · vertical format", credits: 10 },
+  { id: "story_image_3", label: "Story image 3 (9:16)", subLabel: "Nano Banana · vertical format", credits: 10 },
+  { id: "video_16x9", label: "Product video — 16:9", subLabel: "Blinkify Standard · Veo 3.1", credits: 150 },
+  { id: "video_9x16", label: "Vertical video — 9:16", subLabel: "Blinkify Fast · Veo 3.1", credits: 100 },
+  { id: "email_html", label: "Marketing emails (2)", subLabel: "2 variants · free", credits: 0 },
+];
+const TOTAL_FULL_CAMPAIGN_CREDITS = FULL_CAMPAIGN_STEPS.reduce((s, t) => s + t.credits, 0);
 
 async function loadCreativeStudioChatFromSupabase(workspaceId: string, projectId: string): Promise<{
   messages: CreativeMessage[];
@@ -244,6 +307,9 @@ async function loadCreativeStudioChatFromSupabase(workspaceId: string, projectId
   likedSnippets: string[];
   dislikedSnippets: string[];
   selectedEmailTemplateId: EmailTemplateId | null;
+  campaignState: SavedCampaignState | null;
+  /** True when we read a row from DB; false when error or no row (so we don't overwrite with empty). */
+  loadedFromDb: boolean;
 }> {
   const supabase = createSupabaseBrowserClient();
   const { data, error } = await supabase
@@ -265,6 +331,8 @@ async function loadCreativeStudioChatFromSupabase(workspaceId: string, projectId
       likedSnippets: [],
       dislikedSnippets: [],
       selectedEmailTemplateId: null,
+      campaignState: null,
+      loadedFromDb: false,
     };
   }
 
@@ -280,6 +348,7 @@ async function loadCreativeStudioChatFromSupabase(workspaceId: string, projectId
     likedSnippets?: string[];
     dislikedSnippets?: string[];
     selectedEmailTemplateId?: string | null;
+    campaignState?: SavedCampaignState | null;
   };
   const stored = d.messages ?? [];
   const messages: CreativeMessage[] = stored.map((m) => ({
@@ -293,6 +362,8 @@ async function loadCreativeStudioChatFromSupabase(workspaceId: string, projectId
     hasImage: m.hasImage,
     emailPayload: m.emailPayload,
     signedImageUrls: m.signedImageUrls,
+    ...(m.fullCampaignRequest && { fullCampaignRequest: true }),
+    ...(m.attachedImageUrls?.length && { attachedImageUrls: m.attachedImageUrls }),
   }));
   const selectedEmailTemplateId = isEmailTemplateId(d.selectedEmailTemplateId) ? d.selectedEmailTemplateId : null;
   return {
@@ -307,6 +378,34 @@ async function loadCreativeStudioChatFromSupabase(workspaceId: string, projectId
     likedSnippets: Array.isArray(d.likedSnippets) ? d.likedSnippets.slice(0, PREFERENCE_SNIPPETS_MAX) : [],
     dislikedSnippets: Array.isArray(d.dislikedSnippets) ? d.dislikedSnippets.slice(0, PREFERENCE_SNIPPETS_MAX) : [],
     selectedEmailTemplateId,
+    campaignState: d.campaignState ?? null,
+    loadedFromDb: true,
+  };
+}
+
+interface SavedCampaignState {
+  generation: {
+    status: "complete";
+    steps: Omit<FullCampaignStepState, "status">[];
+    creditsUsed: number;
+    brandName: string;
+    campaignGoal: string | null;
+    imageStyleChosen?: string | null;
+  };
+  results: {
+    metaImageUrl?: string;
+    metaImageUrls?: string[];
+    storyImageUrl?: string;
+    storyImageUrls?: string[];
+    videoUrl?: string;
+    videoUrl16x9?: string;
+    videoUrl9x16?: string;
+    emailHtml?: string;
+    emailHtmls?: string[];
+    emailCopy?: Record<string, string>;
+    socialCopy?: Record<string, unknown>;
+    emailImageUrls?: string[];
+    campaignId?: string;
   };
 }
 
@@ -325,10 +424,14 @@ async function saveCreativeStudioChatToSupabase(
     likedSnippets: string[];
     dislikedSnippets: string[];
     selectedEmailTemplateId: EmailTemplateId | null;
+    campaignState?: SavedCampaignState | null;
   }
 ): Promise<void> {
   const supabase = createSupabaseBrowserClient();
-  const storedMessages: StoredCreativeMessage[] = state.messages.map((m) => ({
+  const messagesToSave = state.messages.filter(
+    (m) => !(m.role === "assistant" && m.generating)
+  );
+  const storedMessages: StoredCreativeMessage[] = messagesToSave.map((m) => ({
     role: m.role,
     content: m.content,
     timestamp: m.timestamp,
@@ -339,7 +442,21 @@ async function saveCreativeStudioChatToSupabase(
     ...(m.imageUrls?.length && { hasImage: true }),
     ...(m.emailPayload && { emailPayload: m.emailPayload }),
     ...(m.signedImageUrls?.length && { signedImageUrls: m.signedImageUrls }),
+    ...(m.fullCampaignRequest && { fullCampaignRequest: true }),
+    ...(m.role === "user" && m.attachedImageUrls?.length && { attachedImageUrls: m.attachedImageUrls }),
   }));
+
+  let campaignStateToWrite: SavedCampaignState | null | undefined = state.campaignState;
+  if (campaignStateToWrite == null) {
+    const { data: existing } = await supabase
+      .from("creative_studio_chats")
+      .select("data")
+      .eq("project_id", projectId)
+      .maybeSingle();
+    const existingData = existing?.data as { campaignState?: SavedCampaignState | null } | undefined;
+    if (existingData?.campaignState != null) campaignStateToWrite = existingData.campaignState;
+  }
+
   await supabase.from("creative_studio_chats").upsert(
     {
       workspace_id: workspaceId,
@@ -356,6 +473,7 @@ async function saveCreativeStudioChatToSupabase(
         likedSnippets: state.likedSnippets.slice(0, PREFERENCE_SNIPPETS_MAX),
         dislikedSnippets: state.dislikedSnippets.slice(0, PREFERENCE_SNIPPETS_MAX),
         selectedEmailTemplateId: state.selectedEmailTemplateId ?? null,
+        ...(campaignStateToWrite != null && { campaignState: campaignStateToWrite }),
       },
     },
     { onConflict: "project_id" }
@@ -393,12 +511,119 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
   const [plusMenuOpen, setPlusMenuOpen] = useState(false);
+  const [adStylesConfig, setAdStylesConfig] = useState<{
+    styles: Record<string, { name: string; nano_banana_suffix: string }>;
+  } | null>(null);
+  useEffect(() => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4001";
+    fetch(`${apiUrl}/ad-styles`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => data?.styles != null && typeof data.styles === "object" && setAdStylesConfig({ styles: data.styles }))
+      .catch(() => {});
+  }, []);
   const [generating, setGenerating] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   /** Object URLs for pending image previews; synced from pendingFiles and revoked on cleanup. */
   const [pendingPreviewUrls, setPendingPreviewUrls] = useState<string[]>([]);
   /** When set, the next send is a reply to this message (for context and image edit). */
   const [replyingTo, setReplyingTo] = useState<{ messageIndex: number } | null>(null);
+  /* Full Campaign form state */
+  const [fullCampaignProductImage, setFullCampaignProductImage] = useState<File | null>(null);
+  const [fullCampaignProductPreviewUrl, setFullCampaignProductPreviewUrl] = useState<string | null>(null);
+  const [fullCampaignProductDescription, setFullCampaignProductDescription] = useState("");
+  const [fullCampaignGoal, setFullCampaignGoal] = useState<string | null>(null);
+  const [fullCampaignPreferredStyle, setFullCampaignPreferredStyle] = useState<string>("auto");
+  const [fullCampaignPlatforms, setFullCampaignPlatforms] = useState<string[]>([]);
+  const [fullCampaignShake, setFullCampaignShake] = useState(false);
+  const [fullCampaignGeneration, setFullCampaignGeneration] = useState<{
+    status: "idle" | "generating" | "complete";
+    steps: FullCampaignStepState[];
+    creditsUsed: number;
+    brandName: string;
+    campaignGoal: string | null;
+    videoCountdownSeconds: number | null;
+    imageStyleChosen: string | null;
+    generationUnavailableRetryable?: boolean;
+  }>({ status: "idle", steps: [], creditsUsed: 0, brandName: "", campaignGoal: null, videoCountdownSeconds: null, imageStyleChosen: null });
+  const [fullCampaignResults, setFullCampaignResults] = useState<{
+    metaImageUrl?: string;
+    metaImageUrls?: string[];
+    metaFeedFailed?: boolean[];
+    storyImageUrl?: string;
+    storyImageUrls?: string[];
+    storyFailed?: boolean[];
+    videoUrl?: string;
+    videoUrl16x9?: string;
+    videoUrl9x16?: string;
+    emailHtml?: string;
+    emailHtmls?: string[];
+    emailCopy?: Record<string, string>;
+    emailCopies?: Record<string, string>[];
+    emailPayload?: CreativeMessage["emailPayload"];
+    socialCopy?: {
+      meta_feed?: { caption: string; hashtags: string; alt_caption: string };
+      instagram_stories?: { text_overlay: string; poll_or_question: string; swipe_up_text: string };
+      tiktok?: { hook: string; caption: string; hashtags: string };
+      pinterest?: { title: string; description: string; hashtags: string };
+      linkedin?: { caption: string; hashtags: string };
+    };
+    emailImageUrls?: string[];
+    campaignId?: string;
+  } | null>(null);
+  const [fullCampaignSwipeSlide, setFullCampaignSwipeSlide] = useState(0);
+  const [selectedEmailVariant, setSelectedEmailVariant] = useState(0);
+  const [campaignResultsByMsgIndex, setCampaignResultsByMsgIndex] = useState<Record<number, typeof fullCampaignResults>>({});
+  const [selectedCampaignMsgIndex, setSelectedCampaignMsgIndex] = useState<number | null>(null);
+  const [currentCampaignMsgIndex, setCurrentCampaignMsgIndex] = useState<number | null>(null);
+  const fullCampaignLastUserMsgIndexRef = useRef<number | null>(null);
+  const fullCampaignResultsRef = useRef<HTMLDivElement>(null);
+  const fullCampaignTouchStartX = useRef<number>(0);
+
+  const downloadAsset = useCallback(async (url: string, filename: string) => {
+    try {
+      const resp = await fetch(url);
+      const blob = await resp.blob();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch {
+      toast.error(`Failed to download ${filename}`);
+    }
+  }, []);
+
+  const downloadFullCampaignZip = useCallback(async () => {
+    if (!fullCampaignResults) return;
+    const parts: { url: string; name: string }[] = [];
+    const feedUrls = fullCampaignResults.metaImageUrls?.length ? fullCampaignResults.metaImageUrls : (fullCampaignResults.metaImageUrl ? [fullCampaignResults.metaImageUrl] : []);
+    feedUrls.forEach((url, i) => parts.push({ url, name: `feed-${i + 1}.png` }));
+    const storyUrls = fullCampaignResults.storyImageUrls?.length ? fullCampaignResults.storyImageUrls : (fullCampaignResults.storyImageUrl ? [fullCampaignResults.storyImageUrl] : []);
+    storyUrls.forEach((url, i) => parts.push({ url, name: `story-${i + 1}.png` }));
+    if (fullCampaignResults.videoUrl16x9) parts.push({ url: fullCampaignResults.videoUrl16x9, name: "video-16x9.mp4" });
+    if (fullCampaignResults.videoUrl9x16) parts.push({ url: fullCampaignResults.videoUrl9x16, name: "video-9x16.mp4" });
+    if (!fullCampaignResults.videoUrl16x9 && !fullCampaignResults.videoUrl9x16 && fullCampaignResults.videoUrl) parts.push({ url: fullCampaignResults.videoUrl, name: "video.mp4" });
+
+    if (parts.length === 0 && !fullCampaignResults.emailHtml) {
+      toast.error("No assets to download");
+      return;
+    }
+
+    for (const { url, name } of parts) {
+      await downloadAsset(url, name);
+    }
+
+    if (fullCampaignResults.emailHtml) {
+      const blob = new Blob([fullCampaignResults.emailHtml], { type: "text/html" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "email.html";
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+
+    toast.success("Campaign assets downloaded");
+  }, [fullCampaignResults, downloadAsset]);
 
   const pathname = usePathname();
   const router = useRouter();
@@ -409,12 +634,18 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
   const toolsRef = useRef<HTMLDivElement>(null);
   const plusMenuRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const fullCampaignFileInputRef = useRef<HTMLInputElement>(null);
+  const fullCampaignTriggerSendRef = useRef(false);
+  const isFullCampaignSendRef = useRef(false);
+  const chipSendRef = useRef<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const pollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const generationAbortRef = useRef<AbortController | null>(null);
   /** Tracks current load context so image/video URL fetches only apply when still relevant (avoids hydration lost to effect cleanup). */
   const hydrationContextRef = useRef<{ workspaceId: string; projectId: string } | null>(null);
+  /** True after a load that returned a row from DB; prevents save effect from overwriting with empty when load failed or had no row. */
+  const loadedFromDbRef = useRef(false);
   const stateRef = useRef({
     messages: [] as CreativeMessage[],
     prompt: "",
@@ -494,6 +725,13 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, []);
 
+  useEffect(() => {
+    if (fullCampaignResults?.campaignId != null && fullCampaignLastUserMsgIndexRef.current != null) {
+      const idx = fullCampaignLastUserMsgIndexRef.current;
+      setCampaignResultsByMsgIndex((prev) => ({ ...prev, [idx]: fullCampaignResults }));
+    }
+  }, [fullCampaignResults?.campaignId, fullCampaignResults]);
+
   const pendingPreviewUrlsRef = useRef<string[]>([]);
   useEffect(() => {
     const imageFiles = pendingFiles.filter((f) => f.type.startsWith("image/"));
@@ -508,9 +746,48 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
   }, [pendingFiles]);
 
   useEffect(() => {
+    if (!fullCampaignProductImage) {
+      setFullCampaignProductPreviewUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return null;
+      });
+      return;
+    }
+    const url = URL.createObjectURL(fullCampaignProductImage);
+    setFullCampaignProductPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [fullCampaignProductImage]);
+
+  useEffect(() => {
+    if (!fullCampaignTriggerSendRef.current || selectedTool !== null) return;
+    fullCampaignTriggerSendRef.current = false;
+    handleSend();
+  });
+
+  useEffect(() => {
+    if (chipSendRef.current == null || prompt !== chipSendRef.current) return;
+    chipSendRef.current = null;
+    handleSend();
+  }, [prompt]);
+
+  const fullCampaignVideoCountdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (fullCampaignGeneration.status !== "complete") return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "ArrowLeft") setFullCampaignSwipeSlide((s) => Math.max(0, s - 1));
+      if (e.key === "ArrowRight") setFullCampaignSwipeSlide((s) => Math.min(2, s + 1));
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [fullCampaignGeneration.status]);
+
+  useEffect(() => {
     let cancelled = false;
+    loadedFromDbRef.current = false;
     loadCreativeStudioChatFromSupabase(workspaceId, projectId).then((loaded) => {
       if (cancelled) return;
+      loadedFromDbRef.current = loaded.loadedFromDb;
       setSelectedTool(null);
       setImageOptions(loaded.imageOptions);
       setVideoOptions(loaded.videoOptions);
@@ -527,6 +804,48 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
       setLikedSnippets(loaded.likedSnippets);
       setDislikedSnippets(loaded.dislikedSnippets);
       setSelectedEmailTemplateId(loaded.selectedEmailTemplateId);
+
+      if (loaded.campaignState) {
+        const cs = loaded.campaignState;
+        setFullCampaignGeneration({
+          status: "complete",
+          steps: cs.generation.steps.map((s) => ({ ...s, status: "done" as FullCampaignStepStatus })),
+          creditsUsed: cs.generation.creditsUsed,
+          brandName: cs.generation.brandName,
+          campaignGoal: cs.generation.campaignGoal,
+          videoCountdownSeconds: null,
+          imageStyleChosen: cs.generation.imageStyleChosen ?? null,
+        });
+        setFullCampaignResults(cs.results as typeof fullCampaignResults);
+        const campaignId = cs.results?.campaignId;
+        if (campaignId && workspaceId && projectId) {
+          apiClientFetch<{
+            asset_urls: { meta_image_urls?: string[]; story_image_urls?: string[]; video_16x9?: string | null; video_9x16?: string | null; email_html?: string | null; email_htmls?: string[] };
+            email_copy?: Record<string, string>;
+            email_copies?: Record<string, string>[];
+          }>(`/workspaces/${workspaceId}/projects/${projectId}/campaign/sessions/${campaignId}`)
+            .then((data) => {
+              const ctx = hydrationContextRef.current;
+              if (!ctx || ctx.workspaceId !== workspaceId || ctx.projectId !== projectId) return;
+              const urls = data.asset_urls;
+              if (urls) {
+                setFullCampaignResults((prev) => ({
+                  ...prev,
+                  metaImageUrls: urls.meta_image_urls ?? prev?.metaImageUrls,
+                  storyImageUrls: urls.story_image_urls ?? prev?.storyImageUrls,
+                  videoUrl16x9: urls.video_16x9 ?? prev?.videoUrl16x9,
+                  videoUrl9x16: urls.video_9x16 ?? prev?.videoUrl9x16,
+                  emailHtml: urls.email_html ?? prev?.emailHtml,
+                  emailHtmls: urls.email_htmls ?? prev?.emailHtmls,
+                  emailCopy: data.email_copy ?? prev?.emailCopy,
+                  emailCopies: data.email_copies ?? prev?.emailCopies,
+                }));
+              }
+            })
+            .catch(() => {});
+        }
+      }
+
       setHydrated(true);
 
       if (!projectId) return;
@@ -575,6 +894,7 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
         ).then((results) => {
           const ctx = hydrationContextRef.current;
           if (!ctx || ctx.workspaceId !== workspaceId || ctx.projectId !== projectId) return;
+          let shouldRefresh = false;
           setMessages((prev) =>
             prev.map((m) => {
               if (m.role !== "assistant" || m.tool !== "video" || !m.generationId) return m;
@@ -582,7 +902,7 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
               if (!r) return m;
               const { status, videoUrl, error } = r.res;
               if (status === "completed" && videoUrl) {
-                router.refresh();
+                shouldRefresh = true;
                 return { ...m, videoUrl, generating: false };
               }
               if (status === "failed") {
@@ -594,6 +914,7 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
               return { ...m, generating: false, content: m.content || "Video was still processing. It may have completed—check Asset Collection or generate again." };
             })
           );
+          if (shouldRefresh) router.refresh();
         }).catch(() => {});
       }
     });
@@ -677,9 +998,42 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
   }, [workspaceId, projectId, messages]);
 
   useEffect(() => {
+    if (fullCampaignGeneration.status !== "generating") return;
+    const tick = 100;
+    const id = setInterval(() => {
+      setFullCampaignGeneration((prev) => {
+        const next = prev.steps.map((s) => {
+          if (s.status !== "in_progress") return s;
+          const current = s.progress ?? 0;
+          if (current >= 94) return s;
+          const delta = current < 50 ? 3.5 : 0.75;
+          return { ...s, progress: Math.min(94, current + delta) };
+        });
+        return { ...prev, steps: next };
+      });
+    }, tick);
+    return () => clearInterval(id);
+  }, [fullCampaignGeneration.status]);
+
+  useEffect(() => {
     if (!hydrated) return;
+    if (messages.length === 0 && !loadedFromDbRef.current) return;
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     saveTimeoutRef.current = setTimeout(() => {
+      const campaignState: SavedCampaignState | null =
+        fullCampaignGeneration.status === "complete" && fullCampaignResults
+          ? {
+              generation: {
+                status: "complete",
+                steps: fullCampaignGeneration.steps.map(({ id, label, subLabel, credits }) => ({ id, label, subLabel, credits })),
+                creditsUsed: fullCampaignGeneration.creditsUsed,
+                brandName: fullCampaignGeneration.brandName,
+                campaignGoal: fullCampaignGeneration.campaignGoal,
+                imageStyleChosen: fullCampaignGeneration.imageStyleChosen ?? null,
+              },
+              results: fullCampaignResults,
+            }
+          : null;
       saveCreativeStudioChatToSupabase(workspaceId, projectId, {
         messages,
         prompt,
@@ -692,6 +1046,7 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
         likedSnippets,
         dislikedSnippets,
         selectedEmailTemplateId,
+        campaignState,
       });
     }, 500);
     return () => {
@@ -712,6 +1067,8 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
     likedSnippets,
     dislikedSnippets,
     selectedEmailTemplateId,
+    fullCampaignGeneration,
+    fullCampaignResults,
   ]);
 
   useEffect(() => {
@@ -823,6 +1180,15 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
     setPendingFiles((prev) => [...prev, ...files].slice(0, 10));
     e.target.value = "";
   }
+
+  /** When opening Full Campaign with existing pending images, use first as product photo. */
+  useEffect(() => {
+    if (selectedTool !== "full" || pendingFiles.length === 0) return;
+    const first = pendingFiles[0];
+    if (!first?.type.startsWith("image/")) return;
+    setFullCampaignProductImage(first);
+    setPendingFiles([]);
+  }, [selectedTool, pendingFiles.length]);
 
   function removePendingFile(idx: number) {
     setPendingFiles((prev) => prev.filter((_, i) => i !== idx));
@@ -1029,8 +1395,11 @@ ${bodyRows}
                 }))
               )
             : [];
+        const primaryHex = activeProject?.brand_colors?.[0] ?? "#000000";
+        const secondaryHex = activeProject?.brand_colors?.[1] ?? "#000000";
+        const imagePrompt = buildImagePromptWithAdStyle(userContent, imageOptions, adStylesConfig, primaryHex, secondaryHex);
         const body: Record<string, unknown> = {
-          prompt: userContent,
+          prompt: imagePrompt,
           aspectRatio: imageOptions.aspectRatio,
           imageSize: imageOptions.resolution,
           temperature: imageOptions.temperature,
@@ -1065,9 +1434,10 @@ ${bodyRows}
           const m = n[placeholderIndex];
           if (m && m.role === "assistant") {
             const fromApi = genRes.generation?.text_response?.trim();
+            const keepContent = m.content?.trim();
             n[placeholderIndex] = {
               ...m,
-              content: fromApi ? fromApi : (m.content ?? ""),
+              content: keepContent ? keepContent : (fromApi ?? ""),
               imageUrls: urls,
               generationId: genRes.generation?.id,
               ...(genIds && { generationIds: genIds }),
@@ -1077,6 +1447,8 @@ ${bodyRows}
           queueMicrotask(() => flushSave(n));
           return n;
         });
+        const imageIdsToSave = genIds?.length ? genIds : (genRes.generation?.id ? [genRes.generation.id] : []);
+        imageIdsToSave.forEach((id) => handleSaveToCollection(id).catch(() => {}));
         router.refresh();
       } else if (intent === "video") {
         if (!videoEnabled) {
@@ -1173,6 +1545,8 @@ ${bodyRows}
           queueMicrotask(() => flushSave(n));
           return n;
         });
+        const emailImageIdsToSave = emailGenIds.length ? emailGenIds : (emailRes.generation?.id ? [emailRes.generation.id] : []);
+        emailImageIdsToSave.forEach((id) => handleSaveToCollection(id).catch(() => {}));
         setGenerating(false);
         router.refresh();
       } else {
@@ -1294,6 +1668,7 @@ ${bodyRows}
             return next;
           });
           setGenerating(false);
+          handleSaveVideoToCollection(generationId).catch(() => {});
           router.refresh();
           return;
         }
@@ -1367,7 +1742,7 @@ ${bodyRows}
     const text = prompt.trim();
     if (!text || generating) return;
 
-    const hasCreateTool = selectedTool === "image" || selectedTool === "video" || selectedTool === "email";
+    const hasCreateTool = selectedTool === "image" || selectedTool === "video" || selectedTool === "email" || selectedTool === "full";
     if (hasCreateTool === false) {
       // Reply context: capture and clear so chip disappears
       const replyToMessage =
@@ -1407,7 +1782,14 @@ ${bodyRows}
         timestamp: Date.now(),
         tool: null,
         ...(attachedUrls.length > 0 && { attachedImageUrls: attachedUrls }),
+        ...(isFullCampaignSendRef.current && { fullCampaignRequest: true }),
       };
+      if (isFullCampaignSendRef.current) {
+        fullCampaignLastUserMsgIndexRef.current = messages.length;
+        setCurrentCampaignMsgIndex(messages.length);
+        setSelectedCampaignMsgIndex(null);
+        isFullCampaignSendRef.current = false;
+      }
       const placeholderAssistant: CreativeMessage = {
         role: "assistant",
         content: "",
@@ -1450,8 +1832,14 @@ ${bodyRows}
           const next = [...prev];
           const m = next[msgIndex];
           if (m && m.role === "assistant") {
-            next[msgIndex] = { ...m, content: res.content ?? "", tool: doImageEdit ? "image" : intent ?? null };
+            next[msgIndex] = {
+              ...m,
+              content: res.content ?? "",
+              tool: doImageEdit ? "image" : intent ?? null,
+              generating: false,
+            };
           }
+          queueMicrotask(() => flushSave(next));
           return next;
         });
         if (doImageEdit) setSelectedTool("image");
@@ -1472,8 +1860,11 @@ ${bodyRows}
                 )
               : [];
           const isReplyToImage = replyTo?.hasImage && replyToMessage?.generationId;
+          const primaryHex = activeProject?.brand_colors?.[0] ?? "#000000";
+          const secondaryHex = activeProject?.brand_colors?.[1] ?? "#000000";
+          const imagePrompt = buildImagePromptWithAdStyle(text, imageOptions, adStylesConfig, primaryHex, secondaryHex);
           const body: Record<string, unknown> = {
-            prompt: text,
+            prompt: imagePrompt,
             aspectRatio: imageOptions.aspectRatio,
             imageSize: imageOptions.resolution,
             temperature: imageOptions.temperature,
@@ -1513,9 +1904,10 @@ ${bodyRows}
             const m = next[msgIndex];
             if (m && m.role === "assistant") {
               const fromApi = genRes.generation?.text_response?.trim();
+              const keepContent = m.content?.trim();
               next[msgIndex] = {
                 ...m,
-                content: fromApi ? fromApi : (m.content ?? ""),
+                content: keepContent ? keepContent : (fromApi ?? ""),
                 imageUrls: urls,
                 generationId: genRes.generation?.id,
                 ...(genIds && { generationIds: genIds }),
@@ -1525,6 +1917,8 @@ ${bodyRows}
             queueMicrotask(() => flushSave(next));
             return next;
           });
+          const replyImageIdsToSave = genIds?.length ? genIds : (genRes.generation?.id ? [genRes.generation.id] : []);
+          replyImageIdsToSave.forEach((id) => handleSaveToCollection(id).catch(() => {}));
           setPendingFiles([]);
         } else if (intent === "video") {
           if (!videoEnabled) {
@@ -1621,6 +2015,8 @@ ${bodyRows}
             queueMicrotask(() => flushSave(next));
             return next;
           });
+          const replyEmailIdsToSave = emailGenIds.length ? emailGenIds : (emailRes.generation?.id ? [emailRes.generation.id] : []);
+          replyEmailIdsToSave.forEach((id) => handleSaveToCollection(id).catch(() => {}));
         } else {
           setMessages((prev) => {
             const next = [...prev];
@@ -1713,8 +2109,11 @@ ${bodyRows}
                 }))
               )
             : [];
+        const primaryHex = activeProject?.brand_colors?.[0] ?? "#000000";
+        const secondaryHex = activeProject?.brand_colors?.[1] ?? "#000000";
+        const imagePrompt = buildImagePromptWithAdStyle(text, imageOptions, adStylesConfig, primaryHex, secondaryHex);
         const body: Record<string, unknown> = {
-          prompt: text,
+          prompt: imagePrompt,
           aspectRatio: imageOptions.aspectRatio,
           imageSize: imageOptions.resolution,
           temperature: imageOptions.temperature,
@@ -1753,9 +2152,10 @@ ${bodyRows}
           const m = next[msgIndex];
           if (m && m.role === "assistant") {
             const fromApi = res.generation?.text_response?.trim();
+            const keepContent = m.content?.trim();
             next[msgIndex] = {
               ...m,
-              content: fromApi ? fromApi : (m.content ?? ""),
+              content: keepContent ? keepContent : (fromApi ?? ""),
               imageUrls: urls,
               generationId: res.generation?.id,
               ...(genIds && { generationIds: genIds }),
@@ -1765,6 +2165,8 @@ ${bodyRows}
           queueMicrotask(() => flushSave(next));
           return next;
         });
+        const regenImageIdsToSave = genIds?.length ? genIds : (res.generation?.id ? [res.generation.id] : []);
+        regenImageIdsToSave.forEach((id) => handleSaveToCollection(id).catch(() => {}));
         setPendingFiles([]);
         router.refresh();
       } else if (selectedTool === "video") {
@@ -1862,6 +2264,8 @@ ${bodyRows}
           queueMicrotask(() => flushSave(next));
           return next;
         });
+        const regenEmailIdsToSave = genIds.length ? genIds : (res.generation?.id ? [res.generation.id] : []);
+        regenEmailIdsToSave.forEach((id) => handleSaveToCollection(id).catch(() => {}));
         router.refresh();
       }
     } catch (err) {
@@ -1890,7 +2294,7 @@ ${bodyRows}
     !imageOptions.carousel ||
     imageOptions.numberOfImages < 2 ||
     imageSlidePrompts.slice(0, imageOptions.numberOfImages).every((p) => p.trim().length > 0);
-  const hasCreateTool = selectedTool === "image" || selectedTool === "video" || selectedTool === "email";
+  const hasCreateTool = selectedTool === "image" || selectedTool === "video" || selectedTool === "email" || selectedTool === "full";
   const generationCost =
     selectedTool === "image"
       ? imageCreditCost(imageOptions.resolution) *
@@ -1899,17 +2303,24 @@ ${bodyRows}
         ? videoCreditCost(videoOptions.resolution)
         : selectedTool === "email"
           ? emailCreditCost(emailOptions.imageQuality, emailOptions.numberOfImages)
-          : 0;
+          : selectedTool === "full"
+            ? 0
+            : 0;
+  const fullCampaignFormValid =
+    fullCampaignProductImage != null &&
+    fullCampaignGoal != null;
   const canSend =
-    prompt.trim().length > 0 &&
-    (hasCreateTool
-      ? (selectedTool === "email"
-          ? true
-          : imageCarouselValid &&
-            (selectedTool !== "video" ||
-              continuationSlots === 0 ||
-              continuationPrompts.slice(0, continuationSlots).every((p) => p.trim().length > 0)))
-      : true);
+    selectedTool === "full"
+      ? fullCampaignFormValid
+      : prompt.trim().length > 0 &&
+        (hasCreateTool
+          ? (selectedTool === "email"
+              ? true
+              : imageCarouselValid &&
+                (selectedTool !== "video" ||
+                  continuationSlots === 0 ||
+                  continuationPrompts.slice(0, continuationSlots).every((p) => p.trim().length > 0)))
+          : true);
 
   const hasMessages = messages.length > 0;
 
@@ -1943,33 +2354,66 @@ ${bodyRows}
       <div>
         <div className="flex items-center gap-1.5 mb-2">
           <Monitor className="size-3.5" />
-          <span className="text-xs font-medium">Quality</span>
+          <span className="text-xs font-medium">Ad Style</span>
         </div>
         <div className="flex flex-wrap gap-1.5">
-          {IMAGE_RESOLUTIONS.map((r) => (
+          {[
+            { id: "none" as const, name: "None / Custom" },
+            { id: "luxury_editorial" as const, name: "Luxury Editorial" },
+            { id: "element_explosion" as const, name: "Element Explosion" },
+            { id: "product_in_action" as const, name: "Product In Action" },
+          ].map((s) => (
             <button
-              key={r.value}
+              key={s.id}
               type="button"
-              onClick={() => setImageOptions((o) => ({ ...o, resolution: r.value }))}
+              onClick={() => setImageOptions((o) => ({ ...o, adStyle: s.id }))}
               className={cn(
                 "px-2.5 py-1 rounded-lg text-xs font-medium cursor-pointer",
-                imageOptions.resolution === r.value
+                imageOptions.adStyle === s.id
                   ? "bg-primary text-white"
                   : "bg-secondary/60 text-muted-foreground hover:text-foreground"
               )}
             >
-              {r.label}
+              {s.name}
             </button>
           ))}
         </div>
       </div>
       <div>
         <div className="flex items-center gap-1.5 mb-2">
+          <Monitor className="size-3.5" />
+          <span className="text-xs font-medium">Quality</span>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {IMAGE_RESOLUTIONS.map((r) => (
+            <div key={r.value} className="flex flex-col gap-0.5">
+              <button
+                type="button"
+                onClick={() => setImageOptions((o) => ({ ...o, resolution: r.value }))}
+                className={cn(
+                  "px-2.5 py-1 rounded-lg text-xs font-medium cursor-pointer w-full text-left",
+                  imageOptions.resolution === r.value
+                    ? "bg-primary text-white"
+                    : "bg-secondary/60 text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {r.label}
+              </button>
+              {r.note && imageOptions.resolution === r.value && (
+                <p className="text-[10px] text-muted-foreground px-0.5">{r.note}</p>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+      <div>
+        <div className="flex items-center gap-1.5 mb-2">
           <SlidersHorizontal className="size-3.5" />
-          <span className="text-xs font-medium">Style Variation</span>
+          <span className="text-xs font-medium">Creativity</span>
         </div>
         <div className="space-y-2">
           <div className="flex items-center gap-3">
+            <span className="text-[10px] text-muted-foreground shrink-0">Consistent</span>
             <input
               type="range"
               min={TEMPERATURE_MIN}
@@ -1984,17 +2428,15 @@ ${bodyRows}
               }
               className="flex-1 h-2 rounded-full appearance-none bg-secondary/60 cursor-pointer accent-primary [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:size-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:shadow-sm"
             />
-            <span className="text-xs font-medium tabular-nums w-8 shrink-0">
-              {imageOptions.temperature.toFixed(1)}
-            </span>
+            <span className="text-[10px] text-muted-foreground shrink-0">Creative</span>
           </div>
-          <p className="text-[10px] text-muted-foreground">
-            Lower = more consistent, higher = more creative
+          <p className="text-[10px] text-muted-foreground text-center">
+            {imageOptions.temperature.toFixed(1)}
           </p>
         </div>
       </div>
       <div>
-        <span className="text-xs font-medium mb-2 block">Variations</span>
+        <span className="text-xs font-medium mb-2 block">How many versions?</span>
         <div className="flex flex-wrap gap-1.5">
           {[1, 2, 3, 4].map((n) => (
             <button
@@ -2019,19 +2461,6 @@ ${bodyRows}
           ))}
         </div>
       </div>
-      {imageOptions.numberOfImages >= 2 && (
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={imageOptions.carousel}
-            onChange={(e) =>
-              setImageOptions((o) => ({ ...o, carousel: e.target.checked }))
-            }
-            className="rounded border-border bg-background text-primary focus:ring-primary cursor-pointer"
-          />
-          <span className="text-xs">One description per slide (Instagram/Facebook carousel)</span>
-        </label>
-      )}
     </div>
   );
 
@@ -2112,7 +2541,7 @@ ${bodyRows}
   const emailOptionsPanel = (
     <div className="flex flex-col gap-4 p-2">
       <div>
-        <span className="text-xs font-medium block mb-2">Number of images</span>
+        <span className="text-xs font-medium block mb-2">Creative variations</span>
         <div className="flex flex-wrap gap-1.5">
           {EMAIL_NUMBER_OF_IMAGES.map((r) => (
             <button
@@ -2138,19 +2567,23 @@ ${bodyRows}
         </div>
         <div className="flex flex-wrap gap-1.5">
           {EMAIL_IMAGE_QUALITIES.map((r) => (
-            <button
-              key={r.value}
-              type="button"
-              onClick={() => setEmailOptions((o) => ({ ...o, imageQuality: r.value }))}
-              className={cn(
-                "px-2.5 py-1 rounded-lg text-xs font-medium cursor-pointer",
-                emailOptions.imageQuality === r.value
-                  ? "bg-primary text-white"
-                  : "bg-secondary/60 text-muted-foreground hover:text-foreground"
+            <div key={r.value} className="flex flex-col gap-0.5">
+              <button
+                type="button"
+                onClick={() => setEmailOptions((o) => ({ ...o, imageQuality: r.value }))}
+                className={cn(
+                  "px-2.5 py-1 rounded-lg text-xs font-medium cursor-pointer w-full text-left",
+                  emailOptions.imageQuality === r.value
+                    ? "bg-primary text-white"
+                    : "bg-secondary/60 text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {r.label}
+              </button>
+              {r.note && emailOptions.imageQuality === r.value && (
+                <p className="text-[10px] text-muted-foreground px-0.5">{r.note}</p>
               )}
-            >
-              {r.label}
-            </button>
+            </div>
           ))}
         </div>
       </div>
@@ -2164,7 +2597,61 @@ ${bodyRows}
         ? videoOptionsPanel
         : selectedTool === "email"
           ? emailOptionsPanel
-          : (
+          : selectedTool === "full"
+            ? (
+                <div className="flex flex-col gap-4 p-3 text-[#000000] dark:text-white">
+                  <div>
+                    <label className="block mb-1.5 text-[11px] font-semibold uppercase tracking-[0.4px] text-[#888]">
+                      Campaign goal
+                    </label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {FULL_CAMPAIGN_GOALS.map((g) => (
+                        <button
+                          key={g}
+                          type="button"
+                          onClick={() => setFullCampaignGoal(fullCampaignGoal === g ? null : g)}
+                          className={cn(
+                            "cursor-pointer h-[30px] shrink-0 rounded-full border-[1.5px] px-3 text-xs transition-colors",
+                            fullCampaignGoal === g
+                              ? "border-[#007aff] bg-[#007aff] font-semibold text-[#ffffff]"
+                              : "border-[#e5e7eb] bg-white text-[#555] hover:border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300"
+                          )}
+                        >
+                          {g}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block mb-1.5 text-[11px] font-semibold uppercase tracking-[0.4px] text-[#888]">
+                      Creative style
+                    </label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {[
+                        { id: "auto", name: "Auto (Claude decides)" },
+                        { id: "Luxury Editorial", name: "Luxury Editorial" },
+                        { id: "Element Explosion", name: "Element Explosion" },
+                        { id: "Product In Action", name: "Product In Action" },
+                      ].map((s) => (
+                        <button
+                          key={s.id}
+                          type="button"
+                          onClick={() => setFullCampaignPreferredStyle(s.id)}
+                          className={cn(
+                            "cursor-pointer h-[30px] shrink-0 rounded-full border-[1.5px] px-3 text-xs transition-colors",
+                            fullCampaignPreferredStyle === s.id
+                              ? "border-[#007aff] bg-[#007aff] font-semibold text-[#ffffff]"
+                              : "border-[#e5e7eb] bg-white text-[#555] hover:border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300"
+                          )}
+                        >
+                          {s.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )
+            : (
               <div className="p-4 text-center text-sm text-muted-foreground">
                 Select a tool to see options.
               </div>
@@ -2187,6 +2674,13 @@ ${bodyRows}
     setDislikedSnippets([]);
     setSelectedEmailTemplateId(null);
     setReplyingTo(null);
+    setFullCampaignGeneration({ status: "idle", steps: [], creditsUsed: 0, brandName: "", campaignGoal: null, videoCountdownSeconds: null, imageStyleChosen: null });
+    setFullCampaignResults(null);
+    setFullCampaignSwipeSlide(0);
+    setCampaignResultsByMsgIndex({});
+    setSelectedCampaignMsgIndex(null);
+    setCurrentCampaignMsgIndex(null);
+    fullCampaignLastUserMsgIndexRef.current = null;
     const clearedState = {
       messages: [],
       prompt: "",
@@ -2199,12 +2693,538 @@ ${bodyRows}
       likedSnippets: [] as string[],
       dislikedSnippets: [] as string[],
       selectedEmailTemplateId: null as EmailTemplateId | null,
+      campaignState: null,
     };
     saveCreativeStudioChatToSupabase(workspaceId, projectId, clearedState);
   }
 
+  async function handleFullCampaignGenerate() {
+    const hasProduct = fullCampaignProductImage != null;
+    const hasGoal = fullCampaignGoal != null;
+    if (!hasProduct || !hasGoal) {
+      setFullCampaignShake(true);
+      setTimeout(() => setFullCampaignShake(false), 400);
+      return;
+    }
+
+    const brandName = activeProject?.name ?? "";
+    if (!brandName) {
+      toast.error("Your brand profile is incomplete. Add your brand name to continue.");
+      return;
+    }
+
+    const campaignGoal = fullCampaignGoal!;
+    const platformsCopy = ["Meta feed", "Stories / Reels", "Email"];
+    const productImage = fullCampaignProductImage;
+    const productDesc = fullCampaignProductDescription.trim();
+
+    setFullCampaignProductImage(null);
+    setFullCampaignGoal(null);
+
+    const campaignUserMsg: CreativeMessage = {
+      role: "user",
+      content: `Full campaign: ${campaignGoal} for ${brandName} on ${platformsCopy.join(", ")}`,
+      timestamp: Date.now(),
+      fullCampaignRequest: true,
+    };
+    setMessages((prev) => [...prev, campaignUserMsg]);
+
+    setFullCampaignGeneration({
+      status: "generating",
+      steps: FULL_CAMPAIGN_STEPS.map((s) => ({ ...s, status: "pending" as FullCampaignStepStatus })),
+      imageStyleChosen: null,
+      creditsUsed: 0,
+      brandName,
+      campaignGoal,
+      videoCountdownSeconds: null,
+      generationUnavailableRetryable: false,
+    });
+    setFullCampaignResults(null);
+    setFullCampaignSwipeSlide(0);
+    setSelectedTool(null);
+
+    let productImageBase64: string | undefined;
+    let productImageMimeType: string | undefined;
+    if (productImage) {
+      try {
+        const buf = await productImage.arrayBuffer();
+        productImageBase64 = btoa(
+          new Uint8Array(buf).reduce((s, b) => s + String.fromCharCode(b), "")
+        );
+        productImageMimeType = productImage.type === "image/webp" ? "image/jpeg" : productImage.type || "image/jpeg";
+      } catch {
+        toast.error("Failed to read product image");
+      }
+    }
+
+    const supabase = createSupabaseBrowserClient();
+    const { data: { session } } = await supabase.auth.getSession();
+    const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4001";
+
+    try {
+      const response = await fetch(
+        `${API_URL}/workspaces/${workspaceId}/projects/${projectId}/campaign/generate`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(session?.access_token && { Authorization: `Bearer ${session.access_token}` }),
+          },
+          body: JSON.stringify({
+            productDescription: productDesc || undefined,
+            productImage: productImageBase64,
+            productImageMimeType,
+            campaignGoal,
+            platforms: platformsCopy,
+            preferredStyle: fullCampaignPreferredStyle === "auto" ? undefined : fullCampaignPreferredStyle,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        const errMsg = (body as { error?: string })?.error || `Campaign generation failed (${response.status})`;
+        toast.error(errMsg);
+        setFullCampaignGeneration((prev) => ({ ...prev, status: "complete" }));
+        return;
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) {
+        toast.error("Failed to connect to campaign stream");
+        setFullCampaignGeneration((prev) => ({ ...prev, status: "complete" }));
+        return;
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      const updateStep = (taskId: string, status: FullCampaignStepStatus, timeTaken?: number) => {
+        setFullCampaignGeneration((prev) => ({
+          ...prev,
+          steps: prev.steps.map((s) =>
+            s.id === taskId
+              ? { ...s, status, ...(timeTaken != null && { timeTaken }), progress: status === "done" || status === "failed" ? 100 : status === "in_progress" ? 0 : s.progress }
+              : s
+          ),
+        }));
+      };
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const chunks = buffer.split("\n\n");
+        buffer = chunks.pop()!;
+
+        for (const chunk of chunks) {
+          if (!chunk.startsWith("data: ")) continue;
+          try {
+            const event = JSON.parse(chunk.slice(6)) as Record<string, unknown>;
+            const task = event.task as string;
+            const status = event.status as string;
+
+            if (status === "in_progress") {
+              updateStep(task, "in_progress");
+            } else if (status === "complete") {
+              updateStep(task, "done", event.time_taken as number | undefined);
+              setFullCampaignGeneration((prev) => ({
+                ...prev,
+                creditsUsed: prev.creditsUsed + ((event.credits_used as number) ?? 0),
+                ...(task === "claude_json" && event.image_style_chosen != null && { imageStyleChosen: String(event.image_style_chosen) }),
+              }));
+
+              if (task === "meta_feed_image" && event.result_url) {
+                setFullCampaignResults((prev) => ({ ...prev, metaImageUrl: event.result_url as string }));
+              } else if (task === "meta_feed_image_1" && event.result_url) {
+                setFullCampaignResults((prev) => {
+                  const urls = [...(prev?.metaImageUrls ?? [])];
+                  urls[0] = event.result_url as string;
+                  return { ...prev, metaImageUrls: urls, metaImageUrl: urls[0] };
+                });
+              } else if (task === "meta_feed_image_2" && event.result_url) {
+                setFullCampaignResults((prev) => {
+                  const urls = [...(prev?.metaImageUrls ?? [])];
+                  urls[1] = event.result_url as string;
+                  return { ...prev, metaImageUrls: urls };
+                });
+              } else if (task === "meta_feed_image_3" && event.result_url) {
+                setFullCampaignResults((prev) => {
+                  const urls = [...(prev?.metaImageUrls ?? [])];
+                  urls[2] = event.result_url as string;
+                  return { ...prev, metaImageUrls: urls };
+                });
+              } else if (task === "story_image" && event.result_url) {
+                setFullCampaignResults((prev) => ({ ...prev, storyImageUrl: event.result_url as string }));
+              } else if (task === "story_image_1" && event.result_url) {
+                setFullCampaignResults((prev) => {
+                  const urls = [...(prev?.storyImageUrls ?? [])];
+                  urls[0] = event.result_url as string;
+                  return { ...prev, storyImageUrls: urls, storyImageUrl: urls[0] };
+                });
+              } else if (task === "story_image_2" && event.result_url) {
+                setFullCampaignResults((prev) => {
+                  const urls = [...(prev?.storyImageUrls ?? [])];
+                  urls[1] = event.result_url as string;
+                  return { ...prev, storyImageUrls: urls };
+                });
+              } else if (task === "story_image_3" && event.result_url) {
+                setFullCampaignResults((prev) => {
+                  const urls = [...(prev?.storyImageUrls ?? [])];
+                  urls[2] = event.result_url as string;
+                  return { ...prev, storyImageUrls: urls };
+                });
+              } else if (task === "video_16x9" && event.result_url) {
+                setFullCampaignResults((prev) => ({ ...prev, videoUrl16x9: event.result_url as string }));
+              } else if (task === "video_9x16" && event.result_url) {
+                setFullCampaignResults((prev) => ({ ...prev, videoUrl9x16: event.result_url as string }));
+              } else if (task === "email_html" && event.email_html) {
+                const copies = (event.email_copies as Record<string, string>[] | undefined) ?? (event.email_copy ? [event.email_copy as Record<string, string>, event.email_copy as Record<string, string>] : []);
+                setFullCampaignResults((prev) => ({
+                  ...prev,
+                  emailHtml: event.email_html as string,
+                  emailHtmls: (event.email_htmls as string[] | undefined) ?? (event.email_html ? [event.email_html as string, event.email_html as string] : []),
+                  emailCopy: (event.email_copies as Record<string, string>[] | undefined)?.[0] ?? (event.email_copy as Record<string, string> | undefined),
+                  emailCopies: copies.length >= 2 ? copies : [copies[0] ?? {}, copies[0] ?? {}],
+                }));
+              } else if (task === "social_copy" && event.data) {
+                setFullCampaignResults((prev) => ({
+                  ...prev,
+                  socialCopy: event.data as typeof prev extends null ? never : NonNullable<typeof prev>["socialCopy"],
+                }));
+              } else if (task === "email_image_1" && event.result_url) {
+                setFullCampaignResults((prev) => ({
+                  ...prev,
+                  emailImageUrls: [event.result_url as string, ...(prev?.emailImageUrls?.slice(1) ?? [])],
+                }));
+              } else if (task === "email_image_2" && event.result_url) {
+                setFullCampaignResults((prev) => ({
+                  ...prev,
+                  emailImageUrls: [(prev?.emailImageUrls?.[0] ?? ""), event.result_url as string, ...(prev?.emailImageUrls?.slice(2) ?? [])],
+                }));
+              } else if (task === "email_image_3" && event.result_url) {
+                setFullCampaignResults((prev) => ({
+                  ...prev,
+                  emailImageUrls: [(prev?.emailImageUrls?.[0] ?? ""), (prev?.emailImageUrls?.[1] ?? ""), event.result_url as string],
+                }));
+              } else if (task === "campaign_complete") {
+                setFullCampaignResults((prev) => ({
+                  ...prev,
+                  campaignId: event.campaign_id as string,
+                }));
+              }
+            } else if (status === "failed") {
+              updateStep(task, "failed");
+              const retryable = event.retryable === true || event.code === "generation_unavailable";
+              if (retryable) {
+                setFullCampaignGeneration((prev) => ({ ...prev, generationUnavailableRetryable: true }));
+              }
+              if (task === "meta_feed_image_1" || task === "meta_feed_image_2" || task === "meta_feed_image_3") {
+                const idx = task === "meta_feed_image_1" ? 0 : task === "meta_feed_image_2" ? 1 : 2;
+                setFullCampaignResults((prev) => {
+                  const failed = [...(prev?.metaFeedFailed ?? [false, false, false])];
+                  failed[idx] = true;
+                  return { ...prev, metaFeedFailed: failed };
+                });
+              } else if (task === "story_image_1" || task === "story_image_2" || task === "story_image_3") {
+                const idx = task === "story_image_1" ? 0 : task === "story_image_2" ? 1 : 2;
+                setFullCampaignResults((prev) => {
+                  const failed = [...(prev?.storyFailed ?? [false, false, false])];
+                  failed[idx] = true;
+                  return { ...prev, storyFailed: failed };
+                });
+              } else if (task === "email_html" && event.email_copy) {
+                const copy = event.email_copy as Record<string, string>;
+                const copies = (event.email_copies as Record<string, string>[] | undefined) ?? [copy, copy];
+                setFullCampaignResults((prev) => ({
+                  ...prev,
+                  emailCopy: copy,
+                  emailCopies: copies.length >= 2 ? copies : [copy, copy],
+                }));
+              }
+            }
+          } catch {
+            // skip unparseable chunks
+          }
+        }
+      }
+
+      setFullCampaignGeneration((prev) => ({ ...prev, status: "complete" }));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Campaign generation failed";
+      toast.error(msg);
+      setFullCampaignGeneration((prev) => ({ ...prev, status: "complete" }));
+    }
+  }
+
+  /* Full campaign: product upload only in chat input; goal + style are in Options panel */
+  const fullCampaignProductInput = (
+    <div className="flex flex-col gap-2 p-[14px] text-[#000000] dark:text-white">
+      <label className="block text-[11px] font-semibold uppercase tracking-[0.4px] text-[#888]">
+        Product (required) — upload to generate
+      </label>
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          ref={fullCampaignFileInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          className="sr-only"
+          aria-label="Upload product image"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) {
+              if (fullCampaignProductImage != null) toast.success("Product photo updated");
+              setFullCampaignProductImage(file);
+            }
+            e.target.value = "";
+          }}
+        />
+        <button
+          type="button"
+          onClick={() => fullCampaignFileInputRef.current?.click()}
+          className="cursor-pointer shrink-0 h-[34px] rounded-lg border-[1.5px] border-[#d1d5db] bg-white dark:bg-gray-800 dark:border-gray-600 px-[14px] py-[7px] text-xs text-foreground hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+        >
+          Upload image (JPG/PNG/WEBP)
+        </button>
+        {fullCampaignProductPreviewUrl && (
+          <div className="relative shrink-0 h-[34px] w-[34px] rounded-lg border border-[#e5e7eb] dark:border-gray-600 overflow-hidden bg-gray-100 dark:bg-gray-800">
+            <img src={fullCampaignProductPreviewUrl} alt="" className="h-full w-full object-cover" />
+            <button
+              type="button"
+              onClick={() => setFullCampaignProductImage(null)}
+              className="cursor-pointer absolute top-0.5 right-0.5 size-4 rounded-full bg-black/60 hover:bg-black/80 text-white flex items-center justify-center"
+              aria-label="Remove image"
+            >
+              <X className="size-2.5" />
+            </button>
+          </div>
+        )}
+      </div>
+      {!fullCampaignProductImage && (
+        <p className="text-[11px] text-muted-foreground">No image — add a product photo to generate.</p>
+      )}
+    </div>
+  );
+
+  const renderCampaignCard = (msgIndex: number) => {
+    const isCurrent = currentCampaignMsgIndex === msgIndex;
+    const saved = campaignResultsByMsgIndex[msgIndex];
+    const isComplete = isCurrent ? fullCampaignGeneration.status === "complete" : !!saved;
+    const onTap = () => {
+      if (!isComplete) return;
+      setSelectedCampaignMsgIndex(msgIndex);
+      fullCampaignResultsRef.current?.scrollIntoView({ behavior: "smooth" });
+    };
+    const brandLabel = isCurrent ? fullCampaignGeneration.brandName : (saved ? undefined : "");
+    const goalLabel = isCurrent ? fullCampaignGeneration.campaignGoal : (saved ? undefined : "");
+    if (!isCurrent && !saved) return null;
+    return (
+      <div
+        role={isComplete ? "button" : undefined}
+        tabIndex={isComplete ? 0 : undefined}
+        onClick={isComplete ? onTap : undefined}
+        onKeyDown={isComplete ? (e) => e.key === "Enter" && onTap() : undefined}
+        className={cn(
+          "w-full max-w-2xl rounded-xl border border-[#e5e7eb] bg-[#fafafa] overflow-hidden text-left",
+          isComplete && "cursor-pointer hover:bg-[#f5f5f5] transition-colors"
+        )}
+      >
+        <div className="h-[3px] w-full bg-gray-200 overflow-hidden">
+          <div
+            className="h-full transition-[width] duration-300 ease-out"
+            style={{
+              width: isCurrent && fullCampaignGeneration.status !== "complete"
+                ? `${(fullCampaignGeneration.steps.filter((s) => s.status === "done").length / Math.max(1, fullCampaignGeneration.steps.length)) * 100}%`
+                : "100%",
+              background: isComplete
+                ? "linear-gradient(90deg, #22c55e 0%, #22c55e 100%)"
+                : "linear-gradient(90deg, #3b82f6 0%, #8b5cf6 100%)",
+            }}
+          />
+        </div>
+        <div className="p-4">
+          <h3 className="text-[13px] font-medium text-[#333]">
+            {isComplete ? "✅ Campaign ready — tap to view" : "✦ Generating your campaign..."}
+          </h3>
+          <p className="mt-0.5 text-[11px] text-gray-500">
+            {brandLabel ?? ""}
+            {goalLabel ? ` · ${goalLabel}` : ""}
+          </p>
+          {isCurrent && (
+            <>
+              <div className="mt-3 space-y-2">
+                {fullCampaignGeneration.steps.map((step) => (
+                  <div key={step.id} className="flex items-center gap-3">
+                    <span className="flex shrink-0 items-center justify-center w-5 h-5">
+                      {step.status === "pending" && (
+                        <span className="size-2.5 rounded-full border-2 border-[#d1d5db]" aria-hidden />
+                      )}
+                      {step.status === "in_progress" && (
+                        <span className="relative flex size-5 items-center justify-center">
+                          <Spinner className="size-4 text-[#3b82f6]" />
+                          {typeof step.progress === "number" && (
+                            <span className="absolute -bottom-4 left-0 right-0 text-[10px] text-[#3b82f6] tabular-nums">
+                              {Math.round(step.progress)}%
+                            </span>
+                          )}
+                        </span>
+                      )}
+                      {step.status === "done" && (
+                        <span className="flex size-5 items-center justify-center rounded-full bg-[#dcfce7]">
+                          <Check className="size-3 text-green-600" strokeWidth={2.5} />
+                        </span>
+                      )}
+                      {step.status === "failed" && (
+                        <span className="flex size-5 items-center justify-center rounded-full bg-red-100 text-red-600">
+                          <X className="size-3" />
+                        </span>
+                      )}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className={cn("text-[13px]", step.status === "pending" ? "text-[#aaa]" : "text-[#333]")}>
+                        {step.status === "failed" && step.id === "claude_json" && fullCampaignGeneration.generationUnavailableRetryable
+                          ? "Our AI is busy right now. Tap to try again in a moment."
+                          : step.id === "meta_feed_image_1" && fullCampaignGeneration.imageStyleChosen
+                            ? `${fullCampaignGeneration.imageStyleChosen} — Feed (1:1)`
+                            : step.id === "story_image_1" && fullCampaignGeneration.imageStyleChosen
+                              ? `${fullCampaignGeneration.imageStyleChosen} — Story (9:16)`
+                              : step.label}
+                      </p>
+                      <p className="text-[11px] text-gray-500">{step.subLabel}</p>
+                    </div>
+                    <div className="shrink-0 text-[11px] text-gray-500">
+                      {step.status === "done" && step.timeTaken != null && `${step.timeTaken.toFixed(1)}s`}
+                      {step.status === "in_progress" && step.id === "video" && fullCampaignGeneration.videoCountdownSeconds != null && `~${fullCampaignGeneration.videoCountdownSeconds}s remaining`}
+                      {step.status === "failed" && (
+                        <button
+                          type="button"
+                          className="text-[#3b82f6] hover:underline"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (step.id === "claude_json" && fullCampaignGeneration.generationUnavailableRetryable) {
+                              handleFullCampaignGenerate();
+                            }
+                          }}
+                        >
+                          Retry
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-3 pt-3 border-t border-[#e5e7eb] text-[11px] text-gray-600">
+                Credits used: {fullCampaignGeneration.creditsUsed} of {TOTAL_FULL_CAMPAIGN_CREDITS}
+              </p>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   /* ─── Shared input card (textarea first, then row: Plus, Options, Tools, Send) ─── */
 
+  /** Chat column width: 50% wider than opened sidebar (256 * 1.5 = 384) */
+  const CHAT_WIDTH_PX = 384;
+  const fullCampaignComplete = fullCampaignGeneration.status === "complete";
+  const slideLabels = ["Posts", "Video", "Email"] as const;
+
+  const resultsPanelSegmentBar = fullCampaignGeneration.status !== "idle" ? (
+    <div className="shrink-0 border-b border-border bg-[#ffffff] dark:bg-background flex items-center gap-2 px-3 h-10 w-full text-sm font-medium text-foreground">
+      {slideLabels.map((label, idx) => (
+        <button
+          key={idx}
+          type="button"
+          onClick={() => setFullCampaignSwipeSlide(idx)}
+          className={cn(
+            "flex-1 min-w-0 flex flex-col items-center justify-center gap-0.5 cursor-pointer rounded-sm overflow-hidden h-8",
+            "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
+          )}
+          aria-label={`Show ${label}`}
+        >
+          <div
+            className={cn(
+              "w-full h-0.5 rounded-full min-h-[2px] transition-colors",
+              fullCampaignSwipeSlide === idx ? "bg-primary" : "bg-gray-300"
+            )}
+          />
+          <span className={cn(
+            "text-[10px] truncate w-full text-center leading-tight",
+            fullCampaignSwipeSlide === idx ? "text-foreground font-medium" : "text-muted-foreground"
+          )}>
+            {label}
+          </span>
+        </button>
+      ))}
+    </div>
+  ) : null;
+
+  const chatTopBar = (
+    <div className="sticky top-0 z-20 shrink-0 bg-[#ffffff] dark:bg-background border-b border-border">
+      <div className="flex items-center px-3 h-10 w-full text-sm font-medium text-foreground">
+      {activeProject && (showBrandPicker ? (
+        <div className="relative shrink-0" ref={brandPickerRef}>
+          <button
+            type="button"
+            onClick={() => setBrandPickerOpen((v) => !v)}
+            className="flex items-center gap-1.5 min-w-0 flex-1 rounded-lg py-1.5 pr-2 hover:bg-secondary/50 transition-colors cursor-pointer"
+          >
+            <span className="truncate text-left">{activeProject.name}</span>
+            <ChevronDown className={cn("size-4 shrink-0 text-muted-foreground", brandPickerOpen && "rotate-180")} />
+          </button>
+          {brandPickerOpen && (
+            <div className="absolute top-full left-0 mt-1 w-[200px] rounded-xl border border-border bg-card shadow-lg z-50 py-1">
+              {(allProjects ?? []).map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => {
+                    if (p.id === activeProject.id) {
+                      setBrandPickerOpen(false);
+                      return;
+                    }
+                    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+                    saveCreativeStudioChatToSupabase(workspaceId, projectId, stateRef.current);
+                    setHydrated(false);
+                    setMessages([]);
+                    setPrompt("");
+                    setSelectedTool(null);
+                    setContinuationPrompts([]);
+                    setImageSlidePrompts([]);
+                    setImageOptions(defaultImageOptions());
+                    setVideoOptions(defaultVideoOptions());
+                    setEmailOptions(defaultEmailOptions());
+                    setLikedSnippets([]);
+                    setDislikedSnippets([]);
+                    setSelectedEmailTemplateId(null);
+                    setActiveProject(p);
+                    setBrandPickerOpen(false);
+                  }}
+                  className={cn(
+                    "w-full flex items-center gap-2 px-3 py-2 text-left text-xs font-medium",
+                    "hover:bg-secondary/60"
+                  )}
+                >
+                  {p.brand_colors?.[0] ? (
+                    <span className="size-2.5 rounded-full shrink-0 border border-border" style={{ backgroundColor: p.brand_colors[0] }} aria-hidden />
+                  ) : (
+                    <span className="size-2.5 rounded-full shrink-0 bg-primary" aria-hidden />
+                  )}
+                  <span className="truncate flex-1">{p.name}</span>
+                  {p.id === activeProject.id && <Check className="size-3 shrink-0" />}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : (
+        <span className="truncate shrink-0 max-w-[140px]">{activeProject.name}</span>
+      ))}
+      </div>
+      <div className="h-2 w-full bg-gradient-to-b from-border/60 to-transparent pointer-events-none" aria-hidden />
+    </div>
+  );
   const inputActionRow = (
     <div className="flex items-center justify-between gap-2 flex-wrap pt-2 shrink-0">
       <div className="flex items-center gap-1.5 flex-wrap">
@@ -2228,11 +3248,30 @@ ${bodyRows}
             <Plus className="size-4" />
           </button>
           {plusMenuOpen && (
-            <div className="absolute bottom-full left-0 mb-1 w-[200px] rounded-xl border border-border bg-card shadow-lg z-50 py-1">
+            <div className="absolute bottom-full left-0 mb-1 w-[220px] rounded-xl border border-border bg-card shadow-lg z-50 py-1">
               <button
                 type="button"
                 onClick={() => {
-                  fileInputRef.current?.click();
+                  if (selectedTool === "full") {
+                    fullCampaignFileInputRef.current?.click();
+                  } else {
+                    fileInputRef.current?.click();
+                  }
+                  setPlusMenuOpen(false);
+                }}
+                className="w-full flex items-center gap-2 px-3 py-2 text-left text-xs font-medium hover:bg-secondary/60"
+              >
+                <ImagePlus className="size-3.5" />
+                <span className="flex-1">Upload product photo</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (selectedTool === "full") {
+                    fullCampaignFileInputRef.current?.click();
+                  } else {
+                    fileInputRef.current?.click();
+                  }
                   setPlusMenuOpen(false);
                 }}
                 className="w-full flex items-center gap-2 px-3 py-2 text-left text-xs font-medium hover:bg-secondary/60"
@@ -2249,7 +3288,7 @@ ${bodyRows}
                 className="w-full flex items-center gap-2 px-3 py-2 text-left text-xs font-medium hover:bg-secondary/60"
               >
                 <RotateCcw className="size-3.5" />
-                <span className="flex-1">Reset Chat</span>
+                <span className="flex-1">Start new campaign</span>
               </button>
             </div>
           )}
@@ -2279,8 +3318,24 @@ ${bodyRows}
             {toolsOpen || selectedTool ? <span className="text-gradient-brand">Tools</span> : "Tools"}
             <ChevronDown className={cn("size-3.5", (toolsOpen || selectedTool) && "icon-active-creative")} />
           </button>
-          {toolsOpen && (
-            <div className="absolute bottom-full left-0 mb-1 w-[200px] rounded-xl border border-border bg-card shadow-lg z-50 py-1">
+            {toolsOpen && (
+            <div className="absolute bottom-full left-0 mb-1 w-[220px] rounded-xl border border-border bg-card shadow-lg z-50 py-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedTool(selectedTool === "full" ? null : "full");
+                  setToolsOpen(false);
+                }}
+                className={cn(
+                  "w-full flex items-center gap-2 px-3 py-2 text-left text-xs font-medium",
+                  "bg-primary/10 hover:bg-primary/20 border-b border-border",
+                  selectedTool === "full" && "bg-primary/15"
+                )}
+              >
+                <Zap className="size-3.5 text-primary" />
+                <span className="flex-1 font-semibold">Full campaign</span>
+                {selectedTool === "full" && <Check className="size-3.5 text-[#000000] dark:text-white" />}
+              </button>
               <button
                 type="button"
                 onClick={() => {
@@ -2324,76 +3379,9 @@ ${bodyRows}
                   </div>
                 )}
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedTool(selectedTool === "email" ? null : "email");
-                  setToolsOpen(false);
-                }}
-                className={cn(
-                  "w-full flex items-center gap-2 px-3 py-2 text-left text-xs font-medium",
-                  "hover:bg-secondary/60"
-                )}
-              >
-                <Mail className="size-3.5" />
-                <span className="flex-1">Email marketing</span>
-                {selectedTool === "email" && <Check className="size-3.5 text-[#000000] dark:text-white" />}
-              </button>
             </div>
           )}
         </div>
-        {showBrandPicker && (
-          <div className="relative shrink-0" ref={brandPickerRef}>
-            <button
-              type="button"
-              onClick={() => { setBrandPickerOpen((v) => !v); setToolsOpen(false); setOptionsOpen(false); setPlusMenuOpen(false); }}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer shrink-0 text-[#000000] dark:text-white hover:text-foreground"
-            >
-              <Palette className={cn("size-3.5", brandPickerOpen && "icon-active-creative")} />
-              {brandPickerOpen ? <span className="text-gradient-brand">Brand</span> : "Brand"}
-              <ChevronDown className={cn("size-3.5", brandPickerOpen && "icon-active-creative")} />
-            </button>
-            {brandPickerOpen && (
-              <div className="absolute bottom-full left-0 mb-1 w-[200px] rounded-xl border border-border bg-card shadow-lg z-50 py-1">
-                {(allProjects ?? []).map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => {
-                      if (p.id === activeProject.id) {
-                        setBrandPickerOpen(false);
-                        return;
-                      }
-                      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-                      saveCreativeStudioChatToSupabase(workspaceId, projectId, stateRef.current);
-                      setHydrated(false);
-                      setMessages([]);
-                      setPrompt("");
-                      setSelectedTool(null);
-                      setContinuationPrompts([]);
-                      setImageSlidePrompts([]);
-                      setImageOptions(defaultImageOptions());
-                      setVideoOptions(defaultVideoOptions());
-                      setEmailOptions(defaultEmailOptions());
-                      setLikedSnippets([]);
-                      setDislikedSnippets([]);
-                      setSelectedEmailTemplateId(null);
-                      setActiveProject(p);
-                      setBrandPickerOpen(false);
-                    }}
-                    className={cn(
-                      "w-full flex items-center gap-2 px-3 py-2 text-left text-xs font-medium",
-                      "hover:bg-secondary/60"
-                    )}
-                  >
-                    <span className="truncate flex-1">{p.name}</span>
-                    {p.id === activeProject.id && <Check className="size-3 shrink-0 text-[#000000] dark:text-white" />}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
       </div>
       {hasCreateTool && generationCost > 0 && (
         <span className="text-xs font-medium shrink-0 text-[#000000] dark:text-white">
@@ -2402,149 +3390,262 @@ ${bodyRows}
       )}
       <button
         type="button"
-        onClick={handleSend}
-        disabled={!canSend}
-        className="size-8 rounded-lg bg-primary flex items-center justify-center text-white disabled:opacity-40 transition-opacity cursor-pointer disabled:cursor-default shrink-0"
+        onClick={() => (selectedTool === "full" ? handleFullCampaignGenerate() : handleSend())}
+        disabled={selectedTool !== "full" && !canSend}
+        className={cn(
+          "size-8 rounded-lg bg-primary flex items-center justify-center text-white transition-opacity shrink-0 cursor-pointer",
+          selectedTool !== "full" && !canSend && "disabled:opacity-40 disabled:cursor-default",
+          selectedTool === "full" && !fullCampaignFormValid && "opacity-60",
+          selectedTool === "full" && fullCampaignShake && "animate-shake"
+        )}
       >
         <Send className="size-4" />
       </button>
     </div>
   );
 
-  /* ─── Initial empty state (centered like other chats) ────────────────── */
+  /* ─── Two-column layout: results panel (left) + chat (right), always ─── */
 
-  if (!hasMessages) {
-    return (
-      <div className="flex flex-1 min-h-0">
-        <div className="flex-1 min-w-0 flex flex-col transition-all duration-200">
-        <main className="flex-1 flex min-h-0 w-full flex-col items-center justify-center px-4 pt-6 pb-4">
-          <div className="w-full max-w-2xl flex flex-col">
-            <div className="text-center mb-4 shrink-0">
-              <h1 className="text-2xl lg:text-3xl font-bold tracking-tight mb-2">
+  return (
+    <div className="flex flex-1 min-h-0 w-full overflow-hidden">
+      {/* Results panel (middle): always present when has messages so chat stays fixed on the right */}
+      <div
+        ref={fullCampaignResultsRef}
+        className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden bg-[#fafafa] dark:bg-secondary/20"
+      >
+        {fullCampaignGeneration.status !== "idle" ? (
+          <>
+          {resultsPanelSegmentBar}
+          <div className={cn("flex-1 min-h-0 flex items-center justify-center overflow-hidden", fullCampaignSwipeSlide === 0 ? "p-2 overflow-y-auto" : "p-10")}>
+          <div className={cn("w-full min-w-0", fullCampaignSwipeSlide === 0 ? "min-h-full flex flex-col justify-start" : "h-full flex flex-col items-center justify-center gap-6")}>
+            {/* Posts — 3 columns: 4:5 feed above 9:16 story per column; 5px gap, scale to fit */}
+            {fullCampaignSwipeSlide === 0 && (() => {
+              const displayResults = selectedCampaignMsgIndex != null ? campaignResultsByMsgIndex[selectedCampaignMsgIndex] ?? null : fullCampaignResults;
+              const feedImages = displayResults?.metaImageUrls ?? (displayResults?.metaImageUrl ? [displayResults.metaImageUrl] : []);
+              const storyImages = displayResults?.storyImageUrls ?? (displayResults?.storyImageUrl ? [displayResults.storyImageUrl] : []);
+              const metaFeedFailed = displayResults?.metaFeedFailed ?? [false, false, false];
+              const storyFailed = displayResults?.storyFailed ?? [false, false, false];
+              const generating = fullCampaignGeneration.status === "generating";
+              const Skeleton = ({ className }: { className?: string }) => (
+                <div className={cn("animate-pulse rounded-xl bg-gray-200 dark:bg-secondary/60", className)} />
+              );
+              return (
+                <div className="w-full min-h-full grid grid-cols-3 grid-rows-[minmax(280px,auto)_auto_auto] gap-[5px] min-w-0 place-items-stretch content-start pt-8 pb-4 px-1">
+                  {/* Row 1: three 4:5 feed images — scales with viewport, no horizontal scroll */}
+                  {[0, 1, 2].map((colIdx) => (
+                    <div key={`feed-${colIdx}`} className="row-span-1 col-span-1 w-full min-w-0 overflow-hidden rounded-lg bg-gray-100 dark:bg-secondary/40 border border-border flex items-center justify-center relative group aspect-[4/5]">
+                      {feedImages[colIdx] ? (
+                          <>
+                            <button type="button" className="absolute inset-0 w-full h-full flex items-center justify-center" onClick={() => setImagePreviewUrl(feedImages[colIdx]!)}>
+                              <img src={feedImages[colIdx]} alt={`Feed ${colIdx + 1}`} className="w-full h-full object-contain" />
+                            </button>
+                            <span className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button type="button" onClick={(e) => { e.stopPropagation(); downloadImageAsPng(feedImages[colIdx]!, `feed-${colIdx + 1}.png`); }} className="p-1.5 rounded-lg bg-black/60 hover:bg-black/80 text-white" aria-label="Download">
+                                <Download className="size-4" />
+                              </button>
+                            </span>
+                          </>
+                        ) : metaFeedFailed[colIdx] ? (
+                          <span className="text-sm text-red-600 dark:text-red-400 font-medium">Failed</span>
+                        ) : generating ? (
+                          <Skeleton className="w-full h-full min-h-[60px]" />
+                        ) : (
+                          <span className="text-xs text-center text-muted-foreground px-2">New image will be displayed here</span>
+                        )}
+                    </div>
+                  ))}
+                  {/* Rows 2-3: three 9:16 story images (1 col 2 rows each); aspect-[9/16] so grid grows and scroll shows full image */}
+                  {[0, 1, 2].map((colIdx) => (
+                    <div key={`story-${colIdx}`} className="col-span-1 row-span-2 w-full min-w-0 overflow-hidden rounded-lg bg-gray-100 dark:bg-secondary/40 border border-border flex items-center justify-center relative group aspect-[9/16]">
+                        {storyImages[colIdx] ? (
+                          <>
+                            <button type="button" className="absolute inset-0 w-full h-full flex items-center justify-center" onClick={() => setImagePreviewUrl(storyImages[colIdx]!)}>
+                              <img src={storyImages[colIdx]} alt={`Story ${colIdx + 1}`} className="w-full h-full object-contain" />
+                            </button>
+                            <span className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button type="button" onClick={(e) => { e.stopPropagation(); downloadImageAsPng(storyImages[colIdx]!, `story-${colIdx + 1}.png`); }} className="p-1.5 rounded-lg bg-black/60 hover:bg-black/80 text-white" aria-label="Download">
+                                <Download className="size-4" />
+                              </button>
+                            </span>
+                          </>
+                        ) : storyFailed[colIdx] ? (
+                          <span className="text-sm text-red-600 dark:text-red-400 font-medium">Failed</span>
+                        ) : generating ? (
+                          <Skeleton className="w-full h-full min-h-[60px]" />
+                        ) : (
+                          <span className="text-xs text-center text-muted-foreground px-2">New image will be displayed here</span>
+                        )}
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+            {/* Video — 16:9 left, 9:16 right; no black bars (object-cover), fit nicely */}
+            {fullCampaignSwipeSlide === 1 && (() => {
+              const displayResults = selectedCampaignMsgIndex != null ? campaignResultsByMsgIndex[selectedCampaignMsgIndex] ?? null : fullCampaignResults;
+              const step16 = fullCampaignGeneration.steps.find((s) => s.id === "video_16x9");
+              const step9 = fullCampaignGeneration.steps.find((s) => s.id === "video_9x16");
+              const generating = fullCampaignGeneration.status === "generating";
+              const url16 = displayResults?.videoUrl16x9 ?? displayResults?.videoUrl;
+              const url9 = displayResults?.videoUrl9x16;
+              return (
+              <div className="w-full h-full flex flex-row gap-4 items-center justify-center overflow-auto py-4 px-2 min-h-0">
+                {/* 16:9 left */}
+                <div className="flex-1 min-w-0 flex flex-col gap-1.5 max-w-[60%]">
+                  <p className="text-xs font-medium text-[#333] dark:text-foreground">Product commercial · 16:9</p>
+                  <div className="w-full aspect-video rounded-xl overflow-hidden bg-black flex items-center justify-center relative">
+                    {url16 ? (
+                      <>
+                        <video src={url16} className="w-full h-full object-cover" controls />
+                        <span className="absolute bottom-2 right-2 px-2 py-0.5 rounded bg-black/60 text-white text-xs">0:08</span>
+                        <a href={url16} download="video-16x9.mp4" className="absolute bottom-2 left-2 px-2.5 py-1 rounded-lg bg-black/60 hover:bg-black/80 text-white text-xs flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                          <Download className="size-3.5" /> Download
+                        </a>
+                      </>
+                    ) : step16?.status === "failed" ? (
+                      <div className="flex flex-col items-center justify-center gap-2 p-4">
+                        <span className="text-sm text-red-500">Video failed</span>
+                        <button type="button" className="text-xs text-[#3b82f6] hover:underline">Retry</button>
+                      </div>
+                    ) : generating ? (
+                      <div className="w-full h-full animate-pulse bg-gray-800 flex items-center justify-center">
+                        <span className="text-sm text-gray-400">Product video (16:9)</span>
+                      </div>
+                    ) : (
+                      <span className="text-sm text-muted-foreground text-center px-4">New video will be displayed here</span>
+                    )}
+                  </div>
+                </div>
+                {/* 9:16 right */}
+                <div className="flex-1 min-w-0 flex flex-col gap-1.5 max-w-[40%]">
+                  <p className="text-xs font-medium text-[#333] dark:text-foreground">Vertical video · 9:16</p>
+                  <div className="w-full aspect-[9/16] max-h-[70vh] rounded-xl overflow-hidden bg-black flex items-center justify-center relative">
+                    {url9 ? (
+                      <>
+                        <video src={url9} className="w-full h-full object-cover" controls />
+                        <span className="absolute bottom-2 right-2 px-2 py-0.5 rounded bg-black/60 text-white text-xs">0:08</span>
+                        <a href={url9} download="video-9x16.mp4" className="absolute bottom-2 left-2 px-2.5 py-1 rounded-lg bg-black/60 hover:bg-black/80 text-white text-xs flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                          <Download className="size-3.5" /> Download
+                        </a>
+                      </>
+                    ) : step9?.status === "failed" ? (
+                      <div className="flex flex-col items-center justify-center gap-2 p-4">
+                        <span className="text-sm text-red-500">Video failed</span>
+                        <button type="button" className="text-xs text-[#3b82f6] hover:underline">Retry</button>
+                      </div>
+                    ) : generating ? (
+                      <div className="w-full h-full animate-pulse bg-gray-800 flex items-center justify-center">
+                        <span className="text-sm text-gray-400">Vertical (9:16)</span>
+                      </div>
+                    ) : (
+                      <span className="text-sm text-muted-foreground text-center px-4">New video will be displayed here</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+              );
+            })()}
+            {/* Email — 2 variants side by side; scale to fit, no horizontal scroll */}
+            {fullCampaignSwipeSlide === 2 && (() => {
+              const displayResults = selectedCampaignMsgIndex != null ? campaignResultsByMsgIndex[selectedCampaignMsgIndex] ?? null : fullCampaignResults;
+              const emailHtmls = displayResults?.emailHtmls ?? (displayResults?.emailHtml ? [displayResults.emailHtml, displayResults.emailHtml] : []);
+              const emailCopies = displayResults?.emailCopies ?? (displayResults?.emailCopy ? [displayResults.emailCopy, displayResults.emailCopy] : []);
+              return (
+              <div className="w-full h-full flex flex-row gap-4 justify-center items-stretch min-h-0 overflow-hidden py-4 px-2">
+                {[0, 1].map((idx) => {
+                  const html = emailHtmls[idx] ?? "";
+                  const copy = emailCopies[idx];
+                  return (
+                    <div key={idx} className="w-full flex-1 min-w-0 aspect-[4/5] min-h-0 flex flex-col rounded-xl overflow-hidden border border-border bg-card shadow-sm">
+                      <div className="p-2 flex flex-wrap items-center justify-between gap-2 shrink-0">
+                        <span className="text-xs font-medium truncate min-w-0 flex-1 mr-2 text-[#000000] dark:text-[#ffffff]" title={copy?.subject_line}>
+                          {copy?.subject_line ?? "Preview"}
+                        </span>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            className="px-3 py-1.5 rounded-lg text-xs font-medium bg-secondary hover:bg-secondary/80"
+                            onClick={() => { const sub = copy?.subject_line ?? ""; if (sub) navigator.clipboard.writeText(sub).then(() => toast.success("Subject copied!")); }}
+                          >
+                            Copy Subject
+                          </button>
+                          <button
+                            type="button"
+                            className="px-3 py-1.5 rounded-lg text-xs font-medium bg-secondary hover:bg-secondary/80"
+                            onClick={() => { if (html) navigator.clipboard.writeText(html).then(() => toast.success("HTML copied!")); }}
+                          >
+                            Copy HTML
+                          </button>
+                        </div>
+                      </div>
+                      {html ? (
+                        <iframe srcDoc={html} title={`Email ${idx + 1} preview`} className="w-full flex-1 min-h-0 border-0" sandbox="allow-same-origin" />
+                      ) : copy ? (
+                        <div className="p-4 border-t border-border text-sm text-foreground space-y-2 overflow-y-auto flex-1 min-h-0">
+                          <p className="font-semibold">{copy.headline}</p>
+                          <p className="text-xs text-muted-foreground">{copy.subheadline}</p>
+                        </div>
+                      ) : fullCampaignGeneration.status === "generating" ? (
+                        <div className="flex-1 min-h-0 flex items-center justify-center p-4">
+                          <div className="w-full max-w-[200px] space-y-2">
+                            <div className="h-4 animate-pulse rounded bg-gray-200 dark:bg-secondary/60 w-full" />
+                            <div className="h-4 animate-pulse rounded bg-gray-200 dark:bg-secondary/60 w-4/5" />
+                            <div className="h-4 animate-pulse rounded bg-gray-200 dark:bg-secondary/60 w-3/5" />
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex-1 min-h-0 flex items-center justify-center p-4">
+                          <span className="text-sm text-muted-foreground text-center">New email will be displayed here</span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              );
+            })()}
+            </div>
+          </div>
+        </>
+        ) : (
+          <div className="flex-1 min-h-0 flex items-center justify-center p-10 text-sm text-muted-foreground">
+            Results will appear here when your campaign is ready.
+          </div>
+        )}
+      </div>
+
+      {/* Chat column: always fixed width on the right when has messages */}
+      <div
+        className="flex flex-col h-full min-h-0 shrink-0 border-l border-border bg-background"
+        style={{ width: CHAT_WIDTH_PX, minWidth: CHAT_WIDTH_PX, flex: "none" }}
+      >
+      {chatTopBar}
+      <div className="flex-1 min-h-0 overflow-y-auto px-3 py-4 pb-6">
+        {!hasMessages ? (
+          <div className="flex flex-col items-center justify-start min-h-full w-full pt-6">
+            <div className="text-center mb-4 shrink-0 w-full">
+              <h1 className="text-xl font-bold tracking-tight mb-2">
                 <span className="text-gradient-brand">Creative Studio</span>
               </h1>
               <p className="text-sm text-[#000000] dark:text-white">
-                Chat about ad creatives, social media, and marketing — or choose a tool to create images or videos.
+                Upload your product. Get your ad creative, video, and email — ready to launch.
               </p>
             </div>
-            <div className="relative overflow-visible flex flex-col rounded-2xl border border-border bg-card shadow-sm flex flex-col">
-              <div className="absolute inset-0 rounded-[inherit] z-10 pointer-events-none">
-                <BorderBeam size={80} duration={8} />
+            {!prompt.trim() && selectedTool !== "full" && (
+              <div className="flex flex-wrap gap-2 w-full justify-center">
+                {SUGGESTED_PROMPT_CHIPS.map((label) => (
+                  <button key={label} type="button" onClick={() => setPrompt(label)} className="px-3 py-1.5 rounded-lg text-xs font-medium bg-secondary/60 text-foreground hover:bg-secondary border border-border/60 transition-colors">
+                    {label}
+                  </button>
+                ))}
               </div>
-              <div className="relative z-20 flex flex-col p-4">
-                <div className="shrink-0">
-                  <textarea
-                    ref={textareaRef}
-                    value={prompt}
-                    onChange={(e) => setPrompt(e.target.value)}
-                    placeholder="Describe what you want to create or ask about…"
-                    rows={3}
-                    className="w-full min-h-[4.5rem] max-h-[9.2rem] resize-none overflow-y-auto bg-transparent px-0 py-1 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-0"
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey) {
-                        e.preventDefault();
-                        handleSend();
-                      }
-                    }}
-                  />
-                </div>
-                {(() => {
-                  const imageEntries = pendingFiles
-                    .map((f, i) => ({ f, pendingIndex: i }))
-                    .filter(({ f }) => f.type.startsWith("image/"));
-                  if (imageEntries.length === 0) return null;
-                  return (
-                    <div className="flex flex-wrap gap-3 overflow-x-auto pb-1">
-                      {imageEntries.map(({ pendingIndex }, j) => (
-                        <div
-                          key={pendingIndex}
-                          className="relative shrink-0 rounded-xl border border-border bg-card overflow-hidden w-[140px]"
-                        >
-                          <div className="aspect-square bg-muted/30 relative">
-                            {pendingPreviewUrls[j] ? (
-                              <img
-                                src={pendingPreviewUrls[j]}
-                                alt=""
-                                className="w-full h-full object-cover"
-                              />
-                            ) : null}
-                            <button
-                              type="button"
-                              onClick={() => removePendingFile(pendingIndex)}
-                              className="absolute top-1.5 right-1.5 size-6 rounded-full bg-black/50 hover:bg-black/70 text-white flex items-center justify-center text-sm leading-none"
-                              aria-label="Remove image"
-                            >
-                              <X className="size-3.5" />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  );
-                })()}
-                {selectedTool === "image" && imageOptions.carousel && imageOptions.numberOfImages >= 2 && (
-                  <div className="space-y-2 border-t border-border/60 pt-2">
-                    <p className="text-[10px] font-medium text-muted-foreground">One description per slide (carousel).</p>
-                    {Array.from({ length: imageOptions.numberOfImages }, (_, i) => (
-                      <div key={i}>
-                        <label className="text-[10px] text-muted-foreground block mb-1">Slide {i + 1}</label>
-                        <textarea
-                          value={imageSlidePrompts[i] ?? ""}
-                          onChange={(e) => setImageSlidePromptAt(i, e.target.value)}
-                          placeholder={`Description for slide ${i + 1}…`}
-                          rows={2}
-                          className="w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-                        />
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {selectedTool === "video" && continuationSlots > 0 && (
-                  <div className="space-y-2 border-t border-border/60 pt-2">
-                    <p className="text-[10px] font-medium text-muted-foreground">Segment 2 and after — one prompt per segment.</p>
-                    {Array.from({ length: continuationSlots }, (_, i) => (
-                      <div key={i}>
-                        <label className="text-[10px] text-muted-foreground block mb-1">Segment {i + 2} (~7s)</label>
-                        <textarea
-                          value={continuationPrompts[i] ?? ""}
-                          onChange={(e) => setContinuationPromptAt(i, e.target.value)}
-                          placeholder={`Dialogue and visuals for segment ${i + 2}…`}
-                          rows={2}
-                          className="w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-                        />
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {inputActionRow}
-              </div>
-            </div>
+            )}
           </div>
-        </main>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          multiple
-          className="sr-only"
-          aria-label="Add images"
-          onChange={handleFileSelect}
-        />
-        </div>
-      </div>
-    );
-  }
-
-  /* ─── Chat view (has messages) ───────────────────────────────────────── */
-
-  return (
-    <div className="flex flex-1 min-h-0">
-      <div className="flex-1 min-w-0 flex flex-col h-full min-h-0 min-h-screen transition-all duration-200">
-      <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4 pb-6">
-        <div className="w-full max-w-2xl mx-auto space-y-4">
+        ) : (
+        <div className="w-full space-y-4">
           {messages.map((msg, i) => (
+            <Fragment key={i}>
             <div
-              key={i}
               className={cn(
                 msg.role === "user"
                   ? "ml-auto max-w-[85%]"
@@ -2917,20 +4018,6 @@ ${bodyRows}
                     <div className="relative group/action">
                       <button
                         type="button"
-                        onClick={() => handleRedoResponse(i)}
-                        disabled={generating}
-                        className="size-8 rounded-full flex items-center justify-center text-[#000000] dark:text-white hover:bg-secondary/60 hover:text-foreground transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none"
-                        aria-label="Redo"
-                      >
-                        <RotateCw className="size-4" />
-                      </button>
-                      <span className="absolute left-1/2 -translate-x-1/2 top-full mt-1.5 px-2.5 py-1 rounded-md bg-neutral-800 dark:bg-neutral-700 text-white text-xs font-medium whitespace-nowrap opacity-0 pointer-events-none group-hover/action:opacity-100 transition-opacity z-10">
-                        Redo
-                      </span>
-                    </div>
-                    <div className="relative group/action">
-                      <button
-                        type="button"
                         onClick={() => handleCopyResponse(i)}
                         className="size-8 rounded-full flex items-center justify-center text-[#000000] dark:text-white hover:bg-secondary/60 hover:text-foreground transition-colors cursor-pointer"
                         aria-label={msg.tool === "email" && msg.emailPayload ? "Copy HTML" : "Copy response"}
@@ -2941,35 +4028,44 @@ ${bodyRows}
                         {msg.tool === "email" && msg.emailPayload ? "Copy HTML" : "Copy response"}
                       </span>
                     </div>
-                    <div className="relative group/action">
+                  </div>
+                )}
+                {msg.role === "assistant" &&
+                  !msg.generating &&
+                  i > 0 &&
+                  messages[i - 1].role === "user" &&
+                  messages[i - 1].fullCampaignRequest && (
+                  <div className="flex flex-wrap gap-2 mt-3">
+                    {FULL_CAMPAIGN_FOLLOWUP_CHIPS.map((label) => (
                       <button
+                        key={label}
                         type="button"
-                        onClick={() => handleReplyToMessage(i)}
-                        className="size-8 rounded-full flex items-center justify-center text-[#000000] dark:text-white hover:bg-secondary/60 hover:text-foreground transition-colors cursor-pointer"
-                        aria-label="Reply to this response"
+                        onClick={() => {
+                          chipSendRef.current = label;
+                          setPrompt(label);
+                        }}
+                        className="px-3 py-1.5 rounded-lg text-xs font-medium bg-secondary/60 text-foreground hover:bg-secondary border border-border/60 transition-colors"
                       >
-                        <Reply className="size-4" />
+                        {label}
                       </button>
-                      <span className="absolute left-1/2 -translate-x-1/2 top-full mt-1.5 px-2.5 py-1 rounded-md bg-neutral-800 dark:bg-neutral-700 text-white text-xs font-medium whitespace-nowrap opacity-0 pointer-events-none group-hover/action:opacity-100 transition-opacity z-10">
-                        Reply
-                      </span>
-                    </div>
+                    ))}
                   </div>
                 )}
             </div>
+            {msg.role === "user" && msg.fullCampaignRequest && (() => {
+              const card = renderCampaignCard(i);
+              return card ? <div className="w-full flex flex-col items-start max-w-[85%]">{card}</div> : null;
+            })()}
+            </Fragment>
           ))}
           <div ref={messagesEndRef} />
         </div>
+        )}
       </div>
 
-      {/* Input bar at bottom — sticky so it stays visible while scrolling */}
-      <div className="sticky bottom-0 z-10 shrink-0 pt-2 pb-4 w-full max-w-2xl mx-auto">
-        <div className="w-full">
-          <div className="relative overflow-visible flex flex-col rounded-2xl border border-border bg-card shadow-sm">
-            <div className="absolute inset-0 rounded-[inherit] z-10 pointer-events-none">
-              <BorderBeam size={80} duration={8} />
-            </div>
-            <div className="relative z-20 flex flex-col p-3">
+      {/* Input bar — attached to bottom of chat column */}
+      <div className="shrink-0 border-t border-border bg-background w-full">
+        <div className="flex flex-col p-3">
               {replyingTo != null && (
                 <div className="flex items-center gap-2 mb-2 rounded-lg bg-primary/10 border border-primary/20 px-3 py-1.5 text-sm">
                   <Reply className="size-4 text-primary shrink-0" />
@@ -2985,89 +4081,83 @@ ${bodyRows}
                   </button>
                 </div>
               )}
-              <div className="shrink-0">
-                <textarea
-                  ref={textareaRef}
-                  value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
-                  placeholder={replyingTo != null ? "Describe the change (e.g. make the background darker)…" : "Describe what you want to create or ask about…"}
-                  rows={3}
-                  className="w-full min-h-[4.5rem] max-h-[9.2rem] resize-none overflow-y-auto bg-transparent px-0 py-1 text-sm placeholder:text-muted-foreground focus:outline-none"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      handleSend();
-                    }
-                  }}
-                />
-              </div>
-              {(() => {
-                const imageEntries = pendingFiles
-                  .map((f, i) => ({ f, pendingIndex: i }))
-                  .filter(({ f }) => f.type.startsWith("image/"));
-                if (imageEntries.length === 0) return null;
-                return (
-                  <div className="flex flex-wrap gap-3 overflow-x-auto pb-1">
-                    {imageEntries.map(({ pendingIndex }, j) => (
-                      <div
-                        key={pendingIndex}
-                        className="relative shrink-0 rounded-xl border border-border bg-card overflow-hidden w-[140px]"
-                      >
-                        <div className="aspect-square bg-muted/30 relative">
-                          {pendingPreviewUrls[j] ? (
-                            <img
-                              src={pendingPreviewUrls[j]}
-                              alt=""
-                              className="w-full h-full object-cover"
-                            />
-                          ) : null}
-                          <button
-                            type="button"
-                            onClick={() => removePendingFile(pendingIndex)}
-                            className="absolute top-1.5 right-1.5 size-6 rounded-full bg-black/50 hover:bg-black/70 text-white flex items-center justify-center text-sm leading-none"
-                            aria-label="Remove image"
-                          >
-                            <X className="size-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
+              {selectedTool === "full" ? (
+                fullCampaignProductInput
+              ) : (
+                <>
+                  <div className="shrink-0">
+                    <textarea
+                      ref={textareaRef}
+                      value={prompt}
+                      onChange={(e) => setPrompt(e.target.value)}
+                      placeholder={replyingTo != null ? "Describe the change (e.g. make the background darker)…" : "Describe what you want to create or ask about…"}
+                      rows={3}
+                      className="w-full min-h-[4.5rem] max-h-[9.2rem] resize-none overflow-y-auto bg-transparent px-0 py-1 text-sm placeholder:text-muted-foreground focus:outline-none"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          handleSend();
+                        }
+                      }}
+                    />
                   </div>
-                );
-              })()}
-              {selectedTool === "image" && imageOptions.carousel && imageOptions.numberOfImages >= 2 && (
-                <div className="space-y-2 border-t border-border/60 pt-2">
-                  <p className="text-[10px] font-medium text-muted-foreground">One description per slide.</p>
-                  {Array.from({ length: imageOptions.numberOfImages }, (_, i) => (
-                    <textarea
-                      key={i}
-                      value={imageSlidePrompts[i] ?? ""}
-                      onChange={(e) => setImageSlidePromptAt(i, e.target.value)}
-                      placeholder={`Slide ${i + 1}…`}
-                      rows={1}
-                      className="w-full resize-none rounded-lg border border-border bg-background px-3 py-1.5 text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-                    />
-                  ))}
-                </div>
-              )}
-              {selectedTool === "video" && continuationSlots > 0 && (
-                <div className="space-y-2 border-t border-border/60 pt-2">
-                  <p className="text-[10px] font-medium text-muted-foreground">Segment 2+ — one prompt per segment.</p>
-                  {Array.from({ length: continuationSlots }, (_, i) => (
-                    <textarea
-                      key={i}
-                      value={continuationPrompts[i] ?? ""}
-                      onChange={(e) => setContinuationPromptAt(i, e.target.value)}
-                      placeholder={`Segment ${i + 2}…`}
-                      rows={1}
-                      className="w-full resize-none rounded-lg border border-border bg-background px-3 py-1.5 text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-                    />
-                  ))}
-                </div>
+                  {selectedTool === "image" && imageOptions.adStyle !== "none" && (
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      {adStylesConfig?.styles?.[imageOptions.adStyle]?.name ?? imageOptions.adStyle.replace(/_/g, " ")} style applied
+                    </p>
+                  )}
+                  {(() => {
+                    const imageEntries = pendingFiles
+                      .map((f, i) => ({ f, pendingIndex: i }))
+                      .filter(({ f }) => f.type.startsWith("image/"));
+                    if (imageEntries.length === 0) return null;
+                    return (
+                      <div className="flex flex-wrap gap-3 overflow-x-auto pb-1">
+                        {imageEntries.map(({ pendingIndex }, j) => (
+                          <div
+                            key={pendingIndex}
+                            className="relative shrink-0 rounded-xl border border-border bg-card overflow-hidden w-[140px]"
+                          >
+                            <div className="aspect-square bg-muted/30 relative">
+                              {pendingPreviewUrls[j] ? (
+                                <img
+                                  src={pendingPreviewUrls[j]}
+                                  alt=""
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : null}
+                              <button
+                                type="button"
+                                onClick={() => removePendingFile(pendingIndex)}
+                                className="absolute top-1.5 right-1.5 size-6 rounded-full bg-black/50 hover:bg-black/70 text-white flex items-center justify-center text-sm leading-none"
+                                aria-label="Remove image"
+                              >
+                                <X className="size-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
+                  {selectedTool === "video" && continuationSlots > 0 && (
+                    <div className="space-y-2 border-t border-border/60 pt-2">
+                      <p className="text-[10px] font-medium text-muted-foreground">Segment 2+ — one prompt per segment.</p>
+                      {Array.from({ length: continuationSlots }, (_, i) => (
+                        <textarea
+                          key={i}
+                          value={continuationPrompts[i] ?? ""}
+                          onChange={(e) => setContinuationPromptAt(i, e.target.value)}
+                          placeholder={`Segment ${i + 2}…`}
+                          rows={1}
+                          className="w-full resize-none rounded-lg border border-border bg-background px-3 py-1.5 text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                        />
+                      ))}
+                    </div>
+                  )}
+                </>
               )}
               {inputActionRow}
-            </div>
-          </div>
         </div>
       </div>
       {imagePreviewUrl && (
@@ -3086,12 +4176,21 @@ ${bodyRows}
           >
             <X className="size-5" />
           </button>
-          <img
-            src={imagePreviewUrl}
-            alt=""
-            className="max-w-full max-h-[90vh] w-auto h-auto object-contain rounded-lg shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          />
+          <div className="relative flex items-center justify-center max-w-full max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
+            <img
+              src={imagePreviewUrl}
+              alt=""
+              className="max-w-full max-h-[90vh] w-auto h-auto object-contain rounded-lg shadow-2xl"
+            />
+            <button
+              type="button"
+              onClick={() => downloadImageAsPng(imagePreviewUrl, `blinkify-${Date.now()}.png`)}
+              className="absolute bottom-4 right-4 p-2.5 rounded-lg bg-black/60 hover:bg-black/80 text-white flex items-center justify-center transition-colors"
+              aria-label="Download image"
+            >
+              <Download className="size-5" />
+            </button>
+          </div>
         </div>
       )}
       <input

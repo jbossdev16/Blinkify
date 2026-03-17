@@ -16,6 +16,20 @@ function redirectOrigin(hostname: string): `https://${string}` | null {
 
 const MARKETING_ONLY_PATHS = new Set(["/brand-assets", "/waitlist"]);
 
+/** Paths that never need auth in middleware; skip Supabase to avoid fetch failures (e.g. dev sandbox). */
+const PUBLIC_PATHS = new Set([
+  "/",
+  "/signin",
+  "/signup",
+  "/reset-password",
+  "/setup-plan",
+  "/brand-assets",
+  "/waitlist",
+]);
+function isPublicPath(pathname: string) {
+  return pathname === "/" || PUBLIC_PATHS.has(pathname) || pathname.startsWith("/reset-password") || pathname.startsWith("/setup-plan");
+}
+
 const APP_ROUTE_PREFIXES = [
   "/signin",
   "/signup",
@@ -79,6 +93,9 @@ export async function middleware(request: NextRequest) {
   }
 
   try {
+    if (isPublicPath(pathname)) {
+      return NextResponse.next({ request });
+    }
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
     if (!url || !anon) {
@@ -114,9 +131,9 @@ export async function middleware(request: NextRequest) {
       },
     });
 
-    let user: { id: string } | null = null;
-    const getUserResult = await supabase.auth.getUser().catch(() => ({ data: { user: null }, error: null }));
-    user = getUserResult.data?.user ?? null;
+    // Cookie-only: no network call, so no fetch failure when Supabase is unreachable.
+    const { data: { session } } = await supabase.auth.getSession();
+    const user = session?.user ?? null;
 
     const protectedPaths = [
       "/creative-studio",

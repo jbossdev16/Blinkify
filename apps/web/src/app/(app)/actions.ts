@@ -130,6 +130,7 @@ export interface AnalyzeWebsiteResult {
     primaryFont?: string;
   };
   suggestions: {
+    brand_name?: string;
     description: string;
     brand_guidelines: string;
     suggestedColors: string[];

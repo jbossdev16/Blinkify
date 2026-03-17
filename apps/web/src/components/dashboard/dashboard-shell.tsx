@@ -24,6 +24,13 @@ export function DashboardShell({ user, plan, credits, isAdmin, children }: Dashb
     if (stored === "true") setCollapsed(true);
   }, []);
 
+  // Lock document scroll so only the main content area scrolls; prevents double scrollbar and html overflow
+  useEffect(() => {
+    const el = document.documentElement;
+    el.setAttribute("data-dashboard", "true");
+    return () => el.removeAttribute("data-dashboard");
+  }, []);
+
   function toggleCollapsed() {
     setCollapsed((prev) => {
       const next = !prev;
@@ -33,7 +40,7 @@ export function DashboardShell({ user, plan, credits, isAdmin, children }: Dashb
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="h-screen max-h-screen min-h-0 flex flex-col overflow-hidden bg-background">
       {/* Global gradient def for icon-gradient-brand (sidebar + dashboard) */}
       <svg width="0" height="0" className="absolute" aria-hidden>
         <defs>
@@ -55,11 +62,11 @@ export function DashboardShell({ user, plan, credits, isAdmin, children }: Dashb
       />
       <main
         className={cn(
-          "flex flex-col min-h-screen pt-14 lg:pt-0 bg-[#ffffff] dark:bg-background",
-          collapsed ? "lg:pl-20" : "lg:pl-72"
+          "flex flex-1 flex-col min-h-0 pt-14 lg:pt-0 bg-[#ffffff] dark:bg-background overflow-hidden",
+          collapsed ? "lg:pl-16" : "lg:pl-56"
         )}
       >
-        <div className="flex-1 flex flex-col min-h-0 min-w-0">
+        <div className="flex-1 flex flex-col min-h-0 min-w-0 overflow-y-auto overflow-x-hidden">
           {children}
         </div>
       </main>

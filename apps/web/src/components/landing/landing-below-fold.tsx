@@ -42,6 +42,39 @@ function SectionDivider() {
   );
 }
 
+/** Sets video src only when in viewport to avoid loading all carousel/bento videos on initial load. */
+function LazyVideo({
+  src,
+  className,
+  ...props
+}: React.ComponentPropsWithoutRef<"video"> & { src: string }) {
+  const ref = useRef<HTMLVideoElement>(null);
+  const [load, setLoad] = useState(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) setLoad(true);
+      },
+      { rootMargin: "50%", threshold: 0 }
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
+  return (
+    <video
+      ref={ref}
+      src={load ? src : undefined}
+      className={className}
+      preload={load ? "metadata" : "none"}
+      {...props}
+    />
+  );
+}
+
 /* ─────────────────────────────────────────────
    VISUAL DEMO (Marquee)
 ───────────────────────────────────────────── */
@@ -111,7 +144,7 @@ function ImageCard({ item, imageType }: { item: typeof demoImages[0]; imageType:
               className="w-full h-full object-cover pointer-events-none"
               draggable={false}
               loading="lazy"
-              sizes="(max-width: 400px) 280px, 320px"
+              sizes="(max-width: 400px) 280px, (max-width: 768px) 320px, 560px"
             />
           </div>
         </Card>
@@ -298,27 +331,41 @@ const howItWorksSteps: {
 /** Single-source looping video (steps 1 & 2). */
 function StepVideo({ src }: { src: string }) {
   return (
-    <video
+    <LazyVideo
       src={src}
       autoPlay
       loop
       muted
       playsInline
-      preload="metadata"
       className="h-full w-full object-cover"
     />
   );
 }
 
-/** Two-part video: plays part A once, then loops part B. */
+/** Two-part video: plays part A once, then loops part B. Loads src only when in view. */
 function StepVideoTwoPart({ parts }: { parts: [string, string] }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const videoARef = useRef<HTMLVideoElement>(null);
   const videoBRef = useRef<HTMLVideoElement>(null);
   const [showB, setShowB] = useState(false);
+  const [load, setLoad] = useState(false);
   const hasPlayedA = useRef(false);
 
   useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) setLoad(true);
+      },
+      { rootMargin: "20%", threshold: 0 }
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!load) return;
     const vA = videoARef.current;
     const vB = videoBRef.current;
     if (!vA || !vB) return;
@@ -332,26 +379,26 @@ function StepVideoTwoPart({ parts }: { parts: [string, string] }) {
 
     vA.addEventListener("ended", onEndA);
     return () => vA.removeEventListener("ended", onEndA);
-  }, []);
+  }, [load]);
 
   return (
     <div ref={containerRef} className="relative h-full w-full">
       <video
         ref={videoARef}
-        src={parts[0]}
+        src={load ? parts[0] : undefined}
         autoPlay
         muted
         playsInline
-        preload="metadata"
+        preload={load ? "metadata" : "none"}
         className={cn("absolute inset-0 h-full w-full object-cover transition-opacity duration-300", showB ? "opacity-0 pointer-events-none" : "opacity-100")}
       />
       <video
         ref={videoBRef}
-        src={parts[1]}
+        src={load ? parts[1] : undefined}
         loop
         muted
         playsInline
-        preload="metadata"
+        preload={load ? "metadata" : "none"}
         className={cn("absolute inset-0 h-full w-full object-cover transition-opacity duration-300", showB ? "opacity-100" : "opacity-0 pointer-events-none")}
       />
     </div>
@@ -758,14 +805,13 @@ function AICreativesCarouselSection() {
                       sizes="(max-width: 768px) 160px, 200px"
                     />
                   ) : (
-                    <video
+                    <LazyVideo
                       src={item.src}
                       className="w-full h-full object-contain"
                       muted
                       loop
                       playsInline
                       autoPlay
-                      preload="metadata"
                       aria-label="AI-generated creative video"
                     />
                   )}
@@ -787,14 +833,13 @@ function AICreativesCarouselSection() {
                       sizes="(max-width: 768px) 160px, 200px"
                     />
                   ) : (
-                    <video
+                    <LazyVideo
                       src={item.src}
                       className="w-full h-full object-contain"
                       muted
                       loop
                       playsInline
                       autoPlay
-                      preload="metadata"
                       aria-label="AI-generated creative video"
                     />
                   )}
@@ -810,14 +855,13 @@ function AICreativesCarouselSection() {
             {carouselVideos16x9.map((src, i) => (
               <div key={`row2-${i}`} className="shrink-0 w-[320px] md:w-[400px]">
                 <div className="aspect-video w-full rounded-xl overflow-hidden border border-black/5 bg-slate-100 shadow-sm">
-                  <video
+                  <LazyVideo
                     src={src}
                     className="w-full h-full object-cover"
                     muted
                     loop
                     playsInline
                     autoPlay
-                    preload="metadata"
                     aria-label="AI-generated creative video"
                   />
                 </div>
@@ -826,14 +870,13 @@ function AICreativesCarouselSection() {
             {carouselVideos16x9.map((src, i) => (
               <div key={`row2-dup-${i}`} className="shrink-0 w-[320px] md:w-[400px]">
                 <div className="aspect-video w-full rounded-xl overflow-hidden border border-black/5 bg-slate-100 shadow-sm">
-                  <video
+                  <LazyVideo
                     src={src}
                     className="w-full h-full object-cover"
                     muted
                     loop
                     playsInline
                     autoPlay
-                    preload="metadata"
                     aria-label="AI-generated creative video"
                   />
                 </div>
@@ -1043,12 +1086,11 @@ function StatsBentoSection() {
           {/* 10x Faster – first on mobile for clear message */}
           <BlurFade inView inViewMargin="-40px" delay={0} className="order-1 md:order-none md:col-start-2 md:row-start-2 md:col-span-2 md:row-span-2 min-h-[240px] md:min-h-0">
             <div className="h-full min-h-[240px] md:min-h-0 rounded-2xl overflow-hidden relative border border-black/5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xs flex flex-col justify-center">
-              <video
+              <LazyVideo
                 autoPlay
                 loop
                 muted
                 playsInline
-                preload="metadata"
                 className="absolute inset-0 w-full h-full object-cover"
                 src={BENTO_10X_VIDEO}
                 aria-hidden

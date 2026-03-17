@@ -540,7 +540,7 @@ export function AssetCollectionView({ workspaceId, embedded }: AssetCollectionVi
                     </p>
                   </div>
                 )}
-                {expandedItem.type === "image" && expandedItem.metadata?.aspectRatio && (
+                {(expandedItem.metadata?.aspectRatio) && (
                   <div>
                     <p className="text-xs text-[#000000] dark:text-white/80 mb-0.5">Aspect ratio</p>
                     <p>{expandedItem.metadata.aspectRatio}</p>

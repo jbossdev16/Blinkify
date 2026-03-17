@@ -10,16 +10,19 @@ export default async function DashboardLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
+  let user: { id: string; email?: string | null; user_metadata?: { full_name?: string | null; avatar_url?: string | null } } | null = null;
+  try {
+    const { data } = await supabase.auth.getUser();
+    user = data?.user ?? null;
+  } catch {
+    // Supabase unreachable (e.g. network timeout); treat as unauthenticated
+  }
   if (!user) {
     redirect("/signin?returnTo=/dashboard");
   }
 
   let workspace: { plan: string; credits: number } | null = null;
-  const [initResult, workspacesResult] = await Promise.allSettled([
+  const [, workspacesResult] = await Promise.allSettled([
     apiFetch("/workspaces/init", { method: "POST" }),
     getWorkspaces(),
   ]);

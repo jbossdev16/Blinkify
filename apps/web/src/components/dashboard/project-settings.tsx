@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import {
   Loader2,
@@ -124,6 +125,35 @@ const PRESET_FONTS = [
   "Zeyada",
 ];
 
+const INDUSTRY_OPTIONS = [
+  // --- Products & Ecommerce ---
+  { id: "food_beverage", label: "Food & Beverage", emoji: "🍔" },
+  { id: "coffee_tea", label: "Coffee & Tea", emoji: "☕" },
+  { id: "beauty_skincare", label: "Beauty & Skincare", emoji: "✨" },
+  { id: "health_supplements", label: "Health & Supplements", emoji: "💊" },
+  { id: "fashion_apparel", label: "Fashion & Apparel", emoji: "👗" },
+  { id: "jewelry_accessories", label: "Jewelry & Accessories", emoji: "💎" },
+  { id: "home_lifestyle", label: "Home & Lifestyle", emoji: "🏠" },
+  { id: "sports_fitness", label: "Sports & Fitness", emoji: "💪" },
+  { id: "tech_electronics", label: "Tech & Electronics", emoji: "📱" },
+  { id: "pet_products", label: "Pet Products", emoji: "🐾" },
+  { id: "baby_kids", label: "Baby & Kids", emoji: "🍼" },
+  { id: "candles_fragrance", label: "Candles & Fragrance", emoji: "🕯" },
+  { id: "drinks_beverages", label: "Drinks & Beverages", emoji: "🥤" },
+  { id: "snacks_confectionery", label: "Snacks & Confectionery", emoji: "🍫" },
+  // --- Services & Other ---
+  { id: "restaurant_cafe", label: "Restaurant & Cafe", emoji: "🍽" },
+  { id: "agency_creative", label: "Agency & Creative Services", emoji: "🎨" },
+  { id: "professional_services", label: "Professional Services", emoji: "💼" },
+  { id: "health_wellness_services", label: "Health & Wellness Services", emoji: "🧘" },
+  { id: "fitness_gym", label: "Fitness & Gym", emoji: "🏋" },
+  { id: "real_estate", label: "Real Estate", emoji: "🏡" },
+  { id: "education_coaching", label: "Education & Coaching", emoji: "🎓" },
+  { id: "saas_software", label: "SaaS & Software", emoji: "💻" },
+  { id: "retail_local", label: "Retail & Local Business", emoji: "🏪" },
+  { id: "other", label: "Other", emoji: "📦" },
+];
+
 const GRADIENT_LINE_PREFIX = "GRADIENT:";
 const HEX_REGEX = /^#[0-9a-fA-F]{6}$/;
 /** Accept GRADIENT:slot:angle or GRADIENT::slot:angle (legacy) or with :hex stops; reject plain user text like "GRADIENT: use blue" */
@@ -236,6 +266,7 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
   const [fontStyles, setFontStyles] = useState<FontStyles>(project.font_styles ?? {});
   const [brandTone, setBrandTone] = useState("");
   const [brandIndustry, setBrandIndustry] = useState("");
+  const [industryPopupOpen, setIndustryPopupOpen] = useState(false);
   const [brandGuidelines, setBrandGuidelines] = useState(() => {
     const g = project.brand_guidelines ?? "";
     const { rest } = parseSlotGradientsFromGuidelines(g);
@@ -523,8 +554,12 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
       const result = await analyzeWebsite(workspaceId, project.id, url);
       const suggestions = result.suggestions;
       const extract = result.extract ?? {};
-      const suggestedName = (extract.title || extract.siteName || "").trim().slice(0, 100);
-      if (suggestedName) setName(suggestedName);
+      if (
+        suggestions.brand_name &&
+        (!name || name.trim() === "" || name === "My Brand")
+      ) {
+        setName(suggestions.brand_name.slice(0, 100));
+      }
       const descriptionText = suggestions.description?.trim() || "Brand project for ad creatives.";
       const guidelinesText = suggestions.brand_guidelines?.trim() || "Professional tone. Clear visuals.";
       setDescription(descriptionText);
@@ -902,15 +937,112 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
                     className="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                 </div>
-                <div>
+                <div className="mt-1.5">
                   <label className="text-xs font-medium text-foreground block mb-1.5">Industry</label>
-                  <input
-                    type="text"
-                    value={brandIndustry}
-                    onChange={(e) => setBrandIndustry(e.target.value)}
-                    placeholder="e.g. E-commerce, Fashion, Tech"
-                    className="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                  />
+                  <button
+                    type="button"
+                    onClick={() => setIndustryPopupOpen(true)}
+                    className="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground text-left flex items-center justify-between gap-2 focus:outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    <span className="flex items-center gap-2 min-w-0">
+                      {brandIndustry ? (
+                        <>
+                          <span aria-hidden className="shrink-0">{INDUSTRY_OPTIONS.find((o) => o.label === brandIndustry)?.emoji ?? "📦"}</span>
+                          <span className="truncate">{brandIndustry}</span>
+                        </>
+                      ) : (
+                        <span className="text-muted-foreground">Select industry…</span>
+                      )}
+                    </span>
+                    <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
+                  </button>
+                  {industryPopupOpen &&
+                    typeof document !== "undefined" &&
+                    createPortal(
+                      <>
+                        <div
+                          className="fixed inset-0 z-[9999] bg-black/50 backdrop-blur-sm"
+                          onClick={() => setIndustryPopupOpen(false)}
+                          aria-hidden
+                        />
+                        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 pointer-events-none">
+                          <div
+                            className="relative rounded-2xl border border-border bg-card shadow-xl w-full max-w-md max-h-[90vh] overflow-hidden flex flex-col pointer-events-auto"
+                            onClick={(e) => e.stopPropagation()}
+                            role="dialog"
+                            aria-modal="true"
+                            aria-labelledby="industry-popup-title"
+                          >
+                            <div className="flex items-center justify-between p-4 border-b border-border shrink-0">
+                              <h2 id="industry-popup-title" className="text-lg font-semibold text-foreground">
+                                Select industry
+                              </h2>
+                              <button
+                                type="button"
+                                onClick={() => setIndustryPopupOpen(false)}
+                                className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                                aria-label="Close"
+                              >
+                                <X className="size-5" />
+                              </button>
+                            </div>
+                            <div className="p-4 grid grid-cols-1 gap-2 min-h-0 flex-1 overflow-y-auto">
+                              <div className="col-span-full py-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                                Products & Ecommerce
+                              </div>
+                              {INDUSTRY_OPTIONS.slice(0, 14).map((opt) => {
+                                const isSelected = brandIndustry === opt.label;
+                                return (
+                                  <button
+                                    key={opt.id}
+                                    type="button"
+                                    onClick={() => {
+                                      setBrandIndustry(opt.label);
+                                      setIndustryPopupOpen(false);
+                                    }}
+                                    className={cn(
+                                      "w-full h-11 rounded-lg border px-3 text-sm text-left flex items-center gap-2 transition-colors",
+                                      isSelected
+                                        ? "border-primary bg-primary/10 text-foreground font-medium"
+                                        : "border-border bg-background hover:bg-muted/50 text-foreground"
+                                    )}
+                                  >
+                                    <span aria-hidden className="shrink-0">{opt.emoji}</span>
+                                    <span className="truncate">{opt.label}</span>
+                                  </button>
+                                );
+                              })}
+                              <div className="col-span-full py-1.5 pt-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                                Services & Other Businesses
+                              </div>
+                              {INDUSTRY_OPTIONS.slice(14).map((opt) => {
+                                const isSelected = brandIndustry === opt.label;
+                                return (
+                                  <button
+                                    key={opt.id}
+                                    type="button"
+                                    onClick={() => {
+                                      setBrandIndustry(opt.label);
+                                      setIndustryPopupOpen(false);
+                                    }}
+                                    className={cn(
+                                      "w-full h-11 rounded-lg border px-3 text-sm text-left flex items-center gap-2 transition-colors",
+                                      isSelected
+                                        ? "border-primary bg-primary/10 text-foreground font-medium"
+                                        : "border-border bg-background hover:bg-muted/50 text-foreground"
+                                    )}
+                                  >
+                                    <span aria-hidden className="shrink-0">{opt.emoji}</span>
+                                    <span className="truncate">{opt.label}</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                      </>,
+                      document.body
+                    )}
                 </div>
               </div>
             </BrandCard>

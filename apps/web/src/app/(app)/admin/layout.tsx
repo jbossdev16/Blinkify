@@ -7,10 +7,13 @@ export default async function AdminLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
+  let user: { id: string; email?: string | null } | null = null;
+  try {
+    const { data } = await supabase.auth.getUser();
+    user = data?.user ?? null;
+  } catch {
+    // Supabase unreachable (e.g. network timeout); treat as unauthenticated
+  }
   if (!user) {
     redirect("/signin?returnTo=/creative-studio");
   }

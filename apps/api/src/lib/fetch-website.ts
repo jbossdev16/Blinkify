@@ -1,7 +1,7 @@
 import * as cheerio from "cheerio";
 
 const FETCH_TIMEOUT_MS = 10_000;
-const BODY_SNIPPET_MAX_CHARS = 2000;
+const BODY_SNIPPET_MAX_CHARS = 4000;
 const MAX_STYLESHEETS = 5;
 const STYLESHEET_FETCH_TIMEOUT_MS = 3_000;
 
@@ -70,13 +70,30 @@ export interface WebsiteExtract {
   backgroundColor?: string;
   /** CTA/button color from button-like elements (inline style). */
   ctaColor?: string;
+  url?: string;
+  aboutSnippet?: string;
+  isShopify?: boolean;
+  shopifyProducts?: string;
 }
 
 /**
  * Fetch a URL and parse HTML for meta tags and a short body snippet.
  * Caller must validate URL (https only, no localhost) before calling.
  */
+const SECONDARY_PAGE_TIMEOUT_MS = 5_000;
+const SHOPIFY_PRODUCTS_TIMEOUT_MS = 5_000;
+const ABOUT_SNIPPET_MAX_CHARS = 2000;
+const SHOPIFY_PRODUCTS_MAX_CHARS = 1500;
+
 export async function fetchAndParseWebsite(url: string): Promise<WebsiteExtract> {
+  const normalizedUrl = (() => {
+    try {
+      return new URL(url).href;
+    } catch {
+      return url;
+    }
+  })();
+
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
@@ -101,6 +118,49 @@ export async function fetchAndParseWebsite(url: string): Promise<WebsiteExtract>
 
     const html = await res.text();
     const $ = cheerio.load(html);
+
+    let isShopify = false;
+    const canonicalHref = $('link[rel="canonical"]').attr("href") ?? "";
+    const generator = $('meta[name="generator"]').attr("content") ?? "";
+    if (
+      canonicalHref.includes("myshopify.com") ||
+      generator.includes("Shopify") ||
+      html.includes("cdn.shopify.com") ||
+      html.includes("window.Shopify")
+    ) {
+      isShopify = true;
+    }
+
+    let shopifyProducts: string | undefined;
+    if (isShopify) {
+      try {
+        const productsUrl = new URL("/products.json", normalizedUrl).href;
+        const prodController = new AbortController();
+        const prodTimeout = setTimeout(() => prodController.abort(), SHOPIFY_PRODUCTS_TIMEOUT_MS);
+        const prodRes = await fetch(productsUrl, {
+          signal: prodController.signal,
+          headers: {
+            "User-Agent": "Mozilla/5.0 (compatible; BlinkifyBrandBot/1.0; +https://blinkify.com)",
+          },
+          redirect: "follow",
+        });
+        clearTimeout(prodTimeout);
+        if (prodRes.ok) {
+          const data = (await prodRes.json()) as { products?: Array<{ title?: string; body_html?: string }> };
+          const products = Array.isArray(data?.products) ? data.products : [];
+          const parts: string[] = [];
+          for (const p of products.slice(0, 10)) {
+            const title = (p.title ?? "").trim();
+            const body = (p.body_html ?? "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+            if (title) parts.push(`${title}${body ? `: ${body}` : ""}`);
+          }
+          const joined = parts.join(" ");
+          if (joined) shopifyProducts = joined.slice(0, SHOPIFY_PRODUCTS_MAX_CHARS);
+        }
+      } catch {
+        // ignore
+      }
+    }
 
     const getMeta = (selector: string): string =>
       $(selector).attr("content")?.trim() ?? "";
@@ -229,7 +289,54 @@ export async function fetchAndParseWebsite(url: string): Promise<WebsiteExtract>
       }
     }
 
+    let aboutSnippet: string | undefined;
+    const secondaryPaths = [
+      "/about",
+      "/about-us",
+      "/our-story",
+      "/pages/about",
+      "/pages/our-story",
+      "/services",
+      "/what-we-do",
+      "/work",
+      "/menu",
+      "/products",
+    ];
+    const ua = "Mozilla/5.0 (compatible; BlinkifyBrandBot/1.0; +https://blinkify.com)";
+    for (const path of secondaryPaths) {
+      try {
+        const secUrl = new URL(path, normalizedUrl).href;
+        const secController = new AbortController();
+        const secTimeout = setTimeout(() => secController.abort(), SECONDARY_PAGE_TIMEOUT_MS);
+        const secRes = await fetch(secUrl, {
+          signal: secController.signal,
+          headers: { "User-Agent": ua },
+          redirect: "follow",
+        });
+        clearTimeout(secTimeout);
+        if (!secRes.ok) continue;
+        const secCt = secRes.headers.get("content-type") ?? "";
+        if (!secCt.toLowerCase().includes("text/html")) continue;
+        const secHtml = await secRes.text();
+        const $sec = cheerio.load(secHtml);
+        const secMain =
+          $sec("main").first().text() ||
+          $sec("article").first().text() ||
+          $sec("body").text();
+        if (secMain) {
+          aboutSnippet = secMain
+            .replace(/\s+/g, " ")
+            .trim()
+            .slice(0, ABOUT_SNIPPET_MAX_CHARS);
+          break;
+        }
+      } catch {
+        // continue to next path
+      }
+    }
+
     return {
+      url: normalizedUrl,
       title,
       description,
       ogDescription: getMeta('meta[property="og:description"]'),
@@ -242,6 +349,9 @@ export async function fetchAndParseWebsite(url: string): Promise<WebsiteExtract>
       primaryFont: primaryFont || undefined,
       backgroundColor: backgroundColor || undefined,
       ctaColor: ctaColor || undefined,
+      aboutSnippet: aboutSnippet || undefined,
+      isShopify: isShopify || undefined,
+      shopifyProducts: shopifyProducts || undefined,
     };
   } finally {
     clearTimeout(timeout);
@@ -298,4 +408,45 @@ async function fetchStylesheet(href: string): Promise<string> {
     clearTimeout(timeout);
     return "";
   }
+}
+
+function isNearWhite(hex: string): boolean {
+  const r = parseInt(hex.slice(1, 3), 16) / 255;
+  const g = parseInt(hex.slice(3, 5), 16) / 255;
+  const b = parseInt(hex.slice(5, 7), 16) / 255;
+  const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
+  return luminance > 0.7;
+}
+
+function isValidHex(color: string): boolean {
+  return /^#[0-9A-Fa-f]{6}$/.test(color);
+}
+
+export function buildCssColors(extract: WebsiteExtract): string[] {
+  const colors: string[] = [];
+  if (
+    extract.themeColor &&
+    isValidHex(extract.themeColor) &&
+    !isNearWhite(extract.themeColor)
+  ) {
+    colors.push(extract.themeColor);
+  }
+  if (
+    extract.ctaColor &&
+    isValidHex(extract.ctaColor) &&
+    extract.ctaColor !== extract.themeColor &&
+    !isNearWhite(extract.ctaColor)
+  ) {
+    colors.push(extract.ctaColor);
+  }
+  if (
+    extract.backgroundColor &&
+    isValidHex(extract.backgroundColor) &&
+    extract.backgroundColor !== extract.themeColor &&
+    extract.backgroundColor !== extract.ctaColor &&
+    !isNearWhite(extract.backgroundColor)
+  ) {
+    colors.push(extract.backgroundColor);
+  }
+  return colors;
 }

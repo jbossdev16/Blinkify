@@ -1,39 +1,56 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { createPortal } from "react-dom";
 import {
   Settings,
   Shield,
   User,
+  CreditCard,
   ChevronDown,
   ArrowLeft,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { PLAN_MAX_CREDITS } from "@/lib/constants";
+import { BillingUpgradeModal } from "@/components/dashboard/billing-upgrade-modal";
+import { apiClientFetch } from "@/lib/api-client";
 
 /* ─── Types ───────────────────────────────────────────────────────────── */
 
-type Tab = "general" | "security" | "account";
+type Tab = "general" | "security" | "account" | "plan";
 
 interface SettingsModalProps {
   onClose: () => void;
+  plan?: string | null;
+  credits?: number | null;
+  initialTab?: Tab;
 }
 
 export interface SettingsContentProps {
   /** When set, show close button (modal). When unset, show back link (page). */
   onClose?: () => void;
+  plan?: string | null;
+  credits?: number | null;
+  initialTab?: Tab;
 }
 
 const TABS: { id: Tab; label: string; icon: typeof Settings }[] = [
   { id: "general", label: "General", icon: Settings },
   { id: "security", label: "Security", icon: Shield },
   { id: "account", label: "Account", icon: User },
+  { id: "plan", label: "Manage Plan", icon: CreditCard },
 ];
 
 /* ─── Shared content (modal + page) ────────────────────────────────────── */
 
-export function SettingsContent({ onClose }: SettingsContentProps) {
-  const [activeTab, setActiveTab] = useState<Tab>("general");
+export function SettingsContent({ onClose, plan, credits, initialTab }: SettingsContentProps) {
+  const [activeTab, setActiveTab] = useState<Tab>(initialTab ?? "general");
+
+  useEffect(() => {
+    if (initialTab) setActiveTab(initialTab);
+  }, [initialTab]);
 
   return (
     <div className="relative w-full max-w-2xl rounded-2xl bg-background border border-border shadow-sm flex overflow-hidden max-h-[80vh]">
@@ -71,6 +88,7 @@ export function SettingsContent({ onClose }: SettingsContentProps) {
         {activeTab === "general" && <GeneralTab showHeading={false} />}
         {activeTab === "security" && <SecurityTab showHeading={false} />}
         {activeTab === "account" && <AccountTab showHeading={false} />}
+        {activeTab === "plan" && <ManagePlanTab plan={plan ?? "trial"} credits={credits ?? 0} />}
       </div>
     </div>
   );
@@ -78,7 +96,7 @@ export function SettingsContent({ onClose }: SettingsContentProps) {
 
 /* ─── Modal wrapper ────────────────────────────────────────────────────── */
 
-export function SettingsModal({ onClose }: SettingsModalProps) {
+export function SettingsModal({ onClose, plan, credits, initialTab }: SettingsModalProps) {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") onClose();
@@ -89,8 +107,8 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <SettingsContent onClose={onClose} />
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-md" onClick={onClose} />
+      <SettingsContent onClose={onClose} plan={plan} credits={credits} initialTab={initialTab} />
     </div>
   );
 }
@@ -125,6 +143,117 @@ export function SettingsContentSections() {
 /* ═══════════════════════════════════════════════════════════════════════
    TAB PANELS
    ═══════════════════════════════════════════════════════════════════════ */
+
+function planDisplayName(plan: string): string {
+  const p = plan.toLowerCase();
+  if (p === "ultra") return "Agency";
+  return plan.charAt(0).toUpperCase() + plan.slice(1);
+}
+
+/* ─── Manage Plan ─────────────────────────────────────────────────────── */
+
+function ManagePlanTab({ plan, credits }: { plan: string; credits: number }) {
+  const router = useRouter();
+  const max = PLAN_MAX_CREDITS[plan.toLowerCase()] ?? 100;
+  const used = max - credits;
+  const usagePct = max > 0 ? Math.round((used / max) * 100) : 0;
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
+  const [cancelLoading, setCancelLoading] = useState(false);
+  const [cancelError, setCancelError] = useState("");
+
+  const handleCancelConfirm = useCallback(async () => {
+    setCancelError("");
+    setCancelLoading(true);
+    try {
+      await apiClientFetch("/checkout/cancel-subscription", { method: "POST" });
+      setCancelModalOpen(false);
+      router.refresh();
+    } catch (e) {
+      setCancelError(e instanceof Error ? e.message : "Failed to cancel subscription");
+    } finally {
+      setCancelLoading(false);
+    }
+  }, [router]);
+
+  return (
+    <div>
+      <div className="flex items-center justify-between py-3 border-b border-border">
+        <p className="text-sm font-medium">Credit Usage</p>
+        <div className="flex items-center gap-3 shrink-0">
+          <span className="text-sm tabular-nums text-muted-foreground">{used} / {max}</span>
+          <div className="w-24 h-2 rounded-full bg-secondary/60 overflow-hidden" title={`${usagePct}% used`}>
+            <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${Math.min(100, usagePct)}%` }} />
+          </div>
+        </div>
+      </div>
+      <div className="flex items-center justify-between py-3 border-b border-border">
+        <p className="text-sm font-medium">Current Plan</p>
+        <span className="text-sm font-medium text-foreground">{planDisplayName(plan)}</span>
+      </div>
+      <div className="flex items-center justify-end gap-2 pt-4">
+        <button
+          type="button"
+          onClick={() => { setCancelError(""); setCancelModalOpen(true); }}
+          className="cursor-pointer flex items-center justify-center h-10 rounded-xl bg-card border border-border text-foreground text-sm font-medium hover:bg-destructive hover:text-destructive-foreground hover:border-destructive transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 min-w-[120px]"
+        >
+          Cancel
+        </button>
+        <BillingUpgradeModal
+          currentPlan={plan}
+          buttonClassName="cursor-pointer flex items-center justify-center h-10 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 hover:bg-primary transition-opacity border-0 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 min-w-[120px]"
+        />
+      </div>
+      {cancelModalOpen && typeof document !== "undefined" &&
+        createPortal(
+          <>
+            <div
+              className="fixed inset-0 z-[9999] bg-black/50 backdrop-blur-md"
+              onClick={() => !cancelLoading && setCancelModalOpen(false)}
+              aria-hidden
+            />
+            <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 overflow-y-auto pointer-events-none">
+              <div
+                className="relative rounded-2xl border border-border bg-card shadow-xl w-full max-w-md overflow-hidden transition-all duration-200 my-auto p-5 pointer-events-auto"
+                onClick={(e) => e.stopPropagation()}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="cancel-subscription-title"
+              >
+                <h2 id="cancel-subscription-title" className="text-lg font-semibold text-foreground">
+                  Cancel Subscription?
+                </h2>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  You are about to cancel {planDisplayName(plan)} and will not be billed nor have access to the account after the period ends. Are you sure?
+                </p>
+                {cancelError && (
+                  <p className="mt-2 text-sm text-destructive" role="alert">{cancelError}</p>
+                )}
+                <div className="mt-6 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => !cancelLoading && setCancelModalOpen(false)}
+                    disabled={cancelLoading}
+                    className="rounded-xl px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-secondary disabled:opacity-50"
+                  >
+                    Discard
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCancelConfirm}
+                    disabled={cancelLoading}
+                    className="rounded-xl px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 disabled:opacity-50"
+                  >
+                    {cancelLoading ? "Canceling…" : "Confirm"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </>,
+          document.body
+        )}
+    </div>
+  );
+}
 
 /* ─── General ─────────────────────────────────────────────────────────── */
 

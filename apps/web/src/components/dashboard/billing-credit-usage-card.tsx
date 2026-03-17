@@ -60,7 +60,7 @@ export function BillingCreditUsageCard({ credits, plan, used, max, usagePct }: B
           </div>
         </div>
         <div className="flex flex-col justify-end items-start sm:items-end gap-2 shrink-0 sm:w-1/2 sm:min-w-0">
-          <p className="text-lg font-semibold text-foreground">Current Plan: {packageName}</p>
+          <p className="text-lg font-semibold text-foreground">Current Plan {packageName}</p>
           <div className="flex items-center gap-2 flex-wrap">
             <BillingUpgradeModal
               currentPlan={plan}

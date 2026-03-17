@@ -10,8 +10,8 @@ interface BrandPageProps {
   searchParams: Promise<{ project?: string; new?: string }>;
 }
 
-export default async function BrandPage({ searchParams }: BrandPageProps) {
-  const params = await searchParams;
+export default async function BrandPage(props: BrandPageProps) {
+  const params = await props.searchParams;
   let workspace: Workspace | undefined;
   try {
     const { workspaces } = await getWorkspaces();

@@ -9,6 +9,12 @@ export const VIDEO_MODELS = {
   fast: "veo-3.1-fast-generate-preview",
 } as const;
 
+/** Fallback model when primary returns 503 (e.g. standard → fast). */
+export const VIDEO_MODEL_FALLBACK: Record<keyof typeof VIDEO_MODELS, keyof typeof VIDEO_MODELS> = {
+  standard: "fast",
+  fast: "standard",
+};
+
 export type VideoModelKey = keyof typeof VIDEO_MODELS;
 
 /** Aspect ratios supported by Veo */

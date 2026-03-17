@@ -82,8 +82,8 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
+        <link rel="preconnect" href="https://www.googletagmanager.com" />
         <link rel="dns-prefetch" href="https://www.googletagmanager.com" />
-        <link rel="preload" href="/Sunglasses.webp" as="image" />
         {!isAppDomain && jsonLd ? (
           <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd }} />
         ) : null}
@@ -94,6 +94,7 @@ export default function RootLayout({
         />
       </head>
       <body className={`${manrope.variable} font-sans antialiased`}>
+        {/* Google tag (gtag.js) — same Measurement ID on blinkify.ai and app.blinkify.ai; cookie_flags for cross-domain */}
         <Script
           src={`https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}`}
           strategy="lazyOnload"
@@ -103,7 +104,9 @@ export default function RootLayout({
             window.dataLayer = window.dataLayer || [];
             function gtag(){dataLayer.push(arguments);}
             gtag('js', new Date());
-            gtag('config', '${GA_MEASUREMENT_ID}');
+            gtag('config', '${GA_MEASUREMENT_ID}', {
+              cookie_flags: 'SameSite=None;Secure'
+            });
           `}
         </Script>
         {children}

@@ -5,7 +5,10 @@ import type { Project } from "@/lib/api";
 import { Spinner } from "@/components/ui/spinner";
 
 const CreativeStudioChat = dynamic(
-  () => import("./creative-studio-chat").then((m) => ({ default: m.CreativeStudioChat })),
+  () =>
+    typeof window !== "undefined"
+      ? import("./creative-studio-chat").then((m) => ({ default: m.CreativeStudioChat }))
+      : Promise.resolve({ default: () => null }),
   {
     ssr: false,
     loading: () => (
@@ -26,7 +29,7 @@ export function CreativeStudioView({ workspaceId, projects, plan }: CreativeStud
   if (!projects.length) return null;
 
   return (
-    <div className="flex flex-col flex-1 min-h-0">
+    <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
       <CreativeStudioChat
         project={projects[0]}
         allProjects={projects}

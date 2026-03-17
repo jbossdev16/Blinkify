@@ -8,8 +8,10 @@ import { supabase } from "../lib/supabase.js";
 import { isUuid, isAllowedWebsiteUrl } from "../lib/validation.js";
 import { SIGNED_URL_EXPIRY_SECONDS } from "../lib/storage-constants.js";
 import { getPlanConfig } from "../lib/plan-config.js";
-import { fetchAndParseWebsite, styleValueToHex } from "../lib/fetch-website.js";
-import { suggestBrandFromWebsite, extractColorsFromLogoImage, isMostlyGrayscale, translateToEnglish, extractGeminiErrorMessage } from "../lib/gemini.js";
+import { fetchAndParseWebsite, buildCssColors } from "../lib/fetch-website.js";
+import { analyzeBrandFromWebsite, BrandAnalysisResult } from "../lib/claude.js";
+import type { WebsiteExtract } from "../lib/fetch-website.js";
+import { extractGeminiErrorMessage } from "../lib/gemini.js";
 
 const router = Router();
 
@@ -742,38 +744,66 @@ router.post(
       }
 
       const extract = await fetchAndParseWebsite(url);
-      const suggestions = await suggestBrandFromWebsite(extract);
-      const themeHex = extract.themeColor?.trim();
-      const hasValidTheme = themeHex && /^#[0-9a-fA-F]{6}$/.test(themeHex);
-      if (hasValidTheme) {
-        suggestions.suggestedColors = [themeHex, ...suggestions.suggestedColors].slice(0, 3);
-      } else {
+
+      let logoBase64: string | undefined;
+      let logoMimeType: string | undefined;
+      if (extract.suggestedLogoUrl) {
         try {
-          const logoUrlForColors = extract.logoUrlForColors ?? extract.suggestedLogoUrl ?? "";
-          let logoColors = await extractColorsFromLogoImage(logoUrlForColors);
-          if (logoColors.length > 0 && isMostlyGrayscale(logoColors)) {
-            const fallbackUrl = extract.suggestedLogoUrl?.trim();
-            if (fallbackUrl && fallbackUrl !== logoUrlForColors) {
-              const fallbackColors = await extractColorsFromLogoImage(fallbackUrl);
-              if (fallbackColors.length > 0 && !isMostlyGrayscale(fallbackColors)) logoColors = fallbackColors;
-            }
+          const logoRes = await fetch(extract.suggestedLogoUrl, {
+            signal: AbortSignal.timeout(5000),
+          });
+          if (logoRes.ok) {
+            const buffer = await logoRes.arrayBuffer();
+            logoBase64 = Buffer.from(buffer).toString("base64");
+            const ct = logoRes.headers.get("content-type") ?? "image/png";
+            logoMimeType = ct.startsWith("image/") ? ct.split(";")[0]!.trim() : "image/png";
           }
-          if (logoColors.length > 0) suggestions.suggestedColors = logoColors.slice(0, 3);
-        } catch (colorErr) {
-          console.warn("extractColorsFromLogoImage failed, using defaults:", (colorErr as Error).message);
+        } catch {
+          console.warn("[ApplyBrand] Logo fetch failed, proceeding without vision");
         }
       }
+
+      const claudeResult = await analyzeBrandFromWebsite(extract, logoBase64, logoMimeType);
+
+      function buildSuggestedColors(extract: WebsiteExtract, claude: BrandAnalysisResult): string[] {
+        const colors: string[] = [];
+        if (
+          claude.suggested_primary_color &&
+          /^#[0-9A-Fa-f]{6}$/.test(claude.suggested_primary_color)
+        ) {
+          colors.push(claude.suggested_primary_color);
+        }
+        if (
+          claude.suggested_secondary_color &&
+          /^#[0-9A-Fa-f]{6}$/.test(claude.suggested_secondary_color) &&
+          claude.suggested_secondary_color !== claude.suggested_primary_color
+        ) {
+          colors.push(claude.suggested_secondary_color);
+        }
+        const cssColors = buildCssColors(extract);
+        for (const c of cssColors) {
+          if (!colors.includes(c)) colors.push(c);
+        }
+        return [...new Set(colors)].slice(0, 3);
+      }
+
+      const suggestedColors = buildSuggestedColors(extract, claudeResult);
       const defaults = ["#000000", "#666666", "#FFFFFF"];
-      const colors = [...suggestions.suggestedColors];
-      while (colors.length < 3) colors.push(defaults[colors.length] ?? "#000000");
-      const hex6 = /^#[0-9a-fA-F]{6}$/;
-      suggestions.suggestedColors = colors.slice(0, 3).map((c, i) => {
-        const hex = typeof c === "string" ? styleValueToHex(c) : null;
-        return hex && hex6.test(hex) ? hex : defaults[i]!;
-      });
-      if (extract.primaryFont && !suggestions.primary_font) suggestions.primary_font = extract.primaryFont;
-      const metaDescription = (extract.description || extract.ogDescription || "").trim().slice(0, 2000) || suggestions.description;
-      suggestions.description = await translateToEnglish(metaDescription);
+      const colorsPadded = [...suggestedColors];
+      while (colorsPadded.length < 3) colorsPadded.push(defaults[colorsPadded.length] ?? "#000000");
+      const finalColors = colorsPadded.slice(0, 3);
+
+      const suggestions = {
+        brand_name: claudeResult.brand_name,
+        description: claudeResult.brand_description,
+        brand_guidelines: claudeResult.brand_guidelines,
+        brand_tone: claudeResult.brand_tone,
+        brand_industry: claudeResult.brand_industry,
+        target_audience: (claudeResult.target_audience ?? "").slice(0, 200),
+        primary_font: (claudeResult.primary_font || extract.primaryFont || "").trim(),
+        suggestedColors: finalColors,
+      };
+
       res.json({ extract, suggestions });
     } catch (err: unknown) {
       if (err instanceof Error && err.name === "AbortError") {
