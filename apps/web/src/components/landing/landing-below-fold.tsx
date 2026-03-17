@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useEffect, useCallback, forwardRef } from "react";
+import React, { useState, useRef, useEffect, forwardRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
@@ -17,7 +17,6 @@ import {
   Zap,
   Lock,
   ChevronDown,
-  Play,
   DollarSign,
   Clock,
 } from "lucide-react";
@@ -476,7 +475,7 @@ const audiences = [
   },
 ];
 
-function WhoItsForSection() {
+function _WhoItsForSection() {
   return (
     <section id="who-its-for" className="py-24 bg-[#ffffff]">
       <div className="max-w-[1200px] mx-auto px-4">
@@ -1210,7 +1209,7 @@ const BLINKIFY_PLANS = [
 ];
 
 const HOURS_PER_CREATIVE = 1;
-const CREDITS_PER_CREATIVE = 2; // blended average (static/carousel/video)
+const _CREDITS_PER_CREATIVE = 2; // blended average (static/carousel/video), reserved for future use
 
 const CREATIVES_TO_PLAN: Record<string, (typeof BLINKIFY_PLANS)[number]> = (() => {
   const [Standard, Professional, Agency] = BLINKIFY_PLANS;
@@ -1247,7 +1246,7 @@ function CostCalculatorSection() {
   const [disclaimerOpen, setDisclaimerOpen] = useState(false);
 
   const country = ROI_COUNTRIES.find((c) => c.id === countryId) ?? ROI_COUNTRIES[0];
-  const team = ROI_TEAM_OPTIONS.find((t) => t.id === teamId) ?? ROI_TEAM_OPTIONS[0];
+  const _team = ROI_TEAM_OPTIONS.find((t) => t.id === teamId) ?? ROI_TEAM_OPTIONS[0];
   const creativesRange = ROI_CREATIVES_PER_WEEK.find((c) => c.id === creativesId) ?? ROI_CREATIVES_PER_WEEK[3];
 
   const creativesPerMonth = Math.round((creativesRange.mid * 52) / 12);
