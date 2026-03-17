@@ -23,7 +23,7 @@ Both **blinkify.ai** and **app.blinkify.ai** deploy from the same `apps/web` cod
 
 ### 1. blinkify.ai (marketing)
 
-- **Root Directory:** `apps/web`
+- **Root Directory:** `apps` (required: post-build looks for `web/.next` under this root; using `apps/web` causes ENOENT for `routes-manifest.json`)
 - **Framework:** Next.js (auto)
 - **Domain:** `blinkify.ai`
 
@@ -56,7 +56,7 @@ Deploy → copy the project URL (e.g. `https://blinkify-api.vercel.app`). This i
 
 ### 3. app.blinkify.ai (web app)
 
-- **Root Directory:** `apps/web`
+- **Root Directory:** `apps` (same as marketing; root `vercel.json` uses `outputDirectory: "web/.next"` and install/build run from repo root via `cd ..`)
 - **Framework:** Next.js (auto)
 - **Domain:** `app.blinkify.ai`
 

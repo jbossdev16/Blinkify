@@ -475,6 +475,8 @@ const audiences = [
   },
 ];
 
+// Reserved for future "Who it's for" section
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function _WhoItsForSection() {
   return (
     <section id="who-its-for" className="py-24 bg-[#ffffff]">
@@ -1209,7 +1211,8 @@ const BLINKIFY_PLANS = [
 ];
 
 const HOURS_PER_CREATIVE = 1;
-const _CREDITS_PER_CREATIVE = 2; // blended average (static/carousel/video), reserved for future use
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- reserved for future ROI display
+const _CREDITS_PER_CREATIVE = 2; // blended average (static/carousel/video)
 
 const CREATIVES_TO_PLAN: Record<string, (typeof BLINKIFY_PLANS)[number]> = (() => {
   const [Standard, Professional, Agency] = BLINKIFY_PLANS;
@@ -1246,6 +1249,7 @@ function CostCalculatorSection() {
   const [disclaimerOpen, setDisclaimerOpen] = useState(false);
 
   const country = ROI_COUNTRIES.find((c) => c.id === countryId) ?? ROI_COUNTRIES[0];
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- used for future team-based UI
   const _team = ROI_TEAM_OPTIONS.find((t) => t.id === teamId) ?? ROI_TEAM_OPTIONS[0];
   const creativesRange = ROI_CREATIVES_PER_WEEK.find((c) => c.id === creativesId) ?? ROI_CREATIVES_PER_WEEK[3];
 
