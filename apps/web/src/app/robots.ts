@@ -7,6 +7,19 @@ export const dynamic = "force-dynamic";
 const APP_HOST = "app.blinkify.ai";
 const MARKETING_HOST = "blinkify.ai";
 
+/** Explicit Allow for major AI and search crawlers (marketing site). */
+const AI_AND_SEARCH_RULES: MetadataRoute.Robots["rules"] = [
+  { userAgent: "*", allow: "/" },
+  { userAgent: "GPTBot", allow: "/" },
+  { userAgent: "ChatGPT-User", allow: "/" },
+  { userAgent: "ClaudeBot", allow: "/" },
+  { userAgent: "Claude-Web", allow: "/" },
+  { userAgent: "anthropic-ai", allow: "/" },
+  { userAgent: "PerplexityBot", allow: "/" },
+  { userAgent: "Googlebot", allow: "/" },
+  { userAgent: "Googlebot-Image", allow: "/" },
+];
+
 export default async function robots(): Promise<MetadataRoute.Robots> {
   const headersList = await headers();
   const host = headersList.get("host")?.replace(/:\d+$/, "") ?? MARKETING_HOST;
@@ -22,31 +35,7 @@ export default async function robots(): Promise<MetadataRoute.Robots> {
   const canonicalHost = host === `www.${MARKETING_HOST}` ? MARKETING_HOST : host;
 
   return {
-    rules: [
-      {
-        userAgent: "*",
-        allow: "/",
-        disallow: [
-          "/creative-studio",
-          "/brand",
-          "/asset-collection",
-          "/billing",
-          "/admin",
-          "/settings",
-          "/projects",
-          "/signin",
-          "/signup",
-          "/reset-password",
-          "/setup-plan",
-          "/studio",
-          "/dashboard",
-          "/invitations",
-          "/auth",
-          "/checkout",
-          "/workspaces",
-        ],
-      },
-    ],
+    rules: AI_AND_SEARCH_RULES,
     sitemap: `${baseUrl}/sitemap.xml`,
     host: canonicalHost,
   };

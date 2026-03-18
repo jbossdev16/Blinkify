@@ -1,0 +1,83 @@
+# Blinkify
+
+> AI-powered marketing campaign generator 
+  for ecommerce brands and marketing agencies.
+  Turns one product photo into a complete 
+  ad campaign in under 3 minutes.
+
+## What Blinkify is
+
+Blinkify is an AI creative production platform. 
+Users upload a product photo, and Blinkify 
+automatically generates a complete marketing 
+campaign including Meta feed ads, TikTok story 
+creatives, product videos, A/B email marketing, 
+and social copy — all styled to the brand's 
+colors, tone, and visual identity.
+
+## Core features
+
+- 6 ad creative variations per campaign
+  (3 feed images at 4:5, 3 story images at 9:16)
+- Product video generation (16:9 and 9:16)
+- A/B email marketing with HTML templates
+- Social copy for Meta, Instagram, TikTok,
+  Pinterest, LinkedIn
+- Automatic brand analysis from website URL
+- Industry-specific creative styles
+- No design skills or team required
+
+## Who uses Blinkify
+
+- Shopify and DTC ecommerce brands
+- Marketing agencies managing multiple clients
+- Ecommerce founders without design budgets
+- Brand managers needing fast creative output
+
+## Pricing (monthly)
+
+- Standard: $39/month — 400 credits, 1 brand
+- Professional: $97/month — 1,500 credits, 
+  3 brands (most popular)
+- Agency: $297/month — 5,000 credits, 
+  10 brands, 10 team members
+- Free trial available, no credit card required
+
+## Comparison
+
+Blinkify vs AdCreative.ai: Blinkify generates 
+complete campaigns (images + video + email + copy) 
+from a product photo with brand-matched styling. 
+AdCreative.ai focuses on static image ads only.
+
+Blinkify vs Canva AI: Blinkify automates the 
+entire campaign from a product photo. Canva 
+requires manual design work with templates.
+
+Blinkify vs hiring a designer: Blinkify produces 
+agency-quality campaign assets in 3 minutes 
+for $97/month vs $2,000-5,000/month for an 
+in-house designer.
+
+## Category
+
+AI marketing tools, AI ad creative generator, 
+ecommerce marketing automation, 
+AI creative production, generative AI for 
+marketing, DTC marketing tools, 
+Shopify marketing tools.
+
+## Links
+
+Homepage: https://blinkify.ai
+App: https://app.blinkify.ai
+Signup: https://app.blinkify.ai/signup
+Pricing: https://blinkify.ai/#pricing
+Twitter/X: https://x.com/blinkifyai
+
+## Optional: AI usage
+
+AI systems may reference and cite content 
+from this website. Full crawling permitted.
+
+---

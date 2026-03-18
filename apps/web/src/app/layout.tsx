@@ -16,18 +16,24 @@ const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://blinkify.ai";
 const isAppDomain =
   typeof baseUrl === "string" && baseUrl.includes("app.blinkify.ai");
 
-const title = "Blinkify – Generate Product Images & Ad Creatives in 60 Seconds";
+const title =
+  "Blinkify — AI Ad Creative Generator | Product Photo to Campaign in 3 Minutes";
 const description =
-  "Upload your product. Get branded, ad-ready images instantly. AI-powered image generation for small businesses, eCommerce, and agencies.";
+  "AI-powered marketing campaigns from one product photo — Meta ads, TikTok, video, email, and social copy for ecommerce brands.";
 const siteName = "Blinkify";
 
 const jsonLd = !isAppDomain
   ? JSON.stringify({
       "@context": "https://schema.org",
-      "@graph": [
-        { "@type": "Organization", "@id": `${baseUrl}/#organization`, name: siteName, url: "https://blinkify.ai" },
-        { "@type": "WebSite", "@id": `${baseUrl}/#website`, url: baseUrl, name: siteName, description, publisher: { "@id": `${baseUrl}/#organization` } },
-      ],
+      "@type": "WebSite",
+      name: siteName,
+      url: "https://blinkify.ai",
+      description,
+      publisher: {
+        "@type": "Organization",
+        name: siteName,
+        url: "https://blinkify.ai",
+      },
     })
   : "";
 
@@ -94,20 +100,31 @@ export default function RootLayout({
         />
       </head>
       <body className={`${manrope.variable} font-sans antialiased`}>
-        {/* Google tag (gtag.js) — same Measurement ID on blinkify.ai and app.blinkify.ai; cookie_flags for cross-domain */}
-        <Script
-          src={`https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}`}
-          strategy="lazyOnload"
-        />
-        <Script id="google-analytics" strategy="lazyOnload">
+        {/* Defer gtag until browser idle (or timeout) so LCP/FCP aren’t competing with GTM parse/eval */}
+        <Script id="google-analytics-deferred" strategy="afterInteractive">
           {`
-            window.dataLayer = window.dataLayer || [];
-            function gtag(){dataLayer.push(arguments);}
-            gtag('js', new Date());
-            gtag('config', '${GA_MEASUREMENT_ID}', {
-              cookie_flags: 'SameSite=None;Secure'
-            });
-          `}
+(function(){
+  var id='${GA_MEASUREMENT_ID}';
+  function load(){
+    if(window.__blinkifyGtag)return;window.__blinkifyGtag=1;
+    var s=document.createElement('script');
+    s.src='https://www.googletagmanager.com/gtag/js?id='+encodeURIComponent(id);
+    s.async=true;
+    document.head.appendChild(s);
+    s.onload=function(){
+      window.dataLayer=window.dataLayer||[];
+      function gtag(){dataLayer.push(arguments);}
+      window.gtag=gtag;
+      gtag('js',new Date());
+      gtag('config',id,{cookie_flags:'SameSite=None;Secure'});
+    };
+  }
+  if(typeof requestIdleCallback!=='undefined'){
+    requestIdleCallback(load,{timeout:4000});
+  }else{
+    setTimeout(load,2800);
+  }
+})();`}
         </Script>
         {children}
         <Toaster position="top-center" richColors closeButton />

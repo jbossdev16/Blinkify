@@ -110,6 +110,10 @@ export const getWorkspaces = cache(() =>
   apiFetch<{ workspaces: Workspace[] }>("/workspaces")
 );
 
+export const getWorkspaceProjects = cache((workspaceId: string) =>
+  apiFetch<{ projects: Project[] }>(`/workspaces/${workspaceId}/projects`)
+);
+
 export async function getProjectAssets(
   workspaceId: string,
   projectId: string

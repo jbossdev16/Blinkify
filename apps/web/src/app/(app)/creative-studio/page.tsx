@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
-import { apiFetch, getWorkspaces, type Project, type Workspace } from "@/lib/api";
+import { getWorkspaces, getWorkspaceProjects, type Project, type Workspace } from "@/lib/api";
 import { NoProjectEmptyState } from "@/components/dashboard/no-project-empty-state";
 import { CreativeStudioView } from "@/components/dashboard/creative-studio-view";
 
@@ -38,9 +38,7 @@ export default async function CreativeStudioPage() {
 
   let projects: Project[] = [];
   try {
-    const res = await apiFetch<{ projects: Project[] }>(
-      `/workspaces/${workspace.id}/projects`
-    );
+    const res = await getWorkspaceProjects(workspace.id);
     projects = res.projects ?? [];
   } catch {
     projects = [];

@@ -1,4 +1,11 @@
-import { getWorkspaces, apiFetch, getProjectLogoUrl, type Project, type Workspace } from "@/lib/api";
+import {
+  getWorkspaces,
+  getWorkspaceProjects,
+  apiFetch,
+  getProjectLogoUrl,
+  type Project,
+  type Workspace,
+} from "@/lib/api";
 import { redirect } from "next/navigation";
 import { CreateProjectFlow } from "@/components/dashboard/create-project-flow";
 import { ProjectSettings } from "@/components/dashboard/project-settings";
@@ -23,10 +30,7 @@ export default async function BrandPage(props: BrandPageProps) {
 
   let projects: Project[] = [];
   try {
-    const res = await apiFetch<{ projects: Project[] }>(
-      `/workspaces/${workspace.id}/projects`,
-      { cache: "no-store" }
-    );
+    const res = await getWorkspaceProjects(workspace.id);
     projects = res.projects ?? [];
   } catch {
     // fallback

@@ -61,12 +61,10 @@ export function HeroSection() {
               <div className="mx-auto h-full w-full max-w-2xl bg-[radial-gradient(ellipse_80%_50%_at_20%_30%,rgba(59,130,246,0.25),_transparent_50%),radial-gradient(ellipse_60%_60%_at_50%_50%,rgba(139,92,246,0.2),_transparent_55%),radial-gradient(ellipse_70%_50%_at_80%_70%,rgba(249,115,22,0.2),_transparent_50%),radial-gradient(ellipse_50%_50%_at_70%_20%,rgba(239,68,68,0.15),_transparent_55%)]" />
             </div>
 
-            <h1 className="text-4xl sm:text-5xl md:text-6xl font-medium leading-tight tracking-tight text-foreground mb-2">
-              Ad creatives that convert,
+            <h1 className="text-4xl sm:text-5xl md:text-6xl font-medium leading-tight tracking-tight text-foreground mb-6 md:mb-7">
+              <span className="block mb-2">Ad creatives that convert,</span>
+              <span className="block text-gradient-brand">10x Faster & Cheaper.</span>
             </h1>
-            <h2 className="text-4xl sm:text-5xl md:text-6xl font-medium leading-tight tracking-tight text-foreground mb-6 md:mb-7">
-              <span className="text-gradient-brand">10x Faster & Cheaper.</span>
-            </h2>
             <p className="text-base sm:text-lg text-[#000000] max-w-xl mx-auto mb-7 md:mb-8 leading-relaxed">
               Upload once, get scroll-stopping visuals in seconds.
             </p>
@@ -100,12 +98,10 @@ export function HeroSection() {
           >
             <div className="mx-auto h-full w-full max-w-2xl bg-[radial-gradient(ellipse_80%_50%_at_20%_30%,rgba(59,130,246,0.25),_transparent_50%),radial-gradient(ellipse_60%_60%_at_50%_50%,rgba(139,92,246,0.2),_transparent_55%),radial-gradient(ellipse_70%_50%_at_80%_70%,rgba(249,115,22,0.2),_transparent_50%),radial-gradient(ellipse_50%_50%_at_70%_20%,rgba(239,68,68,0.15),_transparent_55%)]" />
           </div>
-          <h1 className="text-4xl sm:text-5xl md:text-6xl font-medium leading-tight tracking-tight text-foreground mb-2">
-            Ad creatives that convert,
+          <h1 className="text-4xl sm:text-5xl md:text-6xl font-medium leading-tight tracking-tight text-foreground mb-6 md:mb-7">
+            <span className="block mb-2">Ad creatives that convert,</span>
+            <span className="block text-gradient-brand">10x Faster & Cheaper.</span>
           </h1>
-          <h2 className="text-4xl sm:text-5xl md:text-6xl font-medium leading-tight tracking-tight text-foreground mb-6 md:mb-7">
-            <span className="text-gradient-brand">10x Faster & Cheaper.</span>
-          </h2>
           <p className="text-base sm:text-lg text-[#000000] max-w-xl mx-auto mb-7 md:mb-8 leading-relaxed">
             Upload once, get scroll-stopping visuals in seconds.
           </p>

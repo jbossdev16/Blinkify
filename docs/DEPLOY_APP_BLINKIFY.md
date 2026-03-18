@@ -79,6 +79,23 @@ Deploy URL → **API_BACKEND_URL** for the app project.
 
 ---
 
+## Next.js 16, npm audit & monorepo build (keep for later)
+
+**Why:** `npm audit` reported moderate issues on Next 15.x (HTTP smuggling in rewrites + unbounded `next/image` disk cache). Fixes land in **Next ≥ 16.1.7**; staying on 15.x left at least one finding.
+
+**What we changed (web app):**
+
+| Item | Detail |
+|------|--------|
+| **Versions** | `next` and `eslint-config-next` pinned to **16.1.7** in `apps/web/package.json`. |
+| **Production build** | Script uses **`next build --webpack`**. Next 16 defaults to Turbopack for `next build`; Turbopack mis-inferred the monorepo root and failed. Webpack matches the old behavior. |
+| **`next.config.ts`** | **`outputFileTracingRoot`** = monorepo **repository root** (`path.join(__dirname, "..", "..")`), not `apps/`. With only `..` (i.e. `apps/`), **`next build` failed** during “Collecting page data” (`Cannot find module for page: /admin`, `/projects/[id]`, etc.). |
+| **Lockfile** | If `package-lock.json` still resolved `next@15.x` while `package.json` asked for 16.x, run a clean install / refresh the lock so **`apps/web` actually gets 16.1.7**. |
+
+**Vercel:** Web deploy still uses **`apps/web`** root + `vercel.json` install symlink for `next` (hoisted to repo `node_modules`). Local and CI builds must pass **`npm run build`** in `apps/web` after any Next major bump.
+
+---
+
 ## Summary
 
 | Project | Root | Domain | Key env |

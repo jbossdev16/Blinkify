@@ -24,6 +24,23 @@ export function DashboardShell({ user, plan, credits, isAdmin, children }: Dashb
     if (stored === "true") setCollapsed(true);
   }, []);
 
+  useEffect(() => {
+    const base = process.env.NEXT_PUBLIC_API_URL;
+    if (!base) return;
+    try {
+      const u = new URL(base);
+      if (u.origin === window.location.origin) return;
+      if (document.querySelector(`link[rel="preconnect"][href="${u.origin}"]`)) return;
+      const link = document.createElement("link");
+      link.rel = "preconnect";
+      link.href = u.origin;
+      link.crossOrigin = "anonymous";
+      document.head.appendChild(link);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   // Lock document scroll so only the main content area scrolls; prevents double scrollbar and html overflow
   useEffect(() => {
     const el = document.documentElement;

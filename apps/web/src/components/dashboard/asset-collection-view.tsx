@@ -51,6 +51,81 @@ function videoModelLabel(raw: string | undefined): string | null {
   return VIDEO_MODEL_LABELS[raw] ?? raw;
 }
 
+/** Spans for a 3-col bento (same ratios as old 6-col: wide = half row, tall = 1×2). */
+function getBentoSpans(item: AssetItem): { colSpan: number; rowSpan: number } {
+  const ar = (item.metadata?.aspectRatio ?? "").trim() || "1:1";
+  if (
+    ["16:9", "21:9", "5:4", "4:3", "3:2"].includes(ar)
+  ) {
+    return { colSpan: 2, rowSpan: 1 };
+  }
+  if (["9:16", "2:3", "3:4"].includes(ar) || ar === "4:5") {
+    return { colSpan: 1, rowSpan: 2 };
+  }
+  return { colSpan: 1, rowSpan: 1 };
+}
+
+function getBentoLayout(item: AssetItem): {
+  gridClass: string;
+  aspectClass: string;
+} {
+  const ar = (item.metadata?.aspectRatio ?? "").trim() || "1:1";
+  const wide =
+    "col-span-2 row-span-1";
+  switch (ar) {
+    case "16:9":
+    case "21:9":
+    case "5:4":
+    case "4:3":
+    case "3:2":
+      return {
+        gridClass: wide,
+        aspectClass: ar === "21:9" ? "aspect-[21/9]" : ar === "5:4" ? "aspect-[5/4]" : ar === "4:3" ? "aspect-[4/3]" : ar === "3:2" ? "aspect-[3/2]" : "aspect-video",
+      };
+    case "9:16":
+    case "2:3":
+    case "3:4":
+      return {
+        gridClass: "col-span-1 row-span-2",
+        aspectClass: ar === "2:3" ? "aspect-[2/3]" : ar === "3:4" ? "aspect-[3/4]" : "aspect-[9/16]",
+      };
+    case "4:5":
+      return {
+        gridClass: "col-span-1 row-span-2",
+        aspectClass: "aspect-[4/5]",
+      };
+    case "1:1":
+    default:
+      return {
+        gridClass: "col-span-1 row-span-1",
+        aspectClass: "aspect-square",
+      };
+  }
+}
+
+const BENTO_COLS = 3;
+
+/** Pack items left-to-right in a 3-col bento until row budget; approximates CSS dense grid. */
+function sliceItemsWithinRowBudget(items: AssetItem[], maxRows: number): AssetItem[] {
+  if (maxRows <= 0) return [];
+  const colEnd = new Array(BENTO_COLS).fill(0);
+  const out: AssetItem[] = [];
+  for (const item of items) {
+    const { colSpan: cs, rowSpan: rs } = getBentoSpans(item);
+    let placed = false;
+    for (let c = 0; c <= BENTO_COLS - cs && !placed; c++) {
+      const startRow = Math.max(...colEnd.slice(c, c + cs));
+      if (startRow + rs <= maxRows) {
+        for (let k = 0; k < cs; k++) colEnd[c + k] = startRow + rs;
+        out.push(item);
+        placed = true;
+      }
+    }
+    if (!placed) break;
+  }
+  return out;
+}
+
 /* ─── Types ─────────────────────────────────────────────────────────────── */
 
 interface AssetItem {
@@ -87,7 +162,8 @@ export function AssetCollectionView({ workspaceId, embedded }: AssetCollectionVi
   const [imageAspectFilter, setImageAspectFilter] = useState<string>("");
   const [videoAspectFilter, setVideoAspectFilter] = useState<string>("");
   const [videoResolutionFilter, setVideoResolutionFilter] = useState<string>("");
-  const [visibleRows, setVisibleRows] = useState(2);
+  /** Grid row tracks to show (3-col bento); +6 per "View More". Resets on refresh / filter change / remount. */
+  const [visibleRowBudget, setVisibleRowBudget] = useState(6);
   const fetchAbortedRef = useRef(false);
 
   const fetchItems = useCallback(async (silent = false) => {
@@ -152,6 +228,16 @@ export function AssetCollectionView({ workspaceId, embedded }: AssetCollectionVi
       return true;
     });
   }, [items, typeFilter, imageAspectFilter, videoAspectFilter, videoResolutionFilter]);
+
+  useEffect(() => {
+    setVisibleRowBudget(6);
+  }, [typeFilter, imageAspectFilter, videoAspectFilter, videoResolutionFilter]);
+
+  const displayedItems = useMemo(
+    () => sliceItemsWithinRowBudget(filteredItems, visibleRowBudget),
+    [filteredItems, visibleRowBudget]
+  );
+  const hasMoreGrid = displayedItems.length < filteredItems.length;
 
   async function handleRemove(id: string, e: React.MouseEvent) {
     e.stopPropagation();
@@ -223,14 +309,9 @@ export function AssetCollectionView({ workspaceId, embedded }: AssetCollectionVi
     setImageAspectFilter("");
     setVideoAspectFilter("");
     setVideoResolutionFilter("");
-    setVisibleRows(2);
+    setVisibleRowBudget(6);
     fetchItems();
   }
-
-  const cols = 3;
-  const limit = embedded ? visibleRows * cols : undefined;
-  const displayedItems = limit !== undefined ? filteredItems.slice(0, limit) : filteredItems;
-  const hasMore = embedded && limit !== undefined && filteredItems.length > limit;
 
   return (
     <div className={containerClass}>
@@ -256,23 +337,29 @@ export function AssetCollectionView({ workspaceId, embedded }: AssetCollectionVi
               <>
               <div
                 className={cn(
-                  "grid gap-4",
-                  "grid-cols-2 sm:grid-cols-3"
+                  "grid gap-3 sm:gap-4 grid-flow-dense",
+                  "grid-cols-2 sm:grid-cols-3",
+                  "grid-auto-rows-[minmax(150px,1fr)] sm:grid-auto-rows-[minmax(180px,1fr)]"
                 )}
               >
-                {displayedItems.map((item) => (
+                {displayedItems.map((item) => {
+                  const { gridClass, aspectClass } = getBentoLayout(item);
+                  return (
                   <div
                     key={item.id}
-                    className="group relative rounded-xl border border-border bg-card shadow-sm overflow-hidden cursor-pointer"
+                    className={cn(
+                      "group relative rounded-xl border border-border bg-card shadow-sm overflow-hidden cursor-pointer min-h-0 flex flex-col",
+                      gridClass
+                    )}
                     onClick={() => item.url && setExpandedItem(item)}
                   >
-                    <div className="aspect-square bg-secondary/30 flex items-center justify-center relative">
+                    <div className={cn("w-full flex-1 min-h-0 flex items-center justify-center relative bg-secondary/20", aspectClass)}>
                       {item.type === "image" ? (
                         item.url ? (
                           <img
                             src={item.url}
                             alt=""
-                            className="w-full h-full object-cover"
+                            className="absolute inset-0 w-full h-full object-cover"
                           />
                         ) : (
                           <ImageIcon className="size-12 text-muted-foreground/50" />
@@ -281,7 +368,7 @@ export function AssetCollectionView({ workspaceId, embedded }: AssetCollectionVi
                         <>
                           <video
                             src={item.url}
-                            className="w-full h-full object-cover"
+                            className="absolute inset-0 w-full h-full object-cover"
                             muted
                             playsInline
                             preload="metadata"
@@ -327,16 +414,17 @@ export function AssetCollectionView({ workspaceId, embedded }: AssetCollectionVi
                       </button>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
-              {hasMore && (
-                <div className="mt-4 flex items-center justify-center">
+              {hasMoreGrid && (
+                <div className="mt-6 flex items-center justify-center">
                   <button
                     type="button"
-                    onClick={() => setVisibleRows((r) => r + 3)}
-                    className="px-4 py-2 rounded-lg text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                    onClick={() => setVisibleRowBudget((r) => r + 6)}
+                    className="px-5 py-2.5 rounded-xl text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
                   >
-                    View More
+                    View more <span className="opacity-90 font-normal">(6 more rows)</span>
                   </button>
                 </div>
               )}

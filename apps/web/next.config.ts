@@ -50,6 +50,7 @@ const nextConfig: NextConfig = {
       bodySizeLimit: "50mb",
       // allowedOrigins: ["my-proxy.com", "*.my-proxy.com"],
     },
+    optimizePackageImports: ["lucide-react", "@tabler/icons-react"],
   },
 };
 

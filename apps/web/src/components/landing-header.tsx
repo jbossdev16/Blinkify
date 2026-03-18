@@ -60,7 +60,7 @@ export function LandingHeader() {
           >
             Log in
           </a>
-          <Button asChild size="sm" className="font-semibold h-10 px-6 rounded-md bg-[#007aff] hover:bg-[#0066dd] border-0 text-white">
+            <Button asChild size="sm" className="font-semibold h-10 px-6 rounded-md bg-primary hover:bg-primary/90 border-0 text-primary-foreground">
             <a href={`${APP_BASE}/signup`}>Sign up</a>
           </Button>
         </div>

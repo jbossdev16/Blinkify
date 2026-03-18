@@ -13,8 +13,35 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   if (host === APP_HOST) return [];
 
   const baseUrl = `https://${host}`;
+  const aeoMonthly = { changeFrequency: "monthly" as const, priority: 0.8 };
   return [
     { url: baseUrl, lastModified: new Date(), changeFrequency: "weekly", priority: 1 },
+    {
+      url: `${baseUrl}/ai-ad-creative-generator`,
+      lastModified: new Date(),
+      ...aeoMonthly,
+    },
+    {
+      url: `${baseUrl}/adcreative-ai-alternative`,
+      lastModified: new Date(),
+      ...aeoMonthly,
+    },
+    {
+      url: `${baseUrl}/ai-marketing-tools-shopify`,
+      lastModified: new Date(),
+      ...aeoMonthly,
+    },
+    {
+      url: `${baseUrl}/product-photo-to-ad`,
+      lastModified: new Date(),
+      ...aeoMonthly,
+    },
+    {
+      url: `${baseUrl}/features`,
+      lastModified: new Date(),
+      changeFrequency: "monthly",
+      priority: 0.75,
+    },
     { url: `${baseUrl}/waitlist`, lastModified: new Date(), changeFrequency: "monthly", priority: 0.8 },
     { url: `${baseUrl}/privacy`, lastModified: new Date(), changeFrequency: "yearly", priority: 0.3 },
     { url: `${baseUrl}/terms`, lastModified: new Date(), changeFrequency: "yearly", priority: 0.3 },

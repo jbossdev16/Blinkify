@@ -27,6 +27,7 @@ import { cn } from "@/lib/utils";
 import { AnimatePresence, motion } from "motion/react";
 import { OrbitingCircles } from "@/components/ui/orbiting-circles";
 import { AnimatedBeam } from "@/components/ui/animated-beam";
+import { LANDING_FAQ_ITEMS } from "@/lib/homepage-faq-schema";
 
 const APP_BASE =
   process.env.NEXT_PUBLIC_APP_URL === "https://blinkify.ai"
@@ -143,7 +144,8 @@ function ImageCard({ item, imageType }: { item: typeof demoImages[0]; imageType:
               className="w-full h-full object-cover pointer-events-none"
               draggable={false}
               loading="lazy"
-              sizes="(max-width: 400px) 280px, (max-width: 768px) 320px, 560px"
+              sizes="320px"
+              quality={72}
             />
           </div>
         </Card>
@@ -408,6 +410,7 @@ function HowItWorksSection() {
   return (
     <section id="how-it-works" className="py-24 bg-[#ffffff]">
       <div className="max-w-[1200px] mx-auto px-4">
+        <h2 className="sr-only">How it works</h2>
         <div className="space-y-8 md:space-y-10">
           {howItWorksSteps.map((step, i) => {
             const imageLeft = i % 2 === 1;
@@ -628,7 +631,12 @@ function PlatformLogosRow() {
         p.src ? (
           <Image key={p.name} src={p.src} alt={p.name} width={24} height={24} className="h-6 w-6 object-contain shrink-0" />
         ) : (
-          <span key={p.name} className={`flex h-6 w-6 shrink-0 items-center justify-center ${p.name === "Facebook" ? "text-[#1877F2]" : "text-foreground"}`} aria-label={p.name}>
+          <span
+            key={p.name}
+            role="img"
+            className={`flex h-6 w-6 shrink-0 items-center justify-center ${p.name === "Facebook" ? "text-[#1877F2]" : "text-foreground"}`}
+            aria-label={p.name}
+          >
             {p.name === "Facebook" && (
               <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden>
                 <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
@@ -1280,9 +1288,9 @@ function CostCalculatorSection() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8 items-stretch w-full max-w-5xl mx-auto">
           {/* Left: inputs — stretches toward center */}
           <div className="rounded-2xl border border-black/8 bg-white p-5 sm:p-6 lg:min-w-0 lg:flex-1">
-            <h3 className="text-base sm:text-lg font-semibold text-foreground mb-4 sm:mb-5">
-              Calculate your Return on Investment
-            </h3>
+            <p className="text-base sm:text-lg font-semibold text-foreground mb-4 sm:mb-5">
+              Your inputs
+            </p>
             <div className="space-y-5">
               <div>
                 <label htmlFor="roi-country" className="flex items-center gap-1.5 text-sm font-medium text-foreground mb-2">
@@ -1754,7 +1762,7 @@ function PricingSection() {
             <h2 className="text-h2 font-medium tracking-tight text-foreground mb-4 max-w-[600px]">
               Predictable Pricing
             </h2>
-            <p className="text-slate-600 max-w-[520px] font-normal">
+            <p className="text-slate-700 max-w-[520px] font-normal">
               Start small, scale as you grow. No hidden fees. Cancel anytime.
             </p>
           </div>
@@ -1780,7 +1788,7 @@ function PricingSection() {
                 className={`relative px-4 py-2 rounded-full text-sm font-medium transition-colors ${
                   billingPeriod === "monthly"
                     ? "bg-primary text-primary-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
+                    : "text-foreground/80 hover:text-foreground bg-transparent"
                 }`}
               >
                 Monthly
@@ -1791,7 +1799,7 @@ function PricingSection() {
                 className={`relative px-4 py-2 rounded-full text-sm font-medium transition-colors ${
                   billingPeriod === "annual"
                     ? "bg-primary text-primary-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
+                    : "text-foreground/80 hover:text-foreground bg-transparent"
                 }`}
               >
                 Annual
@@ -1813,6 +1821,10 @@ function PricingSection() {
                 {plan.popular && (
                   <div className="absolute inset-0 rounded-[inherit] overflow-hidden z-0">
                     <LazyPricingVideo />
+                    <div
+                      className="absolute inset-0 bg-slate-950/75 z-[1]"
+                      aria-hidden
+                    />
                   </div>
                 )}
                 <div className="absolute inset-0 rounded-[inherit] z-10 pointer-events-none">
@@ -1835,7 +1847,7 @@ function PricingSection() {
                   </h3>
                   <p
                     className={`mt-2 text-sm font-normal ${
-                      plan.popular ? "text-white/90" : "text-slate-600"
+                      plan.popular ? "text-white" : "text-slate-600"
                     }`}
                   >
                     {plan.description}
@@ -1856,7 +1868,7 @@ function PricingSection() {
                           />
                           <span
                             className={`text-base font-normal ml-0.5 ${
-                              plan.popular ? "text-white/80" : "text-slate-600"
+                              plan.popular ? "text-white" : "text-slate-600"
                             }`}
                           >
                             /month
@@ -1864,7 +1876,7 @@ function PricingSection() {
                           {billingPeriod === "annual" && (
                             <p
                               className={`mt-1 text-sm ${
-                                plan.popular ? "text-white/80" : "text-slate-600"
+                                plan.popular ? "text-white" : "text-slate-600"
                               }`}
                             >
                               Billed annually at ${annualTotal.toLocaleString()}
@@ -1921,8 +1933,8 @@ function PricingSection() {
                               ? plan.popular
                                 ? "text-white"
                                 : "text-foreground"
-                              : plan.popular
-                                ? "text-white/60"
+                              :                               plan.popular
+                                ? "text-white/85"
                                 : "text-muted-foreground"
                           }
                         >
@@ -1955,32 +1967,7 @@ function PricingSection() {
 /* ─────────────────────────────────────────────
    FAQ (objection handling before final CTA)
 ───────────────────────────────────────────── */
-const faqItems: { q: string; a: string }[] = [
-  {
-    q: "Is there really a free trial?",
-    a: "Yes. Start your free trial in one click. Cancel anytime.",
-  },
-  {
-    q: "How do credits work?",
-    a: "Each generation uses credits (e.g. one image or one batch counts as one or more credits depending on format). Your plan includes a monthly credit allowance; unused credits don't roll over. Check your plan details for exact usage.",
-  },
-  {
-    q: "What formats can I generate?",
-    a: "Meta, Google, TikTok, and store-ready formats—including static ads, carousels, and video. All tuned for performance.",
-  },
-  {
-    q: "Do you support teams or agencies?",
-    a: "Yes. Professional and Agency plans support multiple brands and team members. For custom or enterprise needs, book a call and we'll set you up.",
-  },
-  {
-    q: "Is my brand data safe?",
-    a: "Your brand assets and inputs are never shared or trained on. Private by default.",
-  },
-  {
-    q: "Can I cancel anytime?",
-    a: "Yes. No long-term commitment. Cancel from your account whenever you want.",
-  },
-];
+const faqItems = LANDING_FAQ_ITEMS;
 
 function FAQSection() {
   const [openIndex, setOpenIndex] = useState<number | null>(null);
@@ -2037,6 +2024,46 @@ function FAQSection() {
             );
           })}
         </ul>
+        <nav
+          className="max-w-[640px] mx-auto mt-10 pt-8 border-t border-black/[0.06] space-y-2 text-center"
+          aria-label="Related guides"
+        >
+          <p className="text-sm text-muted-foreground mb-3">Learn more</p>
+          <ul className="flex flex-col gap-2 text-sm">
+            <li>
+              <Link
+                href="/ai-ad-creative-generator"
+                className="text-foreground font-medium hover:underline underline-offset-2"
+              >
+                Learn more about AI ad creative generation →
+              </Link>
+            </li>
+            <li>
+              <Link
+                href="/adcreative-ai-alternative"
+                className="text-foreground font-medium hover:underline underline-offset-2"
+              >
+                See how Blinkify compares to AdCreative.ai →
+              </Link>
+            </li>
+            <li>
+              <Link
+                href="/ai-marketing-tools-shopify"
+                className="text-foreground font-medium hover:underline underline-offset-2"
+              >
+                AI marketing tools for Shopify →
+              </Link>
+            </li>
+            <li>
+              <Link
+                href="/product-photo-to-ad"
+                className="text-foreground font-medium hover:underline underline-offset-2"
+              >
+                Product photo to ad campaign guide →
+              </Link>
+            </li>
+          </ul>
+        </nav>
       </div>
     </section>
   );

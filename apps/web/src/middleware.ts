@@ -25,9 +25,22 @@ const PUBLIC_PATHS = new Set([
   "/setup-plan",
   "/brand-assets",
   "/waitlist",
+  "/ai-ad-creative-generator",
+  "/adcreative-ai-alternative",
+  "/ai-marketing-tools-shopify",
+  "/product-photo-to-ad",
+  "/features",
+  "/privacy",
+  "/terms",
+  "/cookies",
 ]);
 function isPublicPath(pathname: string) {
-  return pathname === "/" || PUBLIC_PATHS.has(pathname) || pathname.startsWith("/reset-password") || pathname.startsWith("/setup-plan");
+  return (
+    pathname === "/" ||
+    PUBLIC_PATHS.has(pathname) ||
+    pathname.startsWith("/reset-password") ||
+    pathname.startsWith("/setup-plan")
+  );
 }
 
 const APP_ROUTE_PREFIXES = [

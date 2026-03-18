@@ -103,7 +103,7 @@ export function HeroForm() {
         </div>
         <button
           type="submit"
-          className="shrink-0 inline-flex items-center justify-center rounded-full bg-[#007aff] hover:bg-[#0066dd] text-white text-base font-semibold px-6 h-10 transition-colors ml-2"
+          className="shrink-0 inline-flex items-center justify-center rounded-full bg-[hsl(var(--primary))] hover:bg-[hsl(211_100%_28%)] text-white text-base font-semibold px-6 h-10 transition-colors ml-2"
         >
           Get Started
         </button>

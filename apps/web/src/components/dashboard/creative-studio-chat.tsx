@@ -514,13 +514,42 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
   const [adStylesConfig, setAdStylesConfig] = useState<{
     styles: Record<string, { name: string; nano_banana_suffix: string }>;
   } | null>(null);
-  useEffect(() => {
+  const adStylesLoadRef = useRef<"idle" | "loading" | "done">("idle");
+  const fetchAdStyles = useCallback(() => {
+    if (adStylesLoadRef.current !== "idle") return;
+    adStylesLoadRef.current = "loading";
     const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4001";
     fetch(`${apiUrl}/ad-styles`)
-      .then((r) => r.ok ? r.json() : null)
-      .then((data) => data?.styles != null && typeof data.styles === "object" && setAdStylesConfig({ styles: data.styles }))
-      .catch(() => {});
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data?.styles != null && typeof data.styles === "object") {
+          setAdStylesConfig({ styles: data.styles });
+        }
+        adStylesLoadRef.current = "done";
+      })
+      .catch(() => {
+        adStylesLoadRef.current = "idle";
+      });
   }, []);
+  useEffect(() => {
+    let cancelled = false;
+    const run = () => {
+      if (!cancelled) fetchAdStyles();
+    };
+    if (typeof requestIdleCallback !== "undefined") {
+      const id = requestIdleCallback(run, { timeout: 2800 });
+      return () => {
+        cancelled = true;
+        cancelIdleCallback(id);
+      };
+    }
+    const t = setTimeout(run, 1400);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [fetchAdStyles]);
+
   const [generating, setGenerating] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   /** Object URLs for pending image previews; synced from pendingFiles and revoked on cleanup. */
@@ -790,6 +819,9 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
       loadedFromDbRef.current = loaded.loadedFromDb;
       setSelectedTool(null);
       setImageOptions(loaded.imageOptions);
+      if (loaded.imageOptions.adStyle !== "none") {
+        queueMicrotask(() => fetchAdStyles());
+      }
       setVideoOptions(loaded.videoOptions);
       setEmailOptions({ ...defaultEmailOptions(), ...loaded.emailOptions });
       setPrompt(loaded.prompt);
@@ -919,7 +951,7 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
       }
     });
     return () => { cancelled = true; };
-  }, [workspaceId, projectId, router]);
+  }, [workspaceId, projectId, router, fetchAdStyles]);
 
   // Refetch image/video URLs when user returns to tab (signed URLs expire after 1h).
   useEffect(() => {
@@ -1091,6 +1123,10 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
       .catch(() => {});
     return () => { cancelled = true; };
   }, [workspaceId]);
+
+  useEffect(() => {
+    if (selectedTool === "image" || optionsOpen) fetchAdStyles();
+  }, [selectedTool, optionsOpen, fetchAdStyles]);
 
   async function downloadImageAsPng(url: string, filename?: string) {
     try {
