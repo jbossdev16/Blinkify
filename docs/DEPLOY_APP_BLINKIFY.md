@@ -26,6 +26,7 @@ Both **blinkify.ai** and **app.blinkify.ai** deploy from the same `apps/web` cod
 - **Root Directory:** **repository root** (leave empty / `.` — not `apps`). Root `vercel.json` uses `outputDirectory: "apps/web/.next"`; if Root is `apps`, Vercel looks for `web/.next` at the wrong base and you get `ENOENT … routes-manifest.json`, or `apps/apps/web/.next` if you set output to `apps/web/.next` under Root `apps`.
 - **Framework:** Next.js (auto)
 - **Domain:** `blinkify.ai`
+- **Turbo on Vercel:** Root `vercel.json` runs `turbo … --force`. A remote **cache hit** can skip `next build` and leave no `.next` on the builder → `ENOENT … routes-manifest.json`. `--force` always materializes `apps/web/.next`.
 
 **Environment Variables (Production):**
 
