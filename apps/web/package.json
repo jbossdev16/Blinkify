@@ -10,7 +10,7 @@
   ],
   "scripts": {
     "dev": "next dev --port 3000",
-    "build": "node scripts/check-api-backend-env.js && next build",
+    "build": "node scripts/check-api-backend-env.js && next build --webpack",
     "start": "next start",
     "lint": "next lint",
     "clean": "rm -rf .next"
@@ -29,7 +29,7 @@
     "lucide-react": "^0.460.0",
     "mathjs": "^14.9.1",
     "motion": "^12.36.0",
-    "next": "^15.5.12",
+    "next": "16.1.7",
     "ogl": "^1.0.11",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
@@ -49,7 +49,7 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "eslint": "^9.0.0",
-    "eslint-config-next": "15.5.9",
+    "eslint-config-next": "16.1.7",
     "postcss": "^8.4.0",
     "tailwindcss": "^4.1.18",
     "tailwindcss-animate": "^1.0.7",

@@ -8,7 +8,7 @@ const apiBackend = process.env.API_BACKEND_URL;
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   // Use monorepo root for file tracing so Next doesn't infer a wrong root (e.g. parent lockfile)
-  outputFileTracingRoot: path.join(__dirname, ".."),
+  outputFileTracingRoot: path.join(__dirname, "..", ".."),
   async redirects() {
     return [
       { source: "/favicon.ico", destination: "/icon", permanent: false },
