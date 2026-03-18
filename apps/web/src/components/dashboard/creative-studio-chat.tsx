@@ -37,6 +37,7 @@ import { getPlanFeatures, imageCreditCost, emailCreditCost, videoCreditCost } fr
 import { UpgradeModal } from "@/components/ui/upgrade-modal";
 import { toast } from "sonner";
 import { isEmailTemplateId, type EmailTemplateId } from "@/lib/email-templates";
+import { buildStandaloneMarketingEmailHtml } from "@/lib/standalone-email-html";
 
 /* ─── Types ───────────────────────────────────────────────────────────── */
 
@@ -89,11 +90,13 @@ export interface EmailPayload {
 }
 
 export interface EmailBrandSnapshot {
+  brand_name?: string;
   brand_colors: string[];
   font_styles: unknown;
   brand_logo_url: string | null;
   /** Website URL for CTA and clickable images in email. */
   website_url?: string | null;
+  social_links?: Record<string, string> | null;
 }
 
 interface CreativeMessage {
@@ -132,7 +135,6 @@ const IMAGE_ASPECT_RATIOS: { value: ImageAspectRatio; label: string }[] = [
   { value: "4:5", label: "Portrait (4:5)" },
   { value: "9:16", label: "Story (9:16)" },
   { value: "16:9", label: "Landscape (16:9)" },
-  { value: "1:1", label: "Square (1:1)" },
 ];
 
 const IMAGE_RESOLUTIONS: { value: ImageResolution; label: string; note?: string }[] = [
@@ -484,11 +486,13 @@ async function loadCreativeStudioChatFromSupabase(workspaceId: string, projectId
     ...(m.attachedImageUrls?.length && { attachedImageUrls: m.attachedImageUrls }),
   }));
   const selectedEmailTemplateId = isEmailTemplateId(d.selectedEmailTemplateId) ? d.selectedEmailTemplateId : null;
+  const mergedImage = { ...defaultImageOptions(), ...d.imageOptions };
+  if (mergedImage.aspectRatio === "1:1") mergedImage.aspectRatio = "4:5";
   return {
     messages,
     prompt: d.prompt ?? "",
     selectedTool: d.selectedTool ?? null,
-    imageOptions: { ...defaultImageOptions(), ...d.imageOptions },
+    imageOptions: mergedImage,
     videoOptions: { ...defaultVideoOptions(), ...d.videoOptions },
     emailOptions: { ...defaultEmailOptions(), ...d.emailOptions },
     continuationPrompts: Array.isArray(d.continuationPrompts) ? d.continuationPrompts : [],
@@ -596,6 +600,107 @@ async function saveCreativeStudioChatToSupabase(
       },
     },
     { onConflict: "project_id" }
+  );
+}
+
+/** Tools → Email: left panel shows HTML only; images in iframe open preview (download there) and save to collection on load. */
+function MarketingEmailStandalonePreview({
+  subjectLine,
+  html,
+  generationIdList,
+  setImagePreviewUrl,
+  handleSaveToCollection,
+}: {
+  subjectLine: string;
+  html: string | null;
+  generationIdList: string[];
+  setImagePreviewUrl: (url: string | null) => void;
+  handleSaveToCollection: (id: string) => Promise<void>;
+}) {
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const autoSavedKeyRef = useRef("");
+
+  useEffect(() => {
+    autoSavedKeyRef.current = "";
+  }, [html, subjectLine]);
+
+  const onIframeLoad = useCallback(() => {
+    const doc = iframeRef.current?.contentDocument;
+    if (!doc?.body) return;
+
+    const saveKey = [...generationIdList].sort().join("|");
+    if (saveKey && autoSavedKeyRef.current !== saveKey) {
+      autoSavedKeyRef.current = saveKey;
+      for (const id of generationIdList) {
+        void handleSaveToCollection(id);
+      }
+    }
+
+    doc.querySelectorAll("img").forEach((node) => {
+      const img = node as HTMLImageElement;
+      if (img.getAttribute("data-blinkify-email-img") === "1") return;
+      img.setAttribute("data-blinkify-email-img", "1");
+      const src = img.currentSrc || img.src;
+      if (!src || src.startsWith("data:")) return;
+      img.style.cursor = "pointer";
+      img.title = "Click to preview · download in viewer";
+      img.addEventListener(
+        "click",
+        (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setImagePreviewUrl(img.currentSrc || img.src);
+        },
+        true
+      );
+    });
+  }, [html, generationIdList, handleSaveToCollection, setImagePreviewUrl]);
+
+  return (
+    <div className="w-full max-w-2xl max-h-[min(88vh,calc(100vh-6rem))] flex flex-col gap-3 mx-auto min-h-0">
+      <div className="flex flex-wrap items-center gap-2 shrink-0">
+        <span className="text-xs text-muted-foreground">Subject:</span>
+        <span className="text-sm font-medium truncate flex-1 min-w-0">{subjectLine}</span>
+        <button
+          type="button"
+          onClick={() => {
+            navigator.clipboard.writeText(subjectLine);
+            toast.success("Subject copied");
+          }}
+          className="text-xs px-2 py-1 rounded-lg bg-secondary hover:bg-secondary/80"
+        >
+          Copy subject
+        </button>
+        {html && (
+          <button
+            type="button"
+            onClick={() => {
+              navigator.clipboard.writeText(html);
+              toast.success("HTML copied");
+            }}
+            className="text-xs px-2 py-1 rounded-lg bg-secondary hover:bg-secondary/80"
+          >
+            Copy HTML
+          </button>
+        )}
+      </div>
+      <div className="flex min-h-[280px] flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+        {html ? (
+          <iframe
+            ref={iframeRef}
+            srcDoc={html}
+            title="Email preview"
+            className="w-full flex-1 min-h-[min(60vh,520px)] border-0 bg-white"
+            sandbox="allow-same-origin"
+            onLoad={onIframeLoad}
+          />
+        ) : (
+          <div className="flex-1 flex items-center justify-center p-8 text-sm text-muted-foreground">
+            Preview loading…
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -1425,75 +1530,28 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
   function getEmailHtmlFromMessage(msg: CreativeMessage): string | null {
     if (msg.tool !== "email" || !msg.emailPayload) return null;
     const p = msg.emailPayload;
-    const esc = (s: string) =>
-      String(s ?? "")
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;");
-    const n = Math.min(3, Math.max(1, p.numberOfImages ?? msg.imageUrls?.length ?? 1)) as 1 | 2 | 3;
-    const htmlImageUrls = (msg.signedImageUrls?.length ? msg.signedImageUrls : msg.imageUrls) ?? [];
-    const urls = htmlImageUrls.slice(0, n).map((u) => u.replace(/&/g, "&amp;").replace(/"/g, "&quot;"));
     const brand = msg.emailBrandSnapshot;
-    const websiteUrl = (brand?.website_url?.trim() || "").replace(/&/g, "&amp;").replace(/"/g, "&quot;");
-    const ctaUrlRaw = p.ctaUrl?.trim() && p.ctaUrl !== "#" ? p.ctaUrl : (brand?.website_url?.trim() || "#");
-    const ctaUrl = ctaUrlRaw.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
-    const ctaText = esc(p.ctaText || "Shop Now");
-    const headline = esc(p.headline || "");
-    const introCopy = esc(p.introCopy || "").replace(/\n/g, "<br />");
-    const closingCopy = esc(p.closingCopy || "").replace(/\n/g, "<br />");
-    const fontFamily = (brand?.font_styles as { fontFamily?: string } | null)?.fontFamily ?? "Arial,sans-serif";
-    const primaryColor = (Array.isArray(brand?.brand_colors) && brand.brand_colors[0]) ? String(brand.brand_colors[0]).trim() : "#000000";
-    const ctaBg = /^#[0-9a-fA-F]{3,6}$/.test(primaryColor) ? (primaryColor.length === 4 ? `#${primaryColor[1]}${primaryColor[1]}${primaryColor[2]}${primaryColor[2]}${primaryColor[3]}${primaryColor[3]}` : primaryColor) : "#000000";
-    const bodyBg = "#f5f5f5";
-    const logoUrl = brand?.brand_logo_url?.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
-    const imageLinkUrl = websiteUrl || (ctaUrl !== "#" ? ctaUrl : "");
-    const logoBlock = logoUrl ? `<tr><td align="center" style="padding:20px 25px 10px;"><img src="${logoUrl}" alt="Logo" width="160" style="border:none;display:inline-block;height:auto;max-height:60px;" border="0" /></td></tr>` : "";
-    const headlineBlock = headline ? `<tr><td align="left" style="padding:0 25px 10px;font-family:${fontFamily};font-size:22px;font-weight:bold;line-height:1.3;color:#000;"><p style="margin:0;">${headline}</p></td></tr>` : "";
-    const introBlock = introCopy ? `<tr><td align="left" style="padding:0 25px 15px;font-family:${fontFamily};font-size:16px;line-height:1.5;color:#333;"><p style="margin:0 0 10px;">${introCopy}</p></td></tr>` : "";
-    const closingBlock = closingCopy ? `<tr><td align="left" style="padding:0 25px 15px;font-family:${fontFamily};font-size:16px;line-height:1.5;color:#333;"><p style="margin:0;">${closingCopy}</p></td></tr>` : "";
-    const makeImageBlock = (imgUrl: string, alt: string, linkToWebsite: boolean) => {
-      if (!imgUrl) return "";
-      const imgTag = `<img src="${imgUrl}" alt="${esc(alt)}" width="600" style="border:none;display:block;outline:none;text-decoration:none;height:auto;width:100%;" border="0" />`;
-      const wrapped = linkToWebsite && imageLinkUrl ? `<a href="${imageLinkUrl}" target="_blank" style="display:block;">${imgTag}</a>` : imgTag;
-      return `<tr><td style="font-size:0;padding:0 0 20px;"><table role="presentation" cellpadding="0" cellspacing="0" width="100%"><tr><td style="width:600px;">${wrapped}</td></tr></table></td></tr>`;
-    };
-    const ctaBlock = ctaUrl !== "#" ? `<tr><td align="center" style="padding:20px 25px;"><table role="presentation" cellpadding="0" cellspacing="0" align="center"><tr><td align="center" style="border-radius:6px;background:${ctaBg};"><a href="${ctaUrl}" target="_blank" style="display:inline-block;padding:14px 28px;background:${ctaBg};color:#fff!important;text-decoration:none;border-radius:6px;font-weight:600;font-size:16px;font-family:${fontFamily};">${ctaText}</a></td></tr></table></td></tr>` : "";
-    const linkImages = !!imageLinkUrl;
-    let bodyRows: string;
-    if (n === 1) bodyRows = [logoBlock, headlineBlock, introBlock, makeImageBlock(urls[0], "Email hero", linkImages), closingBlock, ctaBlock].filter(Boolean).join("\n");
-    else if (n === 2) {
-      const img1 = makeImageBlock(urls[0], "Email image 1", linkImages);
-      const img2 = makeImageBlock(urls[1], "Email image 2", linkImages);
-      const textCta = (closingCopy ? closingBlock : "") + ctaBlock;
-      bodyRows = [logoBlock, headlineBlock, introBlock, img1, textCta, img2, textCta].filter(Boolean).join("\n");
-    } else {
-      const img1 = makeImageBlock(urls[0], "Email image 1", linkImages);
-      const img2 = makeImageBlock(urls[1], "Email image 2", linkImages);
-      const img3 = makeImageBlock(urls[2], "Email image 3", linkImages);
-      bodyRows = [logoBlock, headlineBlock, introBlock, img1, ctaBlock, img2, closingBlock, img3, ctaBlock].filter(Boolean).join("\n");
-    }
-    return `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-<title>${esc(p.subjectLine || "Email")}</title>
-<style type="text/css">body{margin:0;padding:0;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;}table,td{border-collapse:collapse;}img{border:0;height:auto;line-height:100%;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;}</style>
-</head>
-<body style="margin:0;padding:0;font-family:${fontFamily};background:${bodyBg};">
-<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:${bodyBg};">
-<tr><td align="center" style="padding:20px;">
-<table role="presentation" cellpadding="0" cellspacing="0" width="600" style="max-width:600px;background:#fff;border-radius:8px;">
-<tbody>
-${bodyRows}
-</tbody>
-</table>
-</td></tr>
-</table>
-</body>
-</html>`;
+    const htmlImageUrls = (msg.signedImageUrls?.length ? msg.signedImageUrls : msg.imageUrls) ?? [];
+    const n = Math.min(3, Math.max(1, p.numberOfImages ?? htmlImageUrls.length ?? 1)) as 1 | 2 | 3;
+    const ctaUrlRaw =
+      p.ctaUrl?.trim() && p.ctaUrl !== "#" ? p.ctaUrl.trim() : brand?.website_url?.trim() || "#";
+    return buildStandaloneMarketingEmailHtml({
+      subjectLine: p.subjectLine || "",
+      headline: p.headline || "",
+      introCopy: p.introCopy || "",
+      closingCopy: p.closingCopy || "",
+      ctaText: p.ctaText || "Shop now",
+      ctaUrl: ctaUrlRaw,
+      imageUrls: htmlImageUrls,
+      numberOfImages: n,
+      brandName: (brand?.brand_name || "Your brand").trim() || "Your brand",
+      primaryColor: (Array.isArray(brand?.brand_colors) && brand.brand_colors[0]) || "#3b82f6",
+      secondaryColor: (Array.isArray(brand?.brand_colors) && brand.brand_colors[1]) || "#f8f8f8",
+      websiteUrl: brand?.website_url?.trim() || "#",
+      logoUrl: brand?.brand_logo_url?.trim() || null,
+      socialLinks: (brand?.social_links && typeof brand.social_links === "object" ? brand.social_links : {}) as Record<string, string>,
+      fontFamily: "Arial,Helvetica,sans-serif",
+    });
   }
 
   async function handleCopyResponse(msgIndex: number) {
@@ -3802,104 +3860,21 @@ ${bodyRows}
     if (msg.tool !== "email" || !msg.emailPayload) return null;
     const html = getEmailHtmlFromMessage(msg);
     const p = msg.emailPayload;
-    const n = Math.min(3, Math.max(1, p.numberOfImages ?? msg.imageUrls?.length ?? 1)) as 1 | 2 | 3;
-    const urls = (msg.signedImageUrls?.length ? msg.signedImageUrls : msg.imageUrls) ?? [];
-    const slice = urls.slice(0, n);
-    const genIdFor = (i: number) =>
-      msg.generationIds?.[i] ?? (i === 0 ? msg.generationId : undefined);
+    const generationIdList = Array.from(
+      new Set(
+        (msg.generationIds?.length ? msg.generationIds : msg.generationId ? [msg.generationId] : []).filter(
+          (id): id is string => Boolean(id)
+        )
+      )
+    );
     return (
-      <div className="w-full max-w-2xl max-h-[min(88vh,calc(100vh-6rem))] flex flex-col gap-3 mx-auto min-h-0">
-        <div className="flex flex-wrap items-center gap-2 shrink-0">
-          <span className="text-xs text-muted-foreground">Subject:</span>
-          <span className="text-sm font-medium truncate flex-1 min-w-0">{p.subjectLine}</span>
-          <button
-            type="button"
-            onClick={() => {
-              navigator.clipboard.writeText(p.subjectLine);
-              toast.success("Subject copied");
-            }}
-            className="text-xs px-2 py-1 rounded-lg bg-secondary hover:bg-secondary/80"
-          >
-            Copy subject
-          </button>
-          {html && (
-            <button
-              type="button"
-              onClick={() => {
-                navigator.clipboard.writeText(html);
-                toast.success("HTML copied");
-              }}
-              className="text-xs px-2 py-1 rounded-lg bg-secondary hover:bg-secondary/80"
-            >
-              Copy HTML
-            </button>
-          )}
-        </div>
-        <div className="rounded-xl border border-border overflow-hidden bg-card flex-1 min-h-[280px] flex flex-col shadow-sm">
-          {html ? (
-            <iframe
-              srcDoc={html}
-              title="Email preview"
-              className="w-full flex-1 min-h-[260px] border-0 bg-white"
-              sandbox="allow-same-origin"
-            />
-          ) : (
-            <div className="flex-1 flex items-center justify-center p-8 text-sm text-muted-foreground">
-              Preview loading…
-            </div>
-          )}
-        </div>
-        {slice.length > 0 && (
-          <div className="flex flex-wrap gap-3 justify-center">
-            {slice.map((u, idx) => {
-              const gid = genIdFor(idx);
-              return (
-                <div
-                  key={idx}
-                  className="relative group/em flex w-[min(100%,200px)] aspect-square items-center justify-center rounded-lg overflow-hidden border border-border bg-muted/25"
-                >
-                  <button
-                    type="button"
-                    className="flex h-full w-full cursor-zoom-in items-center justify-center p-1"
-                    onClick={() => setImagePreviewUrl(u)}
-                  >
-                    <img src={u} alt="" className="max-h-full max-w-full object-contain" />
-                  </button>
-                  <div className="absolute bottom-1.5 right-1.5 flex gap-1 opacity-0 group-hover/em:opacity-100 transition-opacity">
-                    {gid && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          handleSaveToCollection(gid);
-                        }}
-                        className={cn(
-                          "size-7 rounded-md flex items-center justify-center",
-                          bookmarkedGenIds.has(gid)
-                            ? "bg-primary text-primary-foreground"
-                            : "bg-black/60 text-white"
-                        )}
-                      >
-                        <Bookmark className="size-3.5" />
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        downloadImageAsPng(u, `blinkify-email-${idx + 1}.png`);
-                      }}
-                      className="size-7 rounded-md bg-black/60 text-white flex items-center justify-center"
-                    >
-                      <Download className="size-3.5" />
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+      <MarketingEmailStandalonePreview
+        subjectLine={p.subjectLine}
+        html={html}
+        generationIdList={generationIdList}
+        setImagePreviewUrl={setImagePreviewUrl}
+        handleSaveToCollection={handleSaveToCollection}
+      />
     );
   }
 

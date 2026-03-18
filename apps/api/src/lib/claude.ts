@@ -1,11 +1,20 @@
 /**
- * Claude Sonnet 4.5 — Creative intelligence layer for Full Campaign.
- * Split into two parallel calls for speed:
- *   Call 1 (fast): Image prompts + video prompt → fires image/video tasks immediately
+ * Claude — Brand analysis and campaign creative copy.
+ *
+ * MODEL ROLES:
+ * - Claude: Brand page (website link) analysis and everything derived from it; all campaign
+ *   copy (image prompts, video prompt, email copy, email HTML template, social copy). Our best
+ *   model for understanding brand and generating structured creative briefs.
+ * - Gemini: Image generation (Nano Banana / Vertex). Images only.
+ * - Veo: Video generation. Video only.
+ *
+ * Full Campaign split:
+ *   Call 1 (fast): Image prompts + video prompt → fires Gemini/Veo tasks immediately
  *   Call 2 (parallel): Email copy + HTML template + social copy
  */
 
 import type { WebsiteExtract } from "./fetch-website.js";
+import { buildEmailHtmlTemplateSpec } from "./email-html-claude-spec.js";
 
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION = "2023-06-01";
@@ -565,6 +574,8 @@ export interface CampaignParams {
   secondaryColorHex: string;
   brandTone: string;
   brandWebsite: string;
+  /** Signed or public URL for email header logo img src; omit if none */
+  brandLogoUrl?: string;
   productDescription?: string;
   hasProductImage: boolean;
   campaignGoal: string;
@@ -575,6 +586,17 @@ export interface CampaignParams {
   brandGuidelines?: string;
   additionalContext?: string;
   preferredStyle?: string;
+  socialLinks?: {
+    instagram?: string;
+    tiktok?: string;
+    facebook?: string;
+    x?: string;
+    linkedin?: string;
+    pinterest?: string;
+    youtube?: string;
+    contact_email?: string;
+    address?: string;
+  };
 }
 
 function getIndustryBackgroundRule(industry: string): string {
@@ -698,8 +720,9 @@ function getLightingMode(brandTone: string): string {
 function buildBrandContext(params: CampaignParams): string {
   const {
     brandName, primaryColorHex, secondaryColorHex, brandTone,
-    brandWebsite, productDescription, hasProductImage, campaignGoal, platforms,
+    brandWebsite, brandLogoUrl, productDescription, hasProductImage, campaignGoal, platforms,
     targetAudience, brandDescription, brandIndustry, brandGuidelines, additionalContext, preferredStyle,
+    socialLinks,
   } = params;
 
   const productLine = hasProductImage
@@ -723,7 +746,16 @@ function buildBrandContext(params: CampaignParams): string {
 - Primary color: ${primaryColorHex}
 - Secondary color: ${secondaryColorHex}
 - Website: ${brandWebsite}
+${brandLogoUrl ? `- BRAND LOGO URL (use in email header): ${brandLogoUrl}` : "- BRAND LOGO URL: none — use brand name text only in email header"}
 ${brandGuidelines ? `- Additional brand guidelines: ${brandGuidelines}` : ""}
+${
+  socialLinks && Object.keys(socialLinks).length > 0
+    ? `\nBRAND SOCIAL LINKS:\n${Object.entries(socialLinks)
+        .filter(([, v]) => typeof v === "string" && v.trim())
+        .map(([k, v]) => `- ${k}: ${v}`)
+        .join("\n")}`
+    : ""
+}
 
 CREATIVE STYLE PREFERENCE: ${stylePreference}
 
@@ -854,41 +886,48 @@ Return ONLY this exact JSON structure with all fields completed — no empty str
 function buildContentUserPrompt(params: CampaignParams): string {
   const { primaryColorHex, secondaryColorHex } = params;
   const ctx = buildBrandContext(params);
+  const htmlSpec = buildEmailHtmlTemplateSpec(primaryColorHex, secondaryColorHex);
 
   return `Create email marketing content for a campaign with these parameters:
 
 ${ctx}
 
-You must output TWO DISTINCT marketing email variants (email_1, email_2). Each must have a DIFFERENT subject line, headline, subheadline, body copy, and CTA angle — different hooks and messaging so the user can A/B test. Use the same HTML structure and placeholders in each html_template.
+=== HTML EMAIL SPECIFICATION (both variants MUST produce full html_template documents obeying ALL of this) ===
+${htmlSpec}
+=== END SPEC ===
 
-CRITICAL — Valid JSON only: Inside every string value you must escape double-quotes as \\\" and use \\n for newlines. Do not put raw newlines or unescaped double-quotes inside JSON strings. Keep html_template compact but complete; ensure the entire JSON is closed (no truncation).
+SOCIAL LINKS: The user configures social media (Instagram, TikTok, Facebook, X, LinkedIn, Pinterest, YouTube) and contact (email, address) on the brand page. BRAND SOCIAL LINKS above lists only what they entered. You MUST add a Follow Us / Stay Connected row with icon links for every platform that has a URL in that list; omit that row only when no social URLs are provided. This ensures the email footer reflects the brand page.
 
-Return ONLY this exact JSON structure with all fields completed — no empty strings, no placeholders:
+You must output TWO DISTINCT marketing email variants (email_1, email_2). Each must have a DIFFERENT subject line, headline, subheadline, body copy, and CTA angle. email_1 html_template must embed email_1 copy; email_2 html_template must embed email_2 copy. Same structure, placeholders, and social/footer rules for both.
+
+CRITICAL — Valid JSON only: Escape double-quotes inside strings as \\". Use \\n for newlines inside JSON strings. html_template must be complete <!DOCTYPE html>…</html>, inline CSS only, include placeholders {{EMAIL_IMAGE_1}} {{EMAIL_IMAGE_2}} {{EMAIL_IMAGE_3}} {{CTA_URL}} {{UNSUBSCRIBE_URL}} where specified.
+
+Return ONLY this JSON shape (replace example text with real copy; html_template = actual HTML strings):
 
 {
   "email_1": {
-    "subject_line": "First variant subject. Under 50 chars. e.g. urgency or curiosity angle.",
-    "preview_text": "Preheader under 90 chars.",
-    "headline": "Main headline. Under 8 words. First angle.",
-    "subheadline": "Supporting line under 15 words.",
-    "body_paragraph_1": "First body. 2-3 sentences. Opens with problem or opportunity.",
-    "body_paragraph_2": "Second body. 2-3 sentences. Product as solution.",
-    "cta_primary": "CTA text. 2-4 words.",
+    "subject_line": "…",
+    "preview_text": "…",
+    "headline": "…",
+    "subheadline": "…",
+    "body_paragraph_1": "…",
+    "body_paragraph_2": "…",
+    "cta_primary": "…",
     "cta_url_note": "USE_BRAND_URL",
-    "footer_tagline": "Footer tagline. Under 8 words.",
-    "html_template": "Complete responsive HTML email. Max width 600px. Inline CSS only. Use placeholders: {{EMAIL_IMAGE_1}}, {{EMAIL_IMAGE_2}}, {{EMAIL_IMAGE_3}}, {{CTA_URL}}. Structure: preheader, hero image, headline, subheadline, body 1, image 2, body 2, image 3, CTA (background ${primaryColorHex}), footer. Button style: background-color ${primaryColorHex}, color white, padding 14px 28px, border-radius 6px. Return full <!DOCTYPE html> to </html>."
+    "footer_tagline": "…",
+    "html_template": "…"
   },
   "email_2": {
-    "subject_line": "Second variant subject. DIFFERENT from email_1 — e.g. benefit-focused or social proof.",
-    "preview_text": "Preheader. Different from email_1.",
-    "headline": "DIFFERENT headline. Second angle.",
-    "subheadline": "DIFFERENT subheadline.",
-    "body_paragraph_1": "DIFFERENT opening. 2-3 sentences.",
-    "body_paragraph_2": "DIFFERENT body. 2-3 sentences.",
-    "cta_primary": "CTA. Can match or vary.",
+    "subject_line": "…",
+    "preview_text": "…",
+    "headline": "…",
+    "subheadline": "…",
+    "body_paragraph_1": "…",
+    "body_paragraph_2": "…",
+    "cta_primary": "…",
     "cta_url_note": "USE_BRAND_URL",
-    "footer_tagline": "Footer. Under 8 words.",
-    "html_template": "Same structure as email_1 but with THIS variant's headline, subheadline, body text. Same placeholders {{EMAIL_IMAGE_1}}, {{EMAIL_IMAGE_2}}, {{EMAIL_IMAGE_3}}, {{CTA_URL}}. Full HTML."
+    "footer_tagline": "…",
+    "html_template": "…"
   }
 }`;
 }

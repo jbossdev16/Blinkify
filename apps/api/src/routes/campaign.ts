@@ -460,11 +460,16 @@ function assembleEmailHtml(
 ): { html: string; valid: boolean; errors: string[] } {
   const errors: string[] = [];
 
+  const unsubBase = (brandWebsite || "#").replace(/\/$/, "");
+  const unsubscribeUrl =
+    !brandWebsite || brandWebsite === "#" ? "#" : `${unsubBase}/unsubscribe`;
+
   let html = htmlTemplate
     .replace(/\{\{EMAIL_IMAGE_1\}\}/g, imageUrls[0] || "")
     .replace(/\{\{EMAIL_IMAGE_2\}\}/g, imageUrls[1] || "")
     .replace(/\{\{EMAIL_IMAGE_3\}\}/g, imageUrls[2] || "")
-    .replace(/\{\{CTA_URL\}\}/g, brandWebsite || "#");
+    .replace(/\{\{CTA_URL\}\}/g, brandWebsite || "#")
+    .replace(/\{\{UNSUBSCRIBE_URL\}\}/g, unsubscribeUrl);
 
   const remainingPlaceholders = html.match(/\{\{[A-Z_]+\}\}/g);
   if (remainingPlaceholders) {
@@ -784,12 +789,42 @@ router.post(
     const preferredStyle = typeof req.body?.preferredStyle === "string" ? req.body.preferredStyle.trim() || undefined : undefined;
     const additionalContext = typeof req.body?.additionalContext === "string" ? req.body.additionalContext.trim().slice(0, 1000) || undefined : undefined;
 
+    let brandLogoUrl: string | undefined;
+    if (project.brand_logo && typeof project.brand_logo === "string") {
+      const { data: logoSigned } = await supabase.storage
+        .from(PROJECT_ASSETS_BUCKET)
+        .createSignedUrl(project.brand_logo, 604800);
+      brandLogoUrl = logoSigned?.signedUrl ?? undefined;
+    }
+
+    const rawSocial = project.social_links as Record<string, unknown> | null;
+    let socialLinks: CampaignParams["socialLinks"];
+    if (rawSocial && typeof rawSocial === "object" && !Array.isArray(rawSocial)) {
+      const o: NonNullable<CampaignParams["socialLinks"]> = {};
+      const set = (k: keyof NonNullable<CampaignParams["socialLinks"]>, v: unknown) => {
+        if (typeof v === "string" && v.trim()) (o as Record<string, string>)[k] = v.trim().slice(0, 2048);
+      };
+      set("instagram", rawSocial.instagram);
+      set("tiktok", rawSocial.tiktok);
+      set("facebook", rawSocial.facebook);
+      set("x", rawSocial.x);
+      set("linkedin", rawSocial.linkedin);
+      set("pinterest", rawSocial.pinterest);
+      set("youtube", rawSocial.youtube);
+      set("contact_email", rawSocial.contact_email);
+      set("address", rawSocial.address);
+      socialLinks = Object.keys(o).length ? o : undefined;
+    } else {
+      socialLinks = undefined;
+    }
+
     const campaignParams: CampaignParams = {
       brandName,
       primaryColorHex,
       secondaryColorHex,
       brandTone,
       brandWebsite,
+      brandLogoUrl,
       productDescription,
       hasProductImage: !!productImageBase64,
       campaignGoal,
@@ -800,6 +835,7 @@ router.post(
       brandGuidelines: extractBrandGuidelinesRest(project.brand_guidelines as string | null),
       additionalContext,
       preferredStyle,
+      socialLinks,
     };
 
     let logoBase64: string | undefined;

@@ -14,6 +14,7 @@ export interface CreateProjectPayload {
   brand_guidelines: string | null;
   font_styles?: FontStyles | null;
   website_url?: string | null;
+  social_links?: Record<string, string> | null;
 }
 
 export async function createProject(

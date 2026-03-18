@@ -12,6 +12,12 @@ import {
   Plus,
   AlertTriangle,
   Link,
+  Instagram,
+  Facebook,
+  Linkedin,
+  Youtube,
+  Mail,
+  MapPin,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -154,6 +160,65 @@ const INDUSTRY_OPTIONS = [
   { id: "other", label: "Other", emoji: "📦" },
 ];
 
+const SOCIAL_LINK_KEYS = [
+  "instagram",
+  "tiktok",
+  "facebook",
+  "x",
+  "linkedin",
+  "pinterest",
+  "youtube",
+  "contact_email",
+  "address",
+] as const;
+
+type SocialLinksState = Partial<Record<(typeof SOCIAL_LINK_KEYS)[number], string>>;
+
+function socialLinksFromProject(raw: unknown): SocialLinksState {
+  const o: SocialLinksState = {};
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+    const r = raw as Record<string, unknown>;
+    for (const k of SOCIAL_LINK_KEYS) {
+      const v = r[k];
+      o[k] = typeof v === "string" ? v : "";
+    }
+  }
+  return o;
+}
+
+function serializeSocialLinksForApi(links: SocialLinksState): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const k of SOCIAL_LINK_KEYS) {
+    const v = links[k]?.trim();
+    if (v) out[k] = v.slice(0, 2048);
+  }
+  return out;
+}
+
+function IconTikTok({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 0 0-.79-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.33-6.34V8.73a8.19 8.19 0 0 0 4.79 1.52V6.8a4.85 4.85 0 0 1-1.02-.11z" />
+    </svg>
+  );
+}
+
+function IconX({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+    </svg>
+  );
+}
+
+function IconPinterest({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M12 2C6.477 2 2 6.477 2 12c0 4.236 2.636 7.855 6.356 9.312-.088-.791-.167-2.005.035-2.868.181-.78 1.172-4.97 1.172-4.97s-.299-.598-.299-1.482c0-1.388.806-2.428 1.808-2.428.852 0 1.264.64 1.264 1.408 0 .858-.546 2.141-.828 3.33-.236.995.499 1.806 1.476 1.806 1.772 0 3.136-1.867 3.136-4.562 0-2.387-1.715-4.054-4.163-4.054-2.833 0-4.497 2.124-4.497 4.32 0 .856.33 1.772.741 2.273a.3.3 0 0 1 .069.286c-.076.313-.244.995-.277 1.134-.044.183-.146.222-.337.134-1.249-.581-2.03-2.407-2.03-3.874 0-3.154 2.292-6.052 6.608-6.052 3.469 0 6.165 2.473 6.165 5.776 0 3.447-2.173 6.22-5.19 6.22-1.013 0-1.966-.527-2.292-1.148l-.623 2.378c-.226.869-.835 1.958-1.244 2.621.937.29 1.931.446 2.962.446 5.523 0 10-4.477 10-10S17.523 2 12 2z" />
+    </svg>
+  );
+}
+
 const GRADIENT_LINE_PREFIX = "GRADIENT:";
 const HEX_REGEX = /^#[0-9a-fA-F]{6}$/;
 /** Accept GRADIENT:slot:angle or GRADIENT::slot:angle (legacy) or with :hex stops; reject plain user text like "GRADIENT: use blue" */
@@ -282,6 +347,9 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
     return Array.from({ length: COLOR_SLOT_COUNT }, (_, i) => slotGradients[i] ?? { angle: 90, colors: [] });
   });
   const [websiteUrl, setWebsiteUrl] = useState(project.website_url ?? "");
+  const [socialLinks, setSocialLinks] = useState<SocialLinksState>(() =>
+    socialLinksFromProject(project.social_links)
+  );
   const [applyingBrand, setApplyingBrand] = useState(false);
   /** After save we set state from the API response. Skip syncing from project for a short window so router.refresh() / cached server data doesn't overwrite with stale brand_colors. */
   const lastSaveAtRef = useRef<number>(0);
@@ -319,6 +387,7 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
     setColorSlotModes(Array.from({ length: COLOR_SLOT_COUNT }, (_, i) => (slotGradients[i]?.colors?.length > 1 ? "gradient" : "solid")));
     setColorSlotGradients(Array.from({ length: COLOR_SLOT_COUNT }, (_, i) => slotGradients[i] ?? { angle: 90, colors: [] }));
     setWebsiteUrl(project.website_url ?? "");
+    setSocialLinks(socialLinksFromProject(project.social_links));
   }, [
     brandMode,
     project.name,
@@ -329,6 +398,7 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
     project.font_styles,
     project.brand_guidelines,
     project.website_url,
+    project.social_links,
   ]);
 
   const brandColorsForSave = brandMode
@@ -351,7 +421,9 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
     (brandMode && (JSON.stringify(colorSlotGradients) !== JSON.stringify(parseSlotGradientsFromGuidelines(project.brand_guidelines ?? "").slotGradients))) ||
     JSON.stringify(brandFonts) !== JSON.stringify(project.brand_fonts ?? []) ||
     JSON.stringify(fontStyles) !== JSON.stringify(project.font_styles ?? {}) ||
-    guidelinesForSave !== (project.brand_guidelines ?? "");
+    guidelinesForSave !== (project.brand_guidelines ?? "") ||
+    JSON.stringify(serializeSocialLinksForApi(socialLinks)) !==
+      JSON.stringify(serializeSocialLinksForApi(socialLinksFromProject(project.social_links)));
 
   /* ── Save ── */
 
@@ -414,6 +486,7 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
       setColorSlotModes(Array.from({ length: COLOR_SLOT_COUNT }, (_, i) => (slotGradients[i]?.colors?.length > 1 ? "gradient" : "solid")));
       setColorSlotGradients(Array.from({ length: COLOR_SLOT_COUNT }, (_, i) => slotGradients[i] ?? { angle: 90, colors: [] }));
       setWebsiteUrl(updatedProject.website_url ?? "");
+      setSocialLinks(socialLinksFromProject(updatedProject.social_links));
       toast.success("Settings saved.");
       router.refresh();
     } catch (err: unknown) {
@@ -898,6 +971,98 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
               </div>
             </BrandCard>
 
+            <div className="col-span-6 rounded-2xl border border-border bg-card p-6 sm:p-8 shadow-sm">
+              <h3 className="text-base font-semibold text-foreground">Social & Contact Links</h3>
+              <p className="text-sm text-muted-foreground mt-1 mb-6">
+                Used in email footers and campaign assets
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {(
+                  [
+                    {
+                      key: "instagram" as const,
+                      label: "Instagram",
+                      Icon: Instagram,
+                      placeholder: "https://instagram.com/yourbrand",
+                      type: "url" as const,
+                    },
+                    {
+                      key: "tiktok" as const,
+                      label: "TikTok",
+                      Icon: IconTikTok,
+                      placeholder: "https://tiktok.com/@yourbrand",
+                      type: "url" as const,
+                    },
+                    {
+                      key: "facebook" as const,
+                      label: "Facebook",
+                      Icon: Facebook,
+                      placeholder: "https://facebook.com/yourbrand",
+                      type: "url" as const,
+                    },
+                    {
+                      key: "x" as const,
+                      label: "X (Twitter)",
+                      Icon: IconX,
+                      placeholder: "https://x.com/yourbrand",
+                      type: "url" as const,
+                    },
+                    {
+                      key: "linkedin" as const,
+                      label: "LinkedIn",
+                      Icon: Linkedin,
+                      placeholder: "https://linkedin.com/company/yourbrand",
+                      type: "url" as const,
+                    },
+                    {
+                      key: "pinterest" as const,
+                      label: "Pinterest",
+                      Icon: IconPinterest,
+                      placeholder: "https://pinterest.com/yourbrand",
+                      type: "url" as const,
+                    },
+                    {
+                      key: "youtube" as const,
+                      label: "YouTube",
+                      Icon: Youtube,
+                      placeholder: "https://youtube.com/@yourbrand",
+                      type: "url" as const,
+                    },
+                    {
+                      key: "contact_email" as const,
+                      label: "Contact Email",
+                      Icon: Mail,
+                      placeholder: "hello@yourbrand.com",
+                      type: "email" as const,
+                    },
+                    {
+                      key: "address" as const,
+                      label: "Address",
+                      Icon: MapPin,
+                      placeholder: "123 Main St, City, State",
+                      type: "text" as const,
+                    },
+                  ] as const
+                ).map(({ key, label, Icon, placeholder, type }) => (
+                  <div key={key} className="space-y-1.5">
+                    <label className="text-xs font-medium text-foreground flex items-center gap-2">
+                      <Icon className="size-4 shrink-0 text-muted-foreground" />
+                      {label}
+                    </label>
+                    <input
+                      type={type}
+                      value={socialLinks[key] ?? ""}
+                      onChange={(e) =>
+                        setSocialLinks((prev) => ({ ...prev, [key]: e.target.value }))
+                      }
+                      placeholder={placeholder}
+                      className="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+
             {/* Row 4-5: Brand Guidelines (cols 5-6) — long, next to Typography */}
             <BrandCard label="Brand Guidelines" className="col-start-5 col-end-7 row-start-4 row-span-2 min-h-[12rem]" footerRight={`${brandGuidelines.length}/500`}>
               <div className="flex flex-col flex-1 min-h-[10rem]">
@@ -1288,6 +1453,44 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
               </label>
             )}
           </Field>
+
+          <div className="rounded-2xl border border-border bg-card p-6 space-y-4">
+            <div>
+              <h3 className="text-base font-semibold text-foreground">Social & Contact Links</h3>
+              <p className="text-sm text-muted-foreground mt-1">
+                Used in email footers and campaign assets
+              </p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {(
+                [
+                  { key: "instagram" as const, label: "Instagram", Icon: Instagram, placeholder: "https://instagram.com/yourbrand", type: "url" as const },
+                  { key: "tiktok" as const, label: "TikTok", Icon: IconTikTok, placeholder: "https://tiktok.com/@yourbrand", type: "url" as const },
+                  { key: "facebook" as const, label: "Facebook", Icon: Facebook, placeholder: "https://facebook.com/yourbrand", type: "url" as const },
+                  { key: "x" as const, label: "X (Twitter)", Icon: IconX, placeholder: "https://x.com/yourbrand", type: "url" as const },
+                  { key: "linkedin" as const, label: "LinkedIn", Icon: Linkedin, placeholder: "https://linkedin.com/company/yourbrand", type: "url" as const },
+                  { key: "pinterest" as const, label: "Pinterest", Icon: IconPinterest, placeholder: "https://pinterest.com/yourbrand", type: "url" as const },
+                  { key: "youtube" as const, label: "YouTube", Icon: Youtube, placeholder: "https://youtube.com/@yourbrand", type: "url" as const },
+                  { key: "contact_email" as const, label: "Contact Email", Icon: Mail, placeholder: "hello@yourbrand.com", type: "email" as const },
+                  { key: "address" as const, label: "Address", Icon: MapPin, placeholder: "123 Main St, City, State", type: "text" as const },
+                ] as const
+              ).map(({ key, label, Icon, placeholder, type }) => (
+                <div key={key} className="space-y-1.5">
+                  <label className="text-xs font-medium text-foreground flex items-center gap-2">
+                    <Icon className="size-4 shrink-0 text-muted-foreground" />
+                    {label}
+                  </label>
+                  <input
+                    type={type}
+                    value={socialLinks[key] ?? ""}
+                    onChange={(e) => setSocialLinks((prev) => ({ ...prev, [key]: e.target.value }))}
+                    placeholder={placeholder}
+                    className="flex h-10 w-full rounded-xl border border-input bg-background px-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:border-primary/50 transition-colors"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
 
           {/* Guidelines */}
           <Field label="Brand Guidelines">

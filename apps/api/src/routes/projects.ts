@@ -211,6 +211,31 @@ router.post(
         if (validated) brandFields.font_styles = validated;
       }
 
+      if (req.body?.social_links !== undefined) {
+        const sl = req.body.social_links;
+        const allowed = [
+          "instagram",
+          "tiktok",
+          "facebook",
+          "x",
+          "linkedin",
+          "pinterest",
+          "youtube",
+          "contact_email",
+          "address",
+        ] as const;
+        if (sl === null || typeof sl !== "object" || Array.isArray(sl)) {
+          brandFields.social_links = {};
+        } else {
+          const out: Record<string, string> = {};
+          for (const k of allowed) {
+            const v = (sl as Record<string, unknown>)[k];
+            if (typeof v === "string" && v.trim()) out[k] = v.trim().slice(0, 2048);
+          }
+          brandFields.social_links = out;
+        }
+      }
+
       // Try with brand fields first; fall back to base-only if columns don't exist yet
       let project;
       let error;
@@ -413,6 +438,33 @@ router.put(
           typeof req.body.target_audience === "string"
             ? req.body.target_audience.trim().slice(0, 500) || null
             : null;
+      }
+
+      if (req.body?.social_links !== undefined) {
+        const sl = req.body.social_links;
+        const allowed = [
+          "instagram",
+          "tiktok",
+          "facebook",
+          "x",
+          "linkedin",
+          "pinterest",
+          "youtube",
+          "contact_email",
+          "address",
+        ] as const;
+        if (sl === null || typeof sl !== "object" || Array.isArray(sl)) {
+          brandUpdates.social_links = {};
+        } else {
+          const out: Record<string, string> = {};
+          for (const k of allowed) {
+            const v = (sl as Record<string, unknown>)[k];
+            if (typeof v === "string" && v.trim()) {
+              out[k] = v.trim().slice(0, 2048);
+            }
+          }
+          brandUpdates.social_links = out;
+        }
       }
 
       // Try with brand fields; fall back to base-only if columns don't exist yet
@@ -745,6 +797,7 @@ router.post(
 
       const extract = await fetchAndParseWebsite(url);
 
+      // Brand analysis uses Claude (our best model for brand/website understanding)
       let logoBase64: string | undefined;
       let logoMimeType: string | undefined;
       if (extract.suggestedLogoUrl) {

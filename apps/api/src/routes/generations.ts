@@ -1069,11 +1069,32 @@ router.post(
           ? project.website_url.trim().slice(0, 2048)
           : null;
 
+      const rawSl = project.social_links as Record<string, unknown> | null;
+      const social_links: Record<string, string> = {};
+      if (rawSl && typeof rawSl === "object" && !Array.isArray(rawSl)) {
+        for (const k of [
+          "instagram",
+          "tiktok",
+          "facebook",
+          "x",
+          "linkedin",
+          "pinterest",
+          "youtube",
+          "contact_email",
+          "address",
+        ] as const) {
+          const v = rawSl[k];
+          if (typeof v === "string" && v.trim()) social_links[k] = v.trim().slice(0, 2048);
+        }
+      }
+
       const brandSnapshot = {
+        brand_name: typeof project.name === "string" ? project.name : "",
         brand_colors: (project.brand_colors as string[] | null) ?? [],
         font_styles: project.font_styles ?? null,
         brand_logo_url,
         website_url: websiteUrl,
+        social_links: Object.keys(social_links).length ? social_links : null,
       };
 
       const ctaUrl =

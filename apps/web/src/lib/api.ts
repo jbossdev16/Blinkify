@@ -100,6 +100,7 @@ export interface Project {
   font_styles?: FontStyles | null;
   /** Website URL for email marketing (CTA buttons and clickable images). */
   website_url?: string | null;
+  social_links?: Record<string, string> | null;
   created_at: string;
   updated_at: string;
 }
