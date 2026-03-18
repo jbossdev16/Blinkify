@@ -156,7 +156,7 @@ router.post(
         .eq("id", workspaceId)
         .single();
 
-      const planConfig = getPlanConfig(workspace?.plan ?? "trial");
+      const planConfig = getPlanConfig(workspace?.plan ?? "free");
 
       const { count: existingProjects } = await supabase
         .from("projects")
@@ -166,7 +166,7 @@ router.post(
 
       if ((existingProjects ?? 0) >= planConfig.maxBrands) {
         res.status(403).json({
-          error: `Brand limit reached. Your ${workspace?.plan ?? "trial"} plan allows up to ${planConfig.maxBrands} brand${planConfig.maxBrands > 1 ? "s" : ""}. Upgrade to add more.`,
+          error: `Brand limit reached. Your ${workspace?.plan ?? "free"} plan allows up to ${planConfig.maxBrands} brand${planConfig.maxBrands > 1 ? "s" : ""}. Upgrade to add more.`,
         });
         return;
       }

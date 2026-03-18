@@ -19,7 +19,7 @@ export function CreditsAlert({
 
   if (credits === null || plan === null || dismissed) return null;
 
-  const max = PLAN_MAX_CREDITS[plan.toLowerCase()] ?? PLAN_MAX_CREDITS.trial;
+  const max = PLAN_MAX_CREDITS[plan.toLowerCase()] ?? PLAN_MAX_CREDITS.free;
   const threshold = Math.floor(max * ALERT_THRESHOLD);
   if (credits > threshold) return null;
 

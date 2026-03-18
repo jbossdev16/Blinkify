@@ -1,8 +1,8 @@
 /** Landing homepage FAQ — single source for UI + JSON-LD. */
 export const LANDING_FAQ_ITEMS: { q: string; a: string }[] = [
   {
-    q: "Is there really a free trial?",
-    a: "Yes. Start your free trial in one click. Cancel anytime.",
+    q: "Is Blinkify free to try?",
+    a: "Yes. Start on the free plan with credits included. Upgrade anytime for more credits and features.",
   },
   {
     q: "How do credits work?",

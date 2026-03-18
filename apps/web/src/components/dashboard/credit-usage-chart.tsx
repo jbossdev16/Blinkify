@@ -14,7 +14,7 @@ interface CreditUsageChartProps {
 }
 
 export function CreditUsageChart({ credits, plan }: CreditUsageChartProps) {
-  const max = PLAN_MAX_CREDITS[plan.toLowerCase()] ?? PLAN_MAX_CREDITS.trial;
+  const max = PLAN_MAX_CREDITS[plan.toLowerCase()] ?? PLAN_MAX_CREDITS.free;
   const used = max - credits;
   const pct = Math.round((used / max) * 100);
 

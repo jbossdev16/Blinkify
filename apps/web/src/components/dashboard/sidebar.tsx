@@ -21,7 +21,7 @@ import {
   Shield,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { PLAN_MAX_CREDITS, getPlanFeatures } from "@/lib/constants";
+import { getPlanFeatures } from "@/lib/constants";
 import { BlinkifyLogo } from "@/components/blinkify-logo";
 import { SettingsModal } from "@/components/dashboard/settings-modal";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
@@ -71,7 +71,7 @@ export function Sidebar({
   const [settingsInitialTab, setSettingsInitialTab] = useState<"general" | "security" | "account" | "plan" | undefined>(undefined);
   const profileRef = useRef<HTMLDivElement>(null);
 
-  const planFeatures = getPlanFeatures(plan ?? "trial");
+  const planFeatures = getPlanFeatures(plan ?? "free");
   const hasMultiBrand = planFeatures.maxBrands > 1;
   const [brandDropdownOpen, setBrandDropdownOpen] = useState(false);
   const [brandProjects, setBrandProjects] = useState<{ id: string; name: string }[]>([]);
@@ -261,7 +261,7 @@ export function Sidebar({
       <div className={cn("pb-4 space-y-1", collapsed ? "px-2" : "px-3")}>
         {/* Credits card */}
         {credits !== null && !collapsed && (
-          <SidebarCreditsCard credits={credits} plan={plan ?? "trial"} />
+          <SidebarCreditsCard credits={credits} plan={plan ?? "free"} />
         )}
         {credits !== null && collapsed && (
           <SidebarTooltip label={`${credits} credits · Manage plan`} side="right" enabled>
@@ -297,7 +297,7 @@ export function Sidebar({
               {!collapsed && (
                 <div className="min-w-0 flex-1 text-left">
                   <p className="text-sm font-normal truncate">{user.name || "User"}</p>
-                  <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+                  <p className="text-xs text-muted-foreground truncate">{sidebarPlanLabel(plan ?? "free")}</p>
                 </div>
               )}
             </button>
@@ -449,38 +449,40 @@ function UserMenuPopover({
 
 /* ─── Sidebar credits card (image-style) ───────────────────────────────── */
 
-const LOW_CREDITS_THRESHOLD = 0.2;
+export function sidebarPlanLabel(plan: string): string {
+  const p = plan.toLowerCase();
+  if (p === "free" || p === "trial") return "Free";
+  if (p === "standard" || p === "starter") return "Standard";
+  if (p === "pro" || p === "professional") return "Professional";
+  if (p === "ultra" || p === "agency") return "Agency";
+  if (p === "enterprise") return "Enterprise";
+  return "Free";
+}
 
 function SidebarCreditsCard({ credits, plan }: { credits: number; plan: string }) {
-  const max = PLAN_MAX_CREDITS[plan.toLowerCase()] ?? 30;
-  const remainingPct = max > 0 ? Math.round((credits / max) * 100) : 0;
-  const lowCredits = credits <= max * LOW_CREDITS_THRESHOLD;
+  const router = useRouter();
+  const label = sidebarPlanLabel(plan);
+  const noCredits = credits === 0;
+  const isFreeish = label === "Free";
 
   return (
-    <div className="relative group p-3">
-      {lowCredits && (
-        <div
-          role="alert"
-          className="absolute bottom-full left-0 right-0 mb-2 px-3 py-2 rounded-lg border border-amber-500/50 bg-amber-500/10 text-foreground text-xs opacity-0 group-hover:opacity-100 transition-opacity z-50 pointer-events-none"
-        >
-          You’re at 20% or less of your plan credits ({credits} of {max} remaining).
-          Consider upgrading to avoid running out.
-        </div>
-      )}
-      <div className="flex items-center justify-between gap-2 mb-3">
-        <span className="text-base font-medium text-foreground">
-          Credits Left:
-        </span>
-        <span className="text-base font-semibold tracking-tight text-foreground tabular-nums">
-          {credits}
-        </span>
+    <div className="px-3 py-2 space-y-2 text-sm text-foreground">
+      <div className="flex items-center justify-between gap-2 w-full">
+        <span className="text-muted-foreground shrink-0">Credits Left</span>
+        <span className="font-medium tabular-nums">{credits.toLocaleString()}</span>
       </div>
-      <div className="h-1.5 w-full rounded-full bg-secondary/60 overflow-hidden mb-3">
-        <div
-          className="h-full rounded-full bg-primary transition-all duration-500"
-          style={{ width: `${Math.min(100, remainingPct)}%` }}
-        />
-      </div>
+      <button
+        type="button"
+        onClick={() => router.push("/setup-plan")}
+        className={cn(
+          "w-full rounded-xl py-2 text-xs font-semibold text-white",
+          noCredits && isFreeish
+            ? "bg-[#ef4444] hover:bg-[#dc2626]"
+            : "bg-[#3b82f6] hover:bg-[#2563eb]"
+        )}
+      >
+        {noCredits && isFreeish ? "Upgrade to Continue" : "Upgrade plan"}
+      </button>
     </div>
   );
 }

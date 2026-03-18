@@ -27,6 +27,9 @@ Set these in your production environment (e.g. host dashboard, `.env` in the API
 | `POLAR_PRODUCT_ID_PROFESSIONAL_ANNUAL` | No | Polar product ID for the Professional plan (annual). Required for annual checkout. |
 | `POLAR_PRODUCT_ID_AGENCY` | No | Polar product ID for the Agency plan (monthly). |
 | `POLAR_PRODUCT_ID_AGENCY_ANNUAL` | No | Polar product ID for the Agency plan (annual). Required for annual checkout. |
+| `POLAR_WEBHOOK_SECRET` | **Yes** (billing) | Secret from Polar **Settings → Webhooks** for the endpoint. Used to verify `POST /webhooks/polar`. |
+
+**Webhook URL:** `https://<your-api-host>/webhooks/polar` (e.g. `https://blinkify-api.vercel.app/webhooks/polar`). Subscribe to `subscription.active`, `subscription.updated`, and `subscription.revoked` ([Polar webhook docs](https://polar.sh/docs/integrate/webhooks/endpoints)).
 
 **Polar embed (setup-plan):** Checkout is created via the [Checkout API](https://polar.sh/docs/features/checkout/session) and opened with [Embedded Checkout](https://polar.sh/docs/features/checkout/embed). Set `WEB_ORIGIN` to your frontend origin (e.g. `https://app.blinkify.com`) so `embed_origin` is correct. In Polar dashboard **Catalogue**, open each product (monthly and annual variants), use the ⋮ menu → **Copy Product ID**, and set all six `POLAR_PRODUCT_ID_*` and `POLAR_PRODUCT_ID_*_ANNUAL` vars. If the API is deployed (e.g. Vercel), add these same vars in the host’s environment; the API does not read a `.env` file in production.
 

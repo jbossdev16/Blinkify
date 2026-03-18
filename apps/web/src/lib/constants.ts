@@ -1,9 +1,9 @@
 /**
  * Max credits per plan. Used for usage bars, alerts, and billing UI.
- * Keys match API plan values and landing names (lowercase): trial, starter/standard, professional/pro, ultra/agency.
  */
 export const PLAN_MAX_CREDITS: Record<string, number> = {
-  trial: 250,
+  free: 100,
+  trial: 100,
   standard: 400,
   starter: 400,
   pro: 1500,
@@ -15,38 +15,44 @@ export const PLAN_MAX_CREDITS: Record<string, number> = {
 
 export interface PlanFeatures {
   videoEnabled: boolean;
+  fullCampaignEnabled: boolean;
+  /** Marketing email tool (generate-email) — Standard+ */
+  emailEnabled: boolean;
   maxBrands: number;
 }
 
 export const PLAN_FEATURES: Record<string, PlanFeatures> = {
-  trial:        { videoEnabled: true,  maxBrands: 1 },
-  standard:     { videoEnabled: false, maxBrands: 1 },
-  starter:      { videoEnabled: false, maxBrands: 1 },
-  pro:          { videoEnabled: true,  maxBrands: 3 },
-  professional: { videoEnabled: true,  maxBrands: 3 },
-  agency:       { videoEnabled: true,  maxBrands: 10 },
-  ultra:        { videoEnabled: true,  maxBrands: 10 },
-  enterprise:   { videoEnabled: true,  maxBrands: 10 },
+  free: { videoEnabled: false, fullCampaignEnabled: false, emailEnabled: true, maxBrands: 1 },
+  trial: { videoEnabled: false, fullCampaignEnabled: false, emailEnabled: true, maxBrands: 1 },
+  standard: { videoEnabled: false, fullCampaignEnabled: false, emailEnabled: true, maxBrands: 1 },
+  starter: { videoEnabled: false, fullCampaignEnabled: false, emailEnabled: true, maxBrands: 1 },
+  pro: { videoEnabled: true, fullCampaignEnabled: true, emailEnabled: true, maxBrands: 3 },
+  professional: { videoEnabled: true, fullCampaignEnabled: true, emailEnabled: true, maxBrands: 3 },
+  agency: { videoEnabled: true, fullCampaignEnabled: true, emailEnabled: true, maxBrands: 10 },
+  ultra: { videoEnabled: true, fullCampaignEnabled: true, emailEnabled: true, maxBrands: 10 },
+  enterprise: { videoEnabled: true, fullCampaignEnabled: true, emailEnabled: true, maxBrands: 10 },
 };
 
 export function getPlanFeatures(plan: string): PlanFeatures {
-  return PLAN_FEATURES[plan.toLowerCase()] ?? PLAN_FEATURES["trial"]!;
+  const k = plan.toLowerCase();
+  if (k === "trial") return PLAN_FEATURES["free"]!;
+  return PLAN_FEATURES[k] ?? PLAN_FEATURES["free"]!;
 }
 
 /** Credit cost per image by size (must match API). */
 export function imageCreditCost(imageSize: "1K" | "4K"): number {
-  return imageSize === "4K" ? 25 : 10;
+  return imageSize === "4K" ? 20 : 10;
 }
 
-/** Credit cost for email marketing: (imageSize, numberOfImages) → total (must match API). */
+/** Credit cost for email marketing (must match API getEmailCreditCost). */
 export function emailCreditCost(imageSize: "1K" | "4K", numberOfImages: 1 | 2 | 3): number {
   if (imageSize === "1K") {
     return numberOfImages === 1 ? 15 : numberOfImages === 2 ? 30 : 50;
   }
-  return numberOfImages === 1 ? 30 : numberOfImages === 2 ? 60 : 100;
+  return numberOfImages === 1 ? 25 : numberOfImages === 2 ? 50 : 75;
 }
 
 /** Credit cost for video by resolution (must match API). */
 export function videoCreditCost(resolution: "1080p" | "4k"): number {
-  return resolution === "4k" ? 150 : 100;
+  return resolution === "4k" ? 75 : 50;
 }

@@ -73,7 +73,7 @@ export default function ProductPhotoToAdPage() {
         <ul className="list-disc pl-6 text-muted-foreground space-y-2">
           <li>One clear product image (PNG or JPG)</li>
           <li>Your brand website URL for colors and tone</li>
-          <li>A Blinkify account (free trial available)</li>
+          <li>A Blinkify account (free plan available)</li>
         </ul>
 
         <h2 className="text-2xl font-semibold mt-12 mb-4">

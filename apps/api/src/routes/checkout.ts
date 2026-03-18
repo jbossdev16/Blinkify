@@ -69,14 +69,12 @@ router.post(
       }
       const webOrigin = getOriginForRequest(req);
 
-      const skipTrial = req.body?.skipTrial === true;
       const checkout = await polar.checkouts.create({
         products: [productId],
         ...(email && { customerEmail: email }),
         embedOrigin: webOrigin,
         successUrl: `${webOrigin}/signin?verified=true`,
-        returnUrl: skipTrial ? `${webOrigin}/billing` : `${webOrigin}/setup-plan`,
-        ...(skipTrial ? {} : { trialInterval: "day", trialIntervalCount: 3 }),
+        returnUrl: `${webOrigin}/billing`,
       });
 
       res.json({ url: checkout.url });
@@ -138,7 +136,9 @@ router.post(
 
       const { data: memberships, error: memError } = await supabase
         .from("workspace_members")
-        .select("workspace_id, workspaces(stripe_subscription_id)")
+        .select(
+          "workspace_id, workspaces(stripe_subscription_id, polar_subscription_id)"
+        )
         .eq("user_id", user.id);
 
       if (memError) {
@@ -147,10 +147,19 @@ router.post(
         return;
       }
 
-      type Row = { workspace_id: string; workspaces: { stripe_subscription_id?: string | null } | null };
+      type Row = {
+        workspace_id: string;
+        workspaces: {
+          stripe_subscription_id?: string | null;
+          polar_subscription_id?: string | null;
+        } | null;
+      };
       const rows = (memberships ?? []) as unknown as Row[];
       const subscriptionId = rows
-        .map((r) => r.workspaces?.stripe_subscription_id)
+        .map(
+          (r) =>
+            r.workspaces?.polar_subscription_id || r.workspaces?.stripe_subscription_id
+        )
         .find((id): id is string => typeof id === "string" && id.length > 0);
 
       if (!subscriptionId) {

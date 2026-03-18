@@ -431,7 +431,7 @@ function HowItWorksSection() {
                   <div className="mt-8">
                     <Button asChild size="lg" className="text-base font-medium px-8">
                       <a href={`${APP_BASE}/signup`}>
-                        Start Free Trial
+                        Start free
                         <ArrowRight className="ml-2 h-5 w-5" />
                       </a>
                     </Button>
@@ -1698,37 +1698,12 @@ const plans: {
   },
 ];
 
-const GRAINIENT_VIDEO_SRC = "/grainient-1770491527486.webm";
-
-function LazyPricingVideo() {
-  const ref = useRef<HTMLDivElement>(null);
-  const [src, setSrc] = useState<string | null>(null);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const obs = new IntersectionObserver(
-      (entries) => {
-        if (entries[0]?.isIntersecting) setSrc(GRAINIENT_VIDEO_SRC);
-      },
-      { rootMargin: "100px", threshold: 0 }
-    );
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, []);
+function PricingPopularBackground() {
   return (
-    <div ref={ref} className="absolute inset-0 w-full h-full">
-      {src && (
-        <video
-          autoPlay
-          loop
-          muted
-          playsInline
-          preload="metadata"
-          className="absolute inset-0 w-full h-full object-cover"
-          src={src}
-        />
-      )}
-    </div>
+    <div
+      className="absolute inset-0 w-full h-full overflow-hidden rounded-[inherit] bg-gradient-brand"
+      aria-hidden
+    />
   );
 }
 
@@ -1772,10 +1747,10 @@ function PricingSection() {
               className="absolute bottom-full right-2 mb-2 flex justify-end pointer-events-none"
               aria-hidden
             >
-              <span className="bg-gradient-brand text-white text-xs font-medium px-3 py-1.5 rounded-lg shadow-md whitespace-nowrap inline-block">
+              <span className="inline-flex items-center rounded-full bg-emerald-500 text-white text-xs font-semibold px-3 py-1 whitespace-nowrap">
                 Save 25%
               </span>
-              <span className="absolute top-full right-6 -mt-px border-[6px] border-transparent border-t-[#0079d0]" />
+              <span className="absolute top-full right-6 -mt-px border-[6px] border-transparent border-t-emerald-500" />
             </div>
             <div
               role="group"
@@ -1820,11 +1795,7 @@ function PricingSection() {
               >
                 {plan.popular && (
                   <div className="absolute inset-0 rounded-[inherit] overflow-hidden z-0">
-                    <LazyPricingVideo />
-                    <div
-                      className="absolute inset-0 bg-slate-950/75 z-[1]"
-                      aria-hidden
-                    />
+                    <PricingPopularBackground />
                   </div>
                 )}
                 <div className="absolute inset-0 rounded-[inherit] z-10 pointer-events-none">
@@ -1837,7 +1808,13 @@ function PricingSection() {
                     </span>
                   </div>
                 )}
-                <div className={`flex-1 relative flex flex-col ${plan.popular ? "z-20" : "z-0"}`}>
+                <div
+                  className={`flex-1 relative flex flex-col ${
+                    plan.popular
+                      ? "z-20 [text-shadow:0_1px_2px_rgba(0,0,0,0.28)]"
+                      : "z-0"
+                  }`}
+                >
                   <h3
                     className={`text-xl md:text-2xl font-medium tracking-tight ${
                       plan.popular ? "text-white" : "text-foreground"
@@ -1897,7 +1874,7 @@ function PricingSection() {
                       asChild
                     >
                       <a href={`${APP_BASE}/signup`}>
-                        Start Free Trial
+                        Start free
                         <ArrowRight className="ml-2 h-4 w-4" />
                       </a>
                     </Button>
@@ -2091,7 +2068,7 @@ function FinalCTASection() {
           </p>
           <Button asChild size="lg" className="text-base font-medium px-8">
             <a href={`${APP_BASE}/signup`}>
-              Start Free Trial
+              Start free
               <ArrowRight className="ml-2 h-5 w-5" />
             </a>
           </Button>

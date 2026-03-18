@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback, Fragment } from "react";
+import { useState, useRef, useEffect, useCallback, Fragment, useMemo } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Send,
@@ -24,6 +24,7 @@ import {
   Check,
   Hammer,
   Zap,
+  Lock,
 } from "lucide-react";
 import { BlinkifyLogo } from "@/components/blinkify-logo";
 import { cn } from "@/lib/utils";
@@ -33,6 +34,7 @@ import { apiClientFetch } from "@/lib/api-client";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { renderContentWithBold } from "@/lib/render-content-with-bold";
 import { getPlanFeatures, imageCreditCost, emailCreditCost, videoCreditCost } from "@/lib/constants";
+import { UpgradeModal } from "@/components/ui/upgrade-modal";
 import { toast } from "sonner";
 import { isEmailTemplateId, type EmailTemplateId } from "@/lib/email-templates";
 
@@ -118,12 +120,19 @@ interface CreativeMessage {
   attachedImageUrls?: string[];
   /** User message was sent from Full Campaign form; show follow-up chips below next assistant reply. */
   fullCampaignRequest?: boolean;
+  /** Layout for Ad Creative / video results panel */
+  studioMeta?: {
+    aspectRatio?: ImageAspectRatio;
+    imageCount?: number;
+    videoAspect?: VideoAspectRatio;
+  };
 }
 
 const IMAGE_ASPECT_RATIOS: { value: ImageAspectRatio; label: string }[] = [
-  { value: "1:1", label: "Square (1:1)" },
+  { value: "4:5", label: "Portrait (4:5)" },
   { value: "9:16", label: "Story (9:16)" },
-  { value: "16:9", label: "Landscape Ad (16:9)" },
+  { value: "16:9", label: "Landscape (16:9)" },
+  { value: "1:1", label: "Square (1:1)" },
 ];
 
 const IMAGE_RESOLUTIONS: { value: ImageResolution; label: string; note?: string }[] = [
@@ -208,9 +217,55 @@ interface StoredCreativeMessage {
   attachedImageUrls?: string[];
 }
 
+function standaloneAdImageLayoutClass(aspect: ImageAspectRatio, n: number): string {
+  const wide =
+    aspect === "16:9" ||
+    aspect === "21:9" ||
+    aspect === "5:4" ||
+    aspect === "4:3" ||
+    aspect === "3:2";
+  if (wide) {
+    if (n <= 3) return "flex flex-col gap-5 w-full max-w-5xl mx-auto items-stretch";
+    return "grid grid-cols-2 gap-5 w-full max-w-6xl mx-auto items-start";
+  }
+  if (n <= 1) return "flex justify-center items-start w-full px-1";
+  if (n <= 3)
+    return "flex flex-row flex-wrap gap-5 justify-center items-start w-full max-w-[min(100%,1240px)] mx-auto px-1";
+  return "grid grid-cols-2 gap-5 w-full max-w-[min(100%,1100px)] mx-auto justify-items-center px-1";
+}
+
+function standaloneAdImageCellWrapClass(aspect: ImageAspectRatio, n: number): string {
+  const wide =
+    aspect === "16:9" ||
+    aspect === "21:9" ||
+    aspect === "5:4" ||
+    aspect === "4:3" ||
+    aspect === "3:2";
+  if (wide) return "w-full rounded-xl overflow-hidden border border-border bg-background shadow-sm";
+  if (n <= 1)
+    return "w-full max-w-[min(92vw,620px)] shrink-0 rounded-xl overflow-hidden border border-border bg-background shadow-sm";
+  if (n <= 3)
+    return "w-[min(48vw,560px)] sm:w-[min(47%,560px)] max-w-[560px] shrink-0 rounded-xl overflow-hidden border border-border bg-background shadow-sm";
+  return "w-full max-w-[540px] rounded-xl overflow-hidden border border-border bg-background shadow-sm";
+}
+
+/** Loading placeholders only — matches expected ratio so layout doesn’t jump wildly. */
+function standaloneAdImageSkeletonClass(aspect: ImageAspectRatio): string {
+  const wide =
+    aspect === "16:9" ||
+    aspect === "21:9" ||
+    aspect === "5:4" ||
+    aspect === "4:3" ||
+    aspect === "3:2";
+  if (wide) return "aspect-video w-full min-h-[220px] rounded-lg bg-muted/50 animate-pulse";
+  if (aspect === "9:16") return "aspect-[9/16] w-full min-h-[420px] rounded-lg bg-muted/50 animate-pulse";
+  if (aspect === "1:1") return "aspect-square w-full max-w-[560px] mx-auto min-h-[280px] rounded-lg bg-muted/50 animate-pulse";
+  return "aspect-[4/5] w-full min-h-[380px] rounded-lg bg-muted/50 animate-pulse";
+}
+
 function defaultImageOptions(): ImageOptions {
   return {
-    aspectRatio: "1:1",
+    aspectRatio: "4:5",
     resolution: "1K",
     temperature: TEMPERATURE_DEFAULT,
     numberOfImages: 2,
@@ -281,19 +336,82 @@ interface FullCampaignStepState {
   credits: number;
   progress?: number;
 }
-const FULL_CAMPAIGN_STEPS: Omit<FullCampaignStepState, "status" | "timeTaken">[] = [
-  { id: "claude_json", label: "Campaign intelligence", subLabel: "Claude Sonnet — prompts + copy", credits: 5 },
-  { id: "meta_feed_image_1", label: "Feed image 1 (1:1)", subLabel: "Nano Banana · 1K resolution", credits: 10 },
-  { id: "meta_feed_image_2", label: "Feed image 2 (1:1)", subLabel: "Nano Banana · 1K resolution", credits: 10 },
-  { id: "meta_feed_image_3", label: "Feed image 3 (1:1)", subLabel: "Nano Banana · 1K resolution", credits: 10 },
-  { id: "story_image_1", label: "Story image 1 (9:16)", subLabel: "Nano Banana · vertical format", credits: 10 },
-  { id: "story_image_2", label: "Story image 2 (9:16)", subLabel: "Nano Banana · vertical format", credits: 10 },
-  { id: "story_image_3", label: "Story image 3 (9:16)", subLabel: "Nano Banana · vertical format", credits: 10 },
-  { id: "video_16x9", label: "Product video — 16:9", subLabel: "Blinkify Standard · Veo 3.1", credits: 150 },
-  { id: "video_9x16", label: "Vertical video — 9:16", subLabel: "Blinkify Fast · Veo 3.1", credits: 100 },
-  { id: "email_html", label: "Marketing emails (2)", subLabel: "2 variants · free", credits: 0 },
-];
-const TOTAL_FULL_CAMPAIGN_CREDITS = FULL_CAMPAIGN_STEPS.reduce((s, t) => s + t.credits, 0);
+type FullCampaignQuality = "1K" | "4K";
+
+function buildFullCampaignSteps(
+  quality: FullCampaignQuality
+): Omit<FullCampaignStepState, "status" | "timeTaken">[] {
+  const pi = quality === "4K" ? 25 : 10;
+  const pv = quality === "4K" ? 150 : 100;
+  const emailC = quality === "4K" ? 50 : 40;
+  const res = quality === "4K" ? "4K" : "1K";
+  return [
+    {
+      id: "claude_json",
+      label: "Campaign intelligence",
+      subLabel: "Claude — prompts + copy (included)",
+      credits: 0,
+    },
+    {
+      id: "meta_feed_image_1",
+      label: "Feed image 1 (1:1)",
+      subLabel: `Nano Banana · ${res}`,
+      credits: pi,
+    },
+    {
+      id: "meta_feed_image_2",
+      label: "Feed image 2 (1:1)",
+      subLabel: `Nano Banana · ${res}`,
+      credits: pi,
+    },
+    {
+      id: "meta_feed_image_3",
+      label: "Feed image 3 (1:1)",
+      subLabel: `Nano Banana · ${res}`,
+      credits: pi,
+    },
+    {
+      id: "story_image_1",
+      label: "Story image 1 (9:16)",
+      subLabel: `Nano Banana · ${res} vertical`,
+      credits: pi,
+    },
+    {
+      id: "story_image_2",
+      label: "Story image 2 (9:16)",
+      subLabel: `Nano Banana · ${res} vertical`,
+      credits: pi,
+    },
+    {
+      id: "story_image_3",
+      label: "Story image 3 (9:16)",
+      subLabel: `Nano Banana · ${res} vertical`,
+      credits: pi,
+    },
+    {
+      id: "video_16x9",
+      label: "Product video — 16:9",
+      subLabel: quality === "4K" ? "Veo · 4K 16:9" : "Veo · Standard 1080p",
+      credits: pv,
+    },
+    {
+      id: "video_9x16",
+      label: "Vertical video — 9:16",
+      subLabel: quality === "4K" ? "Veo · 4K 9:16" : "Veo · 720p vertical",
+      credits: pv,
+    },
+    {
+      id: "email_html",
+      label: "Marketing emails (2)",
+      subLabel: `${emailC} credits · 2 HTML variants`,
+      credits: emailC,
+    },
+  ];
+}
+
+function fullCampaignBudgetCredits(quality: FullCampaignQuality): number {
+  return quality === "4K" ? 500 : 300;
+}
 
 async function loadCreativeStudioChatFromSupabase(workspaceId: string, projectId: string): Promise<{
   messages: CreativeMessage[];
@@ -391,6 +509,7 @@ interface SavedCampaignState {
     brandName: string;
     campaignGoal: string | null;
     imageStyleChosen?: string | null;
+    campaignQuality?: FullCampaignQuality;
   };
   results: {
     metaImageUrl?: string;
@@ -494,10 +613,36 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
   const projectId = activeProject.id;
   const planFeatures = getPlanFeatures(plan);
   const videoEnabled = planFeatures.videoEnabled;
+  const fullCampaignEnabled = planFeatures.fullCampaignEnabled;
+  const emailEnabled = planFeatures.emailEnabled;
+
+  const [upgradeModal, setUpgradeModal] = useState<{
+    feature: string;
+    requiredPlan: "standard" | "pro";
+  } | null>(null);
+
+  function tryHandleBillingError(body: Record<string, unknown>): boolean {
+    const code = body.code as string | undefined;
+    const feature = (body.feature as string) || "credits_empty";
+    const requiredPlan = (body.requiredPlan as "standard" | "pro") || "pro";
+    if (
+      code === "PLAN_UPGRADE_REQUIRED" ||
+      code === "FREE_LIMIT_REACHED" ||
+      code === "INSUFFICIENT_CREDITS"
+    ) {
+      setUpgradeModal({
+        feature: code === "INSUFFICIENT_CREDITS" ? "credits_empty" : feature,
+        requiredPlan: code === "INSUFFICIENT_CREDITS" ? "standard" : requiredPlan,
+      });
+      return true;
+    }
+    return false;
+  }
   const showBrandPicker = planFeatures.maxBrands > 1 && (allProjects?.length ?? 0) > 0;
   const [brandPickerOpen, setBrandPickerOpen] = useState(false);
   const brandPickerRef = useRef<HTMLDivElement>(null);
   const [selectedTool, setSelectedTool] = useState<CreativeTool>(null);
+
   const [imageOptions, setImageOptions] = useState<ImageOptions>(defaultImageOptions);
   const [videoOptions, setVideoOptions] = useState<VideoOptions>(defaultVideoOptions);
   const [emailOptions, setEmailOptions] = useState<EmailOptions>(defaultEmailOptions);
@@ -564,6 +709,7 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
   const [fullCampaignPreferredStyle, setFullCampaignPreferredStyle] = useState<string>("auto");
   const [fullCampaignPlatforms, setFullCampaignPlatforms] = useState<string[]>([]);
   const [fullCampaignShake, setFullCampaignShake] = useState(false);
+  const [fullCampaignQuality, setFullCampaignQuality] = useState<FullCampaignQuality>("1K");
   const [fullCampaignGeneration, setFullCampaignGeneration] = useState<{
     status: "idle" | "generating" | "complete";
     steps: FullCampaignStepState[];
@@ -572,6 +718,7 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
     campaignGoal: string | null;
     videoCountdownSeconds: number | null;
     imageStyleChosen: string | null;
+    campaignQuality?: FullCampaignQuality;
     generationUnavailableRetryable?: boolean;
   }>({ status: "idle", steps: [], creditsUsed: 0, brandName: "", campaignGoal: null, videoCountdownSeconds: null, imageStyleChosen: null });
   const [fullCampaignResults, setFullCampaignResults] = useState<{
@@ -664,7 +811,6 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
   const plusMenuRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const fullCampaignFileInputRef = useRef<HTMLInputElement>(null);
-  const fullCampaignTriggerSendRef = useRef(false);
   const isFullCampaignSendRef = useRef(false);
   const chipSendRef = useRef<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -788,12 +934,6 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
   }, [fullCampaignProductImage]);
 
   useEffect(() => {
-    if (!fullCampaignTriggerSendRef.current || selectedTool !== null) return;
-    fullCampaignTriggerSendRef.current = false;
-    handleSend();
-  });
-
-  useEffect(() => {
     if (chipSendRef.current == null || prompt !== chipSendRef.current) return;
     chipSendRef.current = null;
     handleSend();
@@ -839,6 +979,8 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
 
       if (loaded.campaignState) {
         const cs = loaded.campaignState;
+        const cq = cs.generation.campaignQuality;
+        if (cq === "1K" || cq === "4K") setFullCampaignQuality(cq);
         setFullCampaignGeneration({
           status: "complete",
           steps: cs.generation.steps.map((s) => ({ ...s, status: "done" as FullCampaignStepStatus })),
@@ -847,6 +989,7 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
           campaignGoal: cs.generation.campaignGoal,
           videoCountdownSeconds: null,
           imageStyleChosen: cs.generation.imageStyleChosen ?? null,
+          campaignQuality: cq === "1K" || cq === "4K" ? cq : undefined,
         });
         setFullCampaignResults(cs.results as typeof fullCampaignResults);
         const campaignId = cs.results?.campaignId;
@@ -1062,6 +1205,8 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
                 brandName: fullCampaignGeneration.brandName,
                 campaignGoal: fullCampaignGeneration.campaignGoal,
                 imageStyleChosen: fullCampaignGeneration.imageStyleChosen ?? null,
+                campaignQuality:
+                  fullCampaignGeneration.campaignQuality ?? fullCampaignQuality,
               },
               results: fullCampaignResults,
             }
@@ -1488,11 +1633,12 @@ ${bodyRows}
         router.refresh();
       } else if (intent === "video") {
         if (!videoEnabled) {
+          setUpgradeModal({ feature: "video", requiredPlan: "pro" });
           setMessages((prev) => {
             const n = [...prev];
             const m = n[placeholderIndex];
             if (m && m.role === "assistant") {
-              n[placeholderIndex] = { ...m, content: "Video generation is not available on your current plan. Upgrade to use this feature.", generating: false };
+              n[placeholderIndex] = { ...m, content: "", generating: false };
             }
             queueMicrotask(() => flushSave(n));
             return n;
@@ -1698,7 +1844,12 @@ ${bodyRows}
             const next = [...prev];
             const m = next[msgIndex];
             if (m && m.role === "assistant") {
-              next[msgIndex] = { ...m, videoUrl: res.videoUrl ?? null, generating: false };
+              next[msgIndex] = {
+                ...m,
+                videoUrl: res.videoUrl ?? null,
+                generating: false,
+                content: "Generation complete.",
+              };
             }
             queueMicrotask(() => flushSave(next));
             return next;
@@ -1958,11 +2109,12 @@ ${bodyRows}
           setPendingFiles([]);
         } else if (intent === "video") {
           if (!videoEnabled) {
+            setUpgradeModal({ feature: "video", requiredPlan: "pro" });
             setMessages((prev) => {
               const next = [...prev];
               const m = next[msgIndex];
               if (m && m.role === "assistant") {
-                next[msgIndex] = { ...m, content: "Video generation is not available on your current plan. Upgrade to use this feature.", generating: false };
+                next[msgIndex] = { ...m, content: "", generating: false };
               }
               queueMicrotask(() => flushSave(next));
               return next;
@@ -2118,6 +2270,12 @@ ${bodyRows}
       timestamp: Date.now(),
       tool: selectedTool,
       generating: true,
+      ...(selectedTool === "image" && {
+        studioMeta: { aspectRatio: imageOptions.aspectRatio, imageCount: imageOptions.numberOfImages },
+      }),
+      ...(selectedTool === "video" && {
+        studioMeta: { videoAspect: videoOptions.aspectRatio },
+      }),
     };
     setMessages((prev) => {
       const next = [...prev, userMsg, placeholderAssistant];
@@ -2191,11 +2349,16 @@ ${bodyRows}
             const keepContent = m.content?.trim();
             next[msgIndex] = {
               ...m,
-              content: keepContent ? keepContent : (fromApi ?? ""),
+              content: "Generation complete.",
               imageUrls: urls,
               generationId: res.generation?.id,
               ...(genIds && { generationIds: genIds }),
               generating: false,
+              studioMeta: {
+                ...m.studioMeta,
+                aspectRatio: imageOptions.aspectRatio,
+                imageCount: urls.length,
+              },
             };
           }
           queueMicrotask(() => flushSave(next));
@@ -2279,7 +2442,7 @@ ${bodyRows}
           if (m && m.role === "assistant") {
             next[msgIndex] = {
               ...m,
-              content: "",
+              content: "Generation complete.",
               emailPayload: {
                 subjectLine: res.subjectLine,
                 headline: res.headline,
@@ -2340,7 +2503,7 @@ ${bodyRows}
         : selectedTool === "email"
           ? emailCreditCost(emailOptions.imageQuality, emailOptions.numberOfImages)
           : selectedTool === "full"
-            ? 0
+            ? fullCampaignBudgetCredits(fullCampaignQuality)
             : 0;
   const fullCampaignFormValid =
     fullCampaignProductImage != null &&
@@ -2685,6 +2848,34 @@ ${bodyRows}
                       ))}
                     </div>
                   </div>
+                  <div>
+                    <label className="block mb-1.5 text-[11px] font-semibold uppercase tracking-[0.4px] text-[#888]">
+                      Output quality
+                    </label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(
+                        [
+                          { id: "1K" as const, name: "Standard (1K)" },
+                          { id: "4K" as const, name: "Ultra (4K)" },
+                        ] as const
+                      ).map((s) => (
+                        <button
+                          key={s.id}
+                          type="button"
+                          disabled={fullCampaignGeneration.status === "generating"}
+                          onClick={() => setFullCampaignQuality(s.id)}
+                          className={cn(
+                            "cursor-pointer h-[30px] shrink-0 rounded-full border-[1.5px] px-3 text-xs transition-colors disabled:opacity-50",
+                            fullCampaignQuality === s.id
+                              ? "border-[#007aff] bg-[#007aff] font-semibold text-[#ffffff]"
+                              : "border-[#e5e7eb] bg-white text-[#555] hover:border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300"
+                          )}
+                        >
+                          {s.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               )
             : (
@@ -2743,6 +2934,11 @@ ${bodyRows}
       return;
     }
 
+    if (!fullCampaignEnabled) {
+      setUpgradeModal({ feature: "full_campaign", requiredPlan: "pro" });
+      return;
+    }
+
     const brandName = activeProject?.name ?? "";
     if (!brandName) {
       toast.error("Your brand profile is incomplete. Add your brand name to continue.");
@@ -2765,15 +2961,20 @@ ${bodyRows}
     };
     setMessages((prev) => [...prev, campaignUserMsg]);
 
+    const qc = fullCampaignQuality;
     setFullCampaignGeneration({
       status: "generating",
-      steps: FULL_CAMPAIGN_STEPS.map((s) => ({ ...s, status: "pending" as FullCampaignStepStatus })),
+      steps: buildFullCampaignSteps(qc).map((s) => ({
+        ...s,
+        status: "pending" as FullCampaignStepStatus,
+      })),
       imageStyleChosen: null,
       creditsUsed: 0,
       brandName,
       campaignGoal,
       videoCountdownSeconds: null,
       generationUnavailableRetryable: false,
+      campaignQuality: qc,
     });
     setFullCampaignResults(null);
     setFullCampaignSwipeSlide(0);
@@ -2813,13 +3014,21 @@ ${bodyRows}
             campaignGoal,
             platforms: platformsCopy,
             preferredStyle: fullCampaignPreferredStyle === "auto" ? undefined : fullCampaignPreferredStyle,
+            campaignQuality: qc,
           }),
         }
       );
 
       if (!response.ok) {
-        const body = await response.json().catch(() => ({}));
-        const errMsg = (body as { error?: string })?.error || `Campaign generation failed (${response.status})`;
+        const body = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+        if (tryHandleBillingError(body)) {
+          setFullCampaignGeneration((prev) => ({ ...prev, status: "idle", steps: [] }));
+          return;
+        }
+        const errMsg =
+          typeof body.error === "string"
+            ? body.error
+            : `Campaign generation failed (${response.status})`;
         toast.error(errMsg);
         setFullCampaignGeneration((prev) => ({ ...prev, status: "complete" }));
         return;
@@ -3024,7 +3233,7 @@ ${bodyRows}
         </button>
         {fullCampaignProductPreviewUrl && (
           <div className="relative shrink-0 h-[34px] w-[34px] rounded-lg border border-[#e5e7eb] dark:border-gray-600 overflow-hidden bg-gray-100 dark:bg-gray-800">
-            <img src={fullCampaignProductPreviewUrl} alt="" className="h-full w-full object-cover" />
+            <img src={fullCampaignProductPreviewUrl} alt="" className="h-full w-full object-contain" />
             <button
               type="button"
               onClick={() => setFullCampaignProductImage(null)}
@@ -3150,7 +3359,10 @@ ${bodyRows}
                 ))}
               </div>
               <p className="mt-3 pt-3 border-t border-[#e5e7eb] text-[11px] text-gray-600">
-                Credits used: {fullCampaignGeneration.creditsUsed} of {TOTAL_FULL_CAMPAIGN_CREDITS}
+                Credits used: {fullCampaignGeneration.creditsUsed} of{" "}
+                {fullCampaignGeneration.steps.length > 0
+                  ? fullCampaignGeneration.steps.reduce((a, s) => a + s.credits, 0)
+                  : fullCampaignBudgetCredits(fullCampaignQuality)}
               </p>
             </>
           )}
@@ -3166,7 +3378,101 @@ ${bodyRows}
   const fullCampaignComplete = fullCampaignGeneration.status === "complete";
   const slideLabels = ["Posts", "Video", "Email"] as const;
 
-  const resultsPanelSegmentBar = fullCampaignGeneration.status !== "idle" ? (
+  const { showFullCampaignLeft, standalonePreview } = useMemo(() => {
+    let lastUserIdx = -1;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === "user") {
+        lastUserIdx = i;
+        break;
+      }
+    }
+    const fcActive =
+      lastUserIdx >= 0 &&
+      Boolean(messages[lastUserIdx].fullCampaignRequest) &&
+      (fullCampaignGeneration.status === "generating" ||
+        fullCampaignGeneration.status === "complete");
+
+    type Standalone =
+      | { type: "image"; urls: string[]; aspectRatio: ImageAspectRatio; generationIds?: string[] }
+      | { type: "image-loading"; aspectRatio: ImageAspectRatio; count: number }
+      | { type: "video"; url: string }
+      | { type: "video-loading"; aspectRatio: VideoAspectRatio }
+      | { type: "email"; msg: CreativeMessage }
+      | { type: "email-loading" }
+      | null;
+
+    if (fcActive) {
+      return { showFullCampaignLeft: true as const, standalonePreview: null as Standalone };
+    }
+    if (lastUserIdx < 0) {
+      if (
+        fullCampaignGeneration.status === "complete" &&
+        fullCampaignResults &&
+        (fullCampaignResults.campaignId != null ||
+          (fullCampaignResults.metaImageUrls?.length ?? 0) > 0 ||
+          !!fullCampaignResults.metaImageUrl)
+      ) {
+        return { showFullCampaignLeft: true as const, standalonePreview: null as Standalone };
+      }
+      return { showFullCampaignLeft: false as const, standalonePreview: null as Standalone };
+    }
+    for (let i = messages.length - 1; i > lastUserIdx; i--) {
+      const m = messages[i];
+      if (m.role !== "assistant") continue;
+      if (m.tool === "image") {
+        if (m.generating) {
+          return {
+            showFullCampaignLeft: false as const,
+            standalonePreview: {
+              type: "image-loading" as const,
+              aspectRatio: m.studioMeta?.aspectRatio ?? "4:5",
+              count: Math.max(1, m.studioMeta?.imageCount ?? 1),
+            },
+          };
+        }
+        const urls = (m.signedImageUrls?.length ? m.signedImageUrls : m.imageUrls) ?? [];
+        if (urls.length) {
+          return {
+            showFullCampaignLeft: false as const,
+            standalonePreview: {
+              type: "image" as const,
+              urls,
+              aspectRatio: m.studioMeta?.aspectRatio ?? "4:5",
+              generationIds: m.generationIds,
+            },
+          };
+        }
+        return { showFullCampaignLeft: false as const, standalonePreview: null as Standalone };
+      }
+      if (m.tool === "video") {
+        if (m.generating && !m.videoUrl) {
+          return {
+            showFullCampaignLeft: false as const,
+            standalonePreview: {
+              type: "video-loading" as const,
+              aspectRatio: m.studioMeta?.videoAspect ?? "16:9",
+            },
+          };
+        }
+        if (m.videoUrl) {
+          return { showFullCampaignLeft: false as const, standalonePreview: { type: "video" as const, url: m.videoUrl } };
+        }
+        return { showFullCampaignLeft: false as const, standalonePreview: null as Standalone };
+      }
+      if (m.tool === "email") {
+        if (m.generating && !m.emailPayload) {
+          return { showFullCampaignLeft: false as const, standalonePreview: { type: "email-loading" as const } };
+        }
+        if (m.emailPayload) {
+          return { showFullCampaignLeft: false as const, standalonePreview: { type: "email" as const, msg: m } };
+        }
+        return { showFullCampaignLeft: false as const, standalonePreview: null as Standalone };
+      }
+    }
+    return { showFullCampaignLeft: false as const, standalonePreview: null as Standalone };
+  }, [messages, fullCampaignGeneration.status, fullCampaignResults]);
+
+  const resultsPanelSegmentBar = fullCampaignGeneration.status === "generating" ? (
     <div className="shrink-0 border-b border-border bg-[#ffffff] dark:bg-background flex items-center gap-2 px-3 h-10 w-full text-sm font-medium text-foreground">
       {slideLabels.map((label, idx) => (
         <button
@@ -3197,14 +3503,13 @@ ${bodyRows}
   ) : null;
 
   const chatTopBar = (
-    <div className="sticky top-0 z-20 shrink-0 bg-[#ffffff] dark:bg-background border-b border-border">
-      <div className="flex items-center px-3 h-10 w-full text-sm font-medium text-foreground">
+    <div className="sticky top-0 z-20 shrink-0 flex items-center h-10 w-full border-b border-border bg-[#ffffff] dark:bg-background px-3 text-sm font-medium text-foreground">
       {activeProject && (showBrandPicker ? (
-        <div className="relative shrink-0" ref={brandPickerRef}>
+        <div className="relative shrink-0 flex-1 min-w-0" ref={brandPickerRef}>
           <button
             type="button"
             onClick={() => setBrandPickerOpen((v) => !v)}
-            className="flex items-center gap-1.5 min-w-0 flex-1 rounded-lg py-1.5 pr-2 hover:bg-secondary/50 transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 min-w-0 w-full max-w-full rounded-lg h-10 px-2 -mx-2 hover:bg-secondary/50 cursor-pointer"
           >
             <span className="truncate text-left">{activeProject.name}</span>
             <ChevronDown className={cn("size-4 shrink-0 text-muted-foreground", brandPickerOpen && "rotate-180")} />
@@ -3255,10 +3560,8 @@ ${bodyRows}
           )}
         </div>
       ) : (
-        <span className="truncate shrink-0 max-w-[140px]">{activeProject.name}</span>
+        <span className="truncate min-w-0 max-w-full">{activeProject.name}</span>
       ))}
-      </div>
-      <div className="h-2 w-full bg-gradient-to-b from-border/60 to-transparent pointer-events-none" aria-hidden />
     </div>
   );
   const inputActionRow = (
@@ -3358,19 +3661,36 @@ ${bodyRows}
             <div className="absolute bottom-full left-0 mb-1 w-[220px] rounded-xl border border-border bg-card shadow-lg z-50 py-1">
               <button
                 type="button"
+                title={!fullCampaignEnabled ? "Available on Professional plan" : undefined}
                 onClick={() => {
+                  if (!fullCampaignEnabled) {
+                    setUpgradeModal({ feature: "full_campaign", requiredPlan: "pro" });
+                    setToolsOpen(false);
+                    return;
+                  }
                   setSelectedTool(selectedTool === "full" ? null : "full");
                   setToolsOpen(false);
                 }}
                 className={cn(
-                  "w-full flex items-center gap-2 px-3 py-2 text-left text-xs font-medium",
-                  "bg-primary/10 hover:bg-primary/20 border-b border-border",
-                  selectedTool === "full" && "bg-primary/15"
+                  "w-full flex items-center gap-2 px-3 py-2 text-left text-xs font-medium hover:bg-secondary/60 border-b border-border",
+                  selectedTool === "full" && fullCampaignEnabled && "bg-secondary/40"
                 )}
               >
                 <Zap className="size-3.5 text-primary" />
-                <span className="flex-1 font-semibold">Full campaign</span>
-                {selectedTool === "full" && <Check className="size-3.5 text-[#000000] dark:text-white" />}
+                <span className="flex-1 font-semibold flex items-center gap-1.5 flex-wrap">
+                  Full campaign
+                  {!fullCampaignEnabled && (
+                    <>
+                      <Lock className="size-3 shrink-0 text-muted-foreground" aria-hidden />
+                      <span className="text-[10px] font-semibold text-primary bg-primary/15 px-1.5 py-0 rounded">
+                        Pro
+                      </span>
+                    </>
+                  )}
+                </span>
+                {fullCampaignEnabled && selectedTool === "full" && (
+                  <Check className="size-3.5 text-[#000000] dark:text-white" />
+                )}
               </button>
               <button
                 type="button"
@@ -3384,37 +3704,74 @@ ${bodyRows}
                 )}
               >
                 <ImagePlus className="size-3.5" />
-                <span className="flex-1">Image generation</span>
+                <span className="flex-1">Ad Creative</span>
                 {selectedTool === "image" && <Check className="size-3.5 text-[#000000] dark:text-white" />}
               </button>
               <div className="relative group/video">
                 <button
                   type="button"
-                  disabled={!videoEnabled}
+                  title={!videoEnabled ? "Available on Professional plan" : undefined}
                   onClick={() => {
-                    if (!videoEnabled) return;
+                    if (!videoEnabled) {
+                      setUpgradeModal({ feature: "video", requiredPlan: "pro" });
+                      setToolsOpen(false);
+                      return;
+                    }
                     const next = selectedTool === "video" ? null : "video";
                     setSelectedTool(next);
                     if (next === "video") setVideoOptions(defaultVideoOptions());
                     setToolsOpen(false);
                   }}
-                  className={cn(
-                    "w-full flex items-center gap-2 px-3 py-2 text-left text-xs font-medium",
-                    !videoEnabled
-                      ? "opacity-40 cursor-not-allowed"
-                      : "hover:bg-secondary/60"
-                  )}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-left text-xs font-medium hover:bg-secondary/60"
                 >
                   <Video className="size-3.5" />
-                  <span className="flex-1">Video generation</span>
-                  {videoEnabled && selectedTool === "video" && <Check className="size-3.5 text-[#000000] dark:text-white" />}
+                  <span className="flex-1 flex items-center gap-1.5 flex-wrap">
+                    Commercial Video
+                    {!videoEnabled && (
+                      <>
+                        <Lock className="size-3 shrink-0 text-muted-foreground" aria-hidden />
+                        <span className="text-[10px] font-semibold text-primary bg-primary/15 px-1.5 py-0 rounded">
+                          Pro
+                        </span>
+                      </>
+                    )}
+                  </span>
+                  {videoEnabled && selectedTool === "video" && (
+                    <Check className="size-3.5 text-[#000000] dark:text-white" />
+                  )}
                 </button>
-                {!videoEnabled && (
-                  <div className="absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 rounded-md bg-foreground text-background text-[10px] font-medium whitespace-nowrap opacity-0 group-hover/video:opacity-100 pointer-events-none transition-opacity z-50">
-                    Upgrade your Plan to use this Feature
-                  </div>
-                )}
               </div>
+              <button
+                type="button"
+                title={!emailEnabled ? "Available on Standard plan" : undefined}
+                onClick={() => {
+                  if (!emailEnabled) {
+                    setUpgradeModal({ feature: "email", requiredPlan: "standard" });
+                    setToolsOpen(false);
+                    return;
+                  }
+                  setSelectedTool(selectedTool === "email" ? null : "email");
+                  if (selectedTool !== "email") setEmailOptions(defaultEmailOptions());
+                  setToolsOpen(false);
+                }}
+                className="w-full flex items-center gap-2 px-3 py-2 text-left text-xs font-medium hover:bg-secondary/60"
+              >
+                <Mail className="size-3.5" />
+                <span className="flex-1 flex items-center gap-1.5 flex-wrap">
+                  Marketing Email
+                  {!emailEnabled && (
+                    <>
+                      <Lock className="size-3 shrink-0 text-muted-foreground" aria-hidden />
+                      <span className="text-[10px] font-semibold text-primary bg-primary/15 px-1.5 py-0 rounded">
+                        Standard
+                      </span>
+                    </>
+                  )}
+                </span>
+                {emailEnabled && selectedTool === "email" && (
+                  <Check className="size-3.5 text-[#000000] dark:text-white" />
+                )}
+              </button>
             </div>
           )}
         </div>
@@ -3422,6 +3779,7 @@ ${bodyRows}
       {hasCreateTool && generationCost > 0 && (
         <span className="text-xs font-medium shrink-0 text-[#000000] dark:text-white">
           Generation Cost: {generationCost}
+          {selectedTool === "full" ? ` (${fullCampaignQuality})` : ""}
         </span>
       )}
       <button
@@ -3440,18 +3798,132 @@ ${bodyRows}
     </div>
   );
 
+  function renderStandaloneEmailInPanel(msg: CreativeMessage) {
+    if (msg.tool !== "email" || !msg.emailPayload) return null;
+    const html = getEmailHtmlFromMessage(msg);
+    const p = msg.emailPayload;
+    const n = Math.min(3, Math.max(1, p.numberOfImages ?? msg.imageUrls?.length ?? 1)) as 1 | 2 | 3;
+    const urls = (msg.signedImageUrls?.length ? msg.signedImageUrls : msg.imageUrls) ?? [];
+    const slice = urls.slice(0, n);
+    const genIdFor = (i: number) =>
+      msg.generationIds?.[i] ?? (i === 0 ? msg.generationId : undefined);
+    return (
+      <div className="w-full max-w-2xl max-h-[min(88vh,calc(100vh-6rem))] flex flex-col gap-3 mx-auto min-h-0">
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <span className="text-xs text-muted-foreground">Subject:</span>
+          <span className="text-sm font-medium truncate flex-1 min-w-0">{p.subjectLine}</span>
+          <button
+            type="button"
+            onClick={() => {
+              navigator.clipboard.writeText(p.subjectLine);
+              toast.success("Subject copied");
+            }}
+            className="text-xs px-2 py-1 rounded-lg bg-secondary hover:bg-secondary/80"
+          >
+            Copy subject
+          </button>
+          {html && (
+            <button
+              type="button"
+              onClick={() => {
+                navigator.clipboard.writeText(html);
+                toast.success("HTML copied");
+              }}
+              className="text-xs px-2 py-1 rounded-lg bg-secondary hover:bg-secondary/80"
+            >
+              Copy HTML
+            </button>
+          )}
+        </div>
+        <div className="rounded-xl border border-border overflow-hidden bg-card flex-1 min-h-[280px] flex flex-col shadow-sm">
+          {html ? (
+            <iframe
+              srcDoc={html}
+              title="Email preview"
+              className="w-full flex-1 min-h-[260px] border-0 bg-white"
+              sandbox="allow-same-origin"
+            />
+          ) : (
+            <div className="flex-1 flex items-center justify-center p-8 text-sm text-muted-foreground">
+              Preview loading…
+            </div>
+          )}
+        </div>
+        {slice.length > 0 && (
+          <div className="flex flex-wrap gap-3 justify-center">
+            {slice.map((u, idx) => {
+              const gid = genIdFor(idx);
+              return (
+                <div
+                  key={idx}
+                  className="relative group/em flex w-[min(100%,200px)] aspect-square items-center justify-center rounded-lg overflow-hidden border border-border bg-muted/25"
+                >
+                  <button
+                    type="button"
+                    className="flex h-full w-full cursor-zoom-in items-center justify-center p-1"
+                    onClick={() => setImagePreviewUrl(u)}
+                  >
+                    <img src={u} alt="" className="max-h-full max-w-full object-contain" />
+                  </button>
+                  <div className="absolute bottom-1.5 right-1.5 flex gap-1 opacity-0 group-hover/em:opacity-100 transition-opacity">
+                    {gid && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          handleSaveToCollection(gid);
+                        }}
+                        className={cn(
+                          "size-7 rounded-md flex items-center justify-center",
+                          bookmarkedGenIds.has(gid)
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-black/60 text-white"
+                        )}
+                      >
+                        <Bookmark className="size-3.5" />
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        downloadImageAsPng(u, `blinkify-email-${idx + 1}.png`);
+                      }}
+                      className="size-7 rounded-md bg-black/60 text-white flex items-center justify-center"
+                    >
+                      <Download className="size-3.5" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   /* ─── Two-column layout: results panel (left) + chat (right), always ─── */
 
   return (
+    <>
+      {upgradeModal && (
+        <UpgradeModal
+          feature={upgradeModal.feature}
+          requiredPlan={upgradeModal.requiredPlan}
+          onClose={() => setUpgradeModal(null)}
+        />
+      )}
     <div className="flex flex-1 min-h-0 w-full overflow-hidden">
       {/* Results panel (middle): always present when has messages so chat stays fixed on the right */}
       <div
         ref={fullCampaignResultsRef}
         className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden bg-[#fafafa] dark:bg-secondary/20"
       >
-        {fullCampaignGeneration.status !== "idle" ? (
+        {showFullCampaignLeft ? (
           <>
           {resultsPanelSegmentBar}
+          {fullCampaignGeneration.status === "generating" ? (
           <div className={cn("flex-1 min-h-0 flex items-center justify-center overflow-hidden", fullCampaignSwipeSlide === 0 ? "p-2 overflow-y-auto" : "p-10")}>
           <div className={cn("w-full min-w-0", fullCampaignSwipeSlide === 0 ? "min-h-full flex flex-col justify-start" : "h-full flex flex-col items-center justify-center gap-6")}>
             {/* Posts — 3 columns: 4:5 feed above 9:16 story per column; 5px gap, scale to fit */}
@@ -3516,7 +3988,7 @@ ${bodyRows}
                 </div>
               );
             })()}
-            {/* Video — 16:9 left, 9:16 right; no black bars (object-cover), fit nicely */}
+            {/* Video — 16:9 left, 9:16 right; object-contain shows full frame */}
             {fullCampaignSwipeSlide === 1 && (() => {
               const displayResults = selectedCampaignMsgIndex != null ? campaignResultsByMsgIndex[selectedCampaignMsgIndex] ?? null : fullCampaignResults;
               const step16 = fullCampaignGeneration.steps.find((s) => s.id === "video_16x9");
@@ -3532,7 +4004,7 @@ ${bodyRows}
                   <div className="w-full aspect-video rounded-xl overflow-hidden bg-black flex items-center justify-center relative">
                     {url16 ? (
                       <>
-                        <video src={url16} className="w-full h-full object-cover" controls />
+                        <video src={url16} className="max-h-full max-w-full w-auto h-auto object-contain" controls />
                         <span className="absolute bottom-2 right-2 px-2 py-0.5 rounded bg-black/60 text-white text-xs">0:08</span>
                         <a href={url16} download="video-16x9.mp4" className="absolute bottom-2 left-2 px-2.5 py-1 rounded-lg bg-black/60 hover:bg-black/80 text-white text-xs flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                           <Download className="size-3.5" /> Download
@@ -3558,7 +4030,7 @@ ${bodyRows}
                   <div className="w-full aspect-[9/16] max-h-[70vh] rounded-xl overflow-hidden bg-black flex items-center justify-center relative">
                     {url9 ? (
                       <>
-                        <video src={url9} className="w-full h-full object-cover" controls />
+                        <video src={url9} className="max-h-full max-w-full w-auto h-auto object-contain" controls />
                         <span className="absolute bottom-2 right-2 px-2 py-0.5 rounded bg-black/60 text-white text-xs">0:08</span>
                         <a href={url9} download="video-9x16.mp4" className="absolute bottom-2 left-2 px-2.5 py-1 rounded-lg bg-black/60 hover:bg-black/80 text-white text-xs flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                           <Download className="size-3.5" /> Download
@@ -3642,10 +4114,276 @@ ${bodyRows}
             })()}
             </div>
           </div>
+          ) : (
+          <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-10 pb-8">
+            <div>
+              <p className="text-xs font-semibold text-foreground mb-3 tracking-wide">Posts</p>
+              {(() => {
+                const displayResults = selectedCampaignMsgIndex != null ? campaignResultsByMsgIndex[selectedCampaignMsgIndex] ?? null : fullCampaignResults;
+                const feedImages = displayResults?.metaImageUrls ?? (displayResults?.metaImageUrl ? [displayResults.metaImageUrl] : []);
+                const storyImages = displayResults?.storyImageUrls ?? (displayResults?.storyImageUrl ? [displayResults.storyImageUrl] : []);
+                const metaFeedFailed = displayResults?.metaFeedFailed ?? [false, false, false];
+                const storyFailed = displayResults?.storyFailed ?? [false, false, false];
+                return (
+                  <div className="w-full min-w-0 grid grid-cols-3 grid-rows-[minmax(180px,auto)_auto_auto] gap-[5px] place-items-stretch content-start">
+                    {[0, 1, 2].map((colIdx) => (
+                      <div key={`cf-${colIdx}`} className="relative row-span-1 col-span-1 w-full min-w-0 overflow-hidden rounded-lg bg-gray-100 dark:bg-secondary/40 border border-border flex items-center justify-center aspect-[4/5]">
+                        {feedImages[colIdx] ? (
+                          <button type="button" className="absolute inset-0 w-full h-full flex items-center justify-center" onClick={() => setImagePreviewUrl(feedImages[colIdx]!)}>
+                            <img src={feedImages[colIdx]} alt="" className="w-full h-full object-contain" />
+                          </button>
+                        ) : metaFeedFailed[colIdx] ? (
+                          <span className="text-xs text-red-500">Failed</span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </div>
+                    ))}
+                    {[0, 1, 2].map((colIdx) => (
+                      <div key={`cs-${colIdx}`} className="col-span-1 row-span-2 w-full min-w-0 overflow-hidden rounded-lg bg-gray-100 dark:bg-secondary/40 border border-border flex items-center justify-center aspect-[9/16]">
+                        {storyImages[colIdx] ? (
+                          <button type="button" className="w-full h-full flex items-center justify-center" onClick={() => setImagePreviewUrl(storyImages[colIdx]!)}>
+                            <img src={storyImages[colIdx]} alt="" className="w-full h-full object-contain" />
+                          </button>
+                        ) : storyFailed[colIdx] ? (
+                          <span className="text-xs text-red-500">Failed</span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-foreground mb-3 tracking-wide">Video</p>
+              {(() => {
+                const displayResults = selectedCampaignMsgIndex != null ? campaignResultsByMsgIndex[selectedCampaignMsgIndex] ?? null : fullCampaignResults;
+                const step16 = fullCampaignGeneration.steps.find((s) => s.id === "video_16x9");
+                const step9 = fullCampaignGeneration.steps.find((s) => s.id === "video_9x16");
+                const url16 = displayResults?.videoUrl16x9 ?? displayResults?.videoUrl;
+                const url9 = displayResults?.videoUrl9x16;
+                return (
+                  <div className="w-full flex flex-col sm:flex-row gap-4 items-stretch justify-center">
+                    <div className="flex-1 min-w-0 max-w-full sm:max-w-[60%]">
+                      <p className="text-xs font-medium text-muted-foreground mb-1">16:9</p>
+                      <div className="w-full aspect-video rounded-xl overflow-hidden bg-black flex items-center justify-center">
+                        {url16 ? <video src={url16} className="max-h-full max-w-full w-auto h-auto object-contain" controls /> : step16?.status === "failed" ? <span className="text-xs text-red-500 p-4">Failed</span> : <span className="text-xs text-muted-foreground p-4">—</span>}
+                      </div>
+                    </div>
+                    <div className="flex-1 min-w-0 max-w-full sm:max-w-[40%] flex justify-center">
+                      <div className="w-full max-w-[220px]">
+                        <p className="text-xs font-medium text-muted-foreground mb-1">9:16</p>
+                        <div className="w-full aspect-[9/16] rounded-xl overflow-hidden bg-black flex items-center justify-center max-h-[50vh]">
+                          {url9 ? <video src={url9} className="max-h-full max-w-full w-auto h-auto object-contain" controls /> : step9?.status === "failed" ? <span className="text-xs text-red-500 p-4">Failed</span> : <span className="text-xs text-muted-foreground p-4">—</span>}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-foreground mb-3 tracking-wide">Marketing email</p>
+              {(() => {
+                const displayResults = selectedCampaignMsgIndex != null ? campaignResultsByMsgIndex[selectedCampaignMsgIndex] ?? null : fullCampaignResults;
+                const emailHtmls = displayResults?.emailHtmls ?? (displayResults?.emailHtml ? [displayResults.emailHtml, displayResults.emailHtml] : []);
+                const emailCopies = displayResults?.emailCopies ?? (displayResults?.emailCopy ? [displayResults.emailCopy, displayResults.emailCopy] : []);
+                return (
+                  <div className="w-full flex flex-col md:flex-row gap-4 justify-center">
+                    {[0, 1].map((idx) => {
+                      const html = emailHtmls[idx] ?? "";
+                      const copy = emailCopies[idx];
+                      return (
+                        <div key={idx} className="w-full flex-1 min-w-0 min-h-[280px] max-h-[480px] flex flex-col rounded-xl overflow-hidden border border-border bg-card">
+                          <div className="p-2 flex flex-wrap gap-2 shrink-0 border-b border-border">
+                            <span className="text-xs font-medium truncate flex-1 min-w-0">{copy?.subject_line ?? "Variant"}</span>
+                            {html && (
+                              <button type="button" className="text-xs px-2 py-1 rounded bg-secondary" onClick={() => navigator.clipboard.writeText(html).then(() => toast.success("HTML copied"))}>Copy HTML</button>
+                            )}
+                          </div>
+                          {html ? (
+                            <iframe srcDoc={html} title={`Email ${idx + 1}`} className="w-full flex-1 min-h-[200px] border-0" sandbox="allow-same-origin" />
+                          ) : (
+                            <div className="flex-1 flex items-center justify-center p-4 text-xs text-muted-foreground">—</div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+          )}
         </>
+        ) : standalonePreview ? (
+          <div className="flex-1 min-h-0 flex items-center justify-center p-4 overflow-auto">
+            {standalonePreview.type === "image-loading" && (
+              <div
+                className={cn(
+                  standaloneAdImageLayoutClass(standalonePreview.aspectRatio, standalonePreview.count),
+                  "w-full"
+                )}
+              >
+                {Array.from({ length: standalonePreview.count }, (_, i) => (
+                  <div
+                    key={i}
+                    className={standaloneAdImageCellWrapClass(
+                      standalonePreview.aspectRatio,
+                      standalonePreview.count
+                    )}
+                  >
+                    <div className={standaloneAdImageSkeletonClass(standalonePreview.aspectRatio)} />
+                  </div>
+                ))}
+              </div>
+            )}
+            {standalonePreview.type === "image" && (
+              <div
+                className={cn(
+                  standaloneAdImageLayoutClass(
+                    standalonePreview.aspectRatio,
+                    standalonePreview.urls.length
+                  ),
+                  "w-full min-h-0 py-2"
+                )}
+              >
+                {standalonePreview.urls.map((u, idx) => {
+                  const genId =
+                    standalonePreview.generationIds?.[idx] ??
+                    (idx === 0 ? standalonePreview.generationIds?.[0] : undefined);
+                  const expired = failedMediaUrls.includes(u);
+                  return (
+                    <div
+                      key={idx}
+                      className={standaloneAdImageCellWrapClass(
+                        standalonePreview.aspectRatio,
+                        standalonePreview.urls.length
+                      )}
+                    >
+                      <div className="relative w-full group/img">
+                        {expired ? (
+                          <div className="flex min-h-[240px] flex-col items-center justify-center gap-2 bg-muted/30 p-4 text-center text-sm">
+                            <span>Link expired</span>
+                            <button
+                              type="button"
+                              onClick={() => setRefetchUrlsTrigger((t) => t + 1)}
+                              className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground"
+                            >
+                              <RotateCw className="size-3.5" /> Refresh
+                            </button>
+                          </div>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              className="block w-full cursor-zoom-in text-left"
+                              onClick={() => setImagePreviewUrl(u)}
+                            >
+                              <img
+                                src={u}
+                                alt=""
+                                className="block h-auto w-full max-w-full align-top"
+                                onError={() =>
+                                  setFailedMediaUrls((prev) =>
+                                    prev.includes(u) ? prev : [...prev, u]
+                                  )
+                                }
+                              />
+                            </button>
+                            <div className="absolute bottom-2 right-2 z-10 flex items-center gap-1 opacity-0 transition-opacity group-hover/img:opacity-100">
+                              {genId && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    handleSaveToCollection(genId);
+                                  }}
+                                  className={cn(
+                                    "pointer-events-auto size-8 rounded-lg flex items-center justify-center cursor-pointer transition-colors",
+                                    bookmarkedGenIds.has(genId)
+                                      ? "bg-primary text-primary-foreground"
+                                      : "bg-black/60 hover:bg-black/80 text-white"
+                                  )}
+                                  title={
+                                    bookmarkedGenIds.has(genId)
+                                      ? "In collection"
+                                      : "Save to Asset Collection"
+                                  }
+                                >
+                                  <Bookmark
+                                    className={cn(
+                                      "size-4",
+                                      bookmarkedGenIds.has(genId) && "fill-current"
+                                    )}
+                                  />
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  downloadImageAsPng(u, `blinkify-ad-${idx + 1}-${Date.now()}.png`);
+                                }}
+                                className="pointer-events-auto size-8 rounded-lg bg-black/60 hover:bg-black/80 flex items-center justify-center text-white"
+                                title="Download PNG"
+                              >
+                                <Download className="size-4" />
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {standalonePreview.type === "video-loading" && (
+              <div
+                className={cn(
+                  "w-full max-w-3xl mx-auto rounded-xl overflow-hidden border border-border bg-muted/30 flex items-center justify-center min-h-[200px]",
+                  standalonePreview.aspectRatio === "9:16" ? "aspect-[9/16] max-h-[70vh]" : "aspect-video"
+                )}
+              >
+                <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                  <Spinner className="size-8" />
+                  <span className="text-sm">Generating video…</span>
+                </div>
+              </div>
+            )}
+            {standalonePreview.type === "video" && (
+              <div className="relative group/vid max-w-full">
+                <video
+                  src={standalonePreview.url}
+                  className="max-w-full max-h-[min(78vh,calc(100vh-10rem))] rounded-xl border border-border shadow-sm"
+                  controls
+                  playsInline
+                />
+                <a
+                  href={standalonePreview.url}
+                  download
+                  className="absolute bottom-3 right-3 px-2.5 py-1 rounded-lg bg-black/60 hover:bg-black/80 text-white text-xs flex items-center gap-1 opacity-0 group-hover/vid:opacity-100 transition-opacity"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <Download className="size-3.5" /> Download
+                </a>
+              </div>
+            )}
+            {standalonePreview.type === "email-loading" && (
+              <div className="w-full max-w-2xl mx-auto space-y-4 p-2">
+                <div className="h-9 w-3/4 max-w-md animate-pulse rounded-lg bg-muted" />
+                <div className="h-[min(420px,50vh)] w-full animate-pulse rounded-xl bg-muted/40 border border-border" />
+              </div>
+            )}
+            {standalonePreview.type === "email" &&
+              renderStandaloneEmailInPanel(standalonePreview.msg)}
+          </div>
         ) : (
-          <div className="flex-1 min-h-0 flex items-center justify-center p-10 text-sm text-muted-foreground">
-            Results will appear here when your campaign is ready.
+          <div className="flex-1 min-h-0 flex items-center justify-center p-10 text-sm text-muted-foreground text-center px-6">
+            Results will appear here when generation is complete.
           </div>
         )}
       </div>
@@ -3697,10 +4435,12 @@ ${bodyRows}
                   msg.role === "user"
                     ? "px-4 py-3 bg-primary/10 dark:bg-card"
                     : (() => {
-                        const hasImage = msg.tool === "image" && (msg.imageUrls?.length ?? 0) > 0;
-                        const hasVideo = !!msg.videoUrl;
-                        const hasEmail = msg.tool === "email" && !!msg.emailPayload;
-                        const isMediaOnly = hasImage || hasVideo || hasEmail;
+                        const hasImageInChat =
+                          msg.tool !== "image" &&
+                          (msg.imageUrls?.length ?? 0) > 0 &&
+                          !(msg.tool === "email" && msg.emailPayload);
+                        const hasVideoInChat = !!msg.videoUrl && msg.tool !== "video";
+                        const isMediaOnly = hasImageInChat || hasVideoInChat;
                         return isMediaOnly ? "" : "px-4 py-3 bg-card border border-border";
                       })()
                 )}
@@ -3722,7 +4462,7 @@ ${bodyRows}
                             className="relative shrink-0 rounded-xl border border-border bg-card overflow-hidden w-[140px]"
                           >
                             <div className="aspect-square bg-muted/30 relative">
-                              <img src={url} alt="" className="w-full h-full object-cover" />
+                              <img src={url} alt="" className="w-full h-full object-contain" />
                             </div>
                           </div>
                         ))}
@@ -3732,117 +4472,48 @@ ${bodyRows}
                   </>
                 ) : (
                   <>
-                    {msg.generating && !msg.content && !msg.imageUrls?.length && !msg.videoUrl && (
-                      <div className="flex items-center justify-between gap-2 w-full">
-                        <div className="flex items-center gap-2 text-muted-foreground">
-                          <Spinner className="size-4" />
-                          <span className="text-xs">
-                            {msg.tool === "email" ? "Creating your email creative…" : "Thinking…"}
-                          </span>
+                    {msg.generating &&
+                      (msg.tool === "image" || msg.tool === "video" || msg.tool === "email") && (
+                        <div className="flex items-center justify-between gap-2 w-full">
+                          <div className="flex items-center gap-2 text-muted-foreground">
+                            <Spinner className="size-4" />
+                            <span className="text-xs">Generating…</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => cancelGeneration(i)}
+                            className="shrink-0 text-xs font-medium text-muted-foreground hover:text-foreground"
+                          >
+                            Cancel
+                          </button>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => cancelGeneration(i)}
-                          className="shrink-0 text-xs font-medium text-muted-foreground hover:text-foreground"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    )}
+                      )}
+                    {msg.generating &&
+                      msg.tool !== "image" &&
+                      msg.tool !== "video" &&
+                      msg.tool !== "email" &&
+                      !msg.content &&
+                      !msg.imageUrls?.length &&
+                      !msg.videoUrl && (
+                        <div className="flex items-center justify-between gap-2 w-full">
+                          <div className="flex items-center gap-2 text-muted-foreground">
+                            <Spinner className="size-4" />
+                            <span className="text-xs">Thinking…</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => cancelGeneration(i)}
+                            className="shrink-0 text-xs font-medium text-muted-foreground hover:text-foreground"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      )}
                     {(() => {
                       if (msg.tool === "email" && msg.emailPayload) {
-                        const p = msg.emailPayload;
-                        const n = Math.min(3, Math.max(1, p.numberOfImages ?? msg.imageUrls?.length ?? 1)) as 1 | 2 | 3;
-                        const urls = (msg.imageUrls ?? []).slice(0, n);
-                        const brand = msg.emailBrandSnapshot;
-                        const fontFamily = (brand?.font_styles as { fontFamily?: string } | null)?.fontFamily ?? "Arial, sans-serif";
-                        const primaryColor = (Array.isArray(brand?.brand_colors) && brand.brand_colors[0]) ? String(brand.brand_colors[0]).trim() : "#000000";
-                        const ctaBg = /^#[0-9a-fA-F]{3,6}$/.test(primaryColor) ? (primaryColor.length === 4 ? `#${primaryColor[1]}${primaryColor[1]}${primaryColor[2]}${primaryColor[2]}${primaryColor[3]}${primaryColor[3]}` : primaryColor) : "#000000";
-                        const logoUrl = brand?.brand_logo_url ?? null;
-
-                        const genIdForSlot = (i: number) => msg.generationIds?.[i] ?? (i === 0 ? msg.generationId : undefined);
-                        const renderImageSlot = (url: string | undefined, idx: number, generationIdForSlot: string | undefined) => {
-                          if (!url)
-                            return (
-                              <div key={idx} className="flex items-center justify-center min-h-[180px] bg-muted/40 rounded-lg border border-dashed border-border text-sm text-muted-foreground">
-                                Image loading…
-                              </div>
-                            );
-                          if (failedMediaUrls.includes(url))
-                            return (
-                              <div key={idx} className="flex flex-col items-center justify-center gap-2 min-h-[180px] p-4 text-center text-sm text-muted-foreground bg-muted/30 rounded-lg border border-border">
-                                <span>Link expired</span>
-                                <button type="button" onClick={() => setRefetchUrlsTrigger((t) => t + 1)} className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90">
-                                  <RotateCw className="size-3.5" /> Refresh
-                                </button>
-                              </div>
-                            );
-                          return (
-                            <div key={idx} className="relative group/em rounded-lg overflow-hidden border border-border w-full">
-                              <button type="button" className="block w-full cursor-zoom-in text-left" onClick={() => setImagePreviewUrl(url)}>
-                                <img src={url} alt="" className="w-full h-auto max-h-[70vh] object-contain" onError={() => setFailedMediaUrls((prev) => (prev.includes(url) ? prev : [...prev, url]))} />
-                              </button>
-                              <div className="absolute bottom-2 right-2 flex items-center gap-1 opacity-0 group-hover/em:opacity-100 transition-opacity">
-                                {generationIdForSlot && (
-                                  <button type="button" onClick={(e) => { e.preventDefault(); handleSaveToCollection(generationIdForSlot); }} className={cn("size-8 rounded-lg flex items-center justify-center cursor-pointer transition-colors", bookmarkedGenIds.has(generationIdForSlot) ? "bg-primary text-primary-foreground" : "bg-black/60 hover:bg-black/80 text-white")} title={bookmarkedGenIds.has(generationIdForSlot) ? "In collection" : "Save to Asset Collection"}>
-                                    <Bookmark className={cn("size-4", bookmarkedGenIds.has(generationIdForSlot) && "fill-current")} />
-                                  </button>
-                                )}
-                                <button type="button" onClick={(e) => { e.preventDefault(); downloadImageAsPng(url, `blinkify-email-${idx + 1}-${Date.now()}.png`); }} className="size-8 rounded-lg bg-black/60 hover:bg-black/80 flex items-center justify-center text-white cursor-pointer" title="Download PNG">
-                                  <Download className="size-4" />
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        };
-
-                        return (
-                          <div className="w-full max-w-[600px]">
-                              <div className="flex items-center gap-2 flex-wrap mb-3">
-                                <span className="text-xs text-muted-foreground">Subject:</span>
-                                <span className="text-sm font-medium">{p.subjectLine}</span>
-                                <button type="button" onClick={() => { navigator.clipboard.writeText(p.subjectLine); toast.success("Subject line copied"); }} className="size-7 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-secondary/60 hover:text-foreground shrink-0" title="Copy subject line" aria-label="Copy subject line">
-                                  <Copy className="size-3.5" />
-                                </button>
-                              </div>
-                              <div className="rounded-xl border border-border bg-background overflow-hidden shadow-sm" style={{ fontFamily }}>
-                                <div className="p-5 pb-4 text-center">
-                                  {logoUrl && <img src={logoUrl} alt="Logo" className="h-10 w-auto max-w-[160px] mx-auto object-contain" />}
-                                </div>
-                                {p.headline && <h2 className="px-5 pt-1 pb-3 text-xl font-bold text-foreground" style={{ fontFamily }}>{p.headline}</h2>}
-                                {p.introCopy && <div className="px-5 pb-4 text-[15px] leading-relaxed text-muted-foreground whitespace-pre-wrap" style={{ fontFamily }}>{p.introCopy}</div>}
-
-                                {n === 1 && (
-                                  <>
-                                    {renderImageSlot(urls[0], 0, genIdForSlot(0))}
-                                    {p.closingCopy && <div className="px-5 py-4 text-[15px] leading-relaxed text-muted-foreground whitespace-pre-wrap" style={{ fontFamily }}>{p.closingCopy}</div>}
-                                    {p.ctaUrl && p.ctaUrl !== "#" && <div className="px-5 pb-4 text-center"><a href={p.ctaUrl} target="_blank" rel="noopener noreferrer" className="inline-block px-6 py-3 rounded-md text-white font-semibold text-sm" style={{ backgroundColor: ctaBg, fontFamily }}>{p.ctaText || "Shop Now"}</a></div>}
-                                  </>
-                                )}
-                                {n === 2 && (
-                                  <>
-                                    {renderImageSlot(urls[0], 0, genIdForSlot(0))}
-                                    {p.closingCopy && <div className="px-5 py-3 text-[15px] leading-relaxed text-muted-foreground whitespace-pre-wrap" style={{ fontFamily }}>{p.closingCopy}</div>}
-                                    {p.ctaUrl && p.ctaUrl !== "#" && <div className="px-5 pb-4 text-center"><a href={p.ctaUrl} target="_blank" rel="noopener noreferrer" className="inline-block px-6 py-3 rounded-md text-white font-semibold text-sm" style={{ backgroundColor: ctaBg, fontFamily }}>{p.ctaText || "Shop Now"}</a></div>}
-                                    {renderImageSlot(urls[1], 1, genIdForSlot(1))}
-                                    {p.ctaUrl && p.ctaUrl !== "#" && <div className="px-5 pb-4 text-center"><a href={p.ctaUrl} target="_blank" rel="noopener noreferrer" className="inline-block px-6 py-3 rounded-md text-white font-semibold text-sm" style={{ backgroundColor: ctaBg, fontFamily }}>{p.ctaText || "Shop Now"}</a></div>}
-                                  </>
-                                )}
-                                {n === 3 && (
-                                  <>
-                                    {renderImageSlot(urls[0], 0, genIdForSlot(0))}
-                                    {p.closingCopy && <div className="px-5 py-3 text-[15px] leading-relaxed text-muted-foreground whitespace-pre-wrap" style={{ fontFamily }}>{p.closingCopy}</div>}
-                                    {p.ctaUrl && p.ctaUrl !== "#" && <div className="px-5 pb-4 text-center"><a href={p.ctaUrl} target="_blank" rel="noopener noreferrer" className="inline-block px-6 py-3 rounded-md text-white font-semibold text-sm" style={{ backgroundColor: ctaBg, fontFamily }}>{p.ctaText || "Shop Now"}</a></div>}
-                                    {renderImageSlot(urls[1], 1, genIdForSlot(1))}
-                                    {renderImageSlot(urls[2], 2, genIdForSlot(2))}
-                                    {p.ctaUrl && p.ctaUrl !== "#" && <div className="px-5 pb-4 text-center"><a href={p.ctaUrl} target="_blank" rel="noopener noreferrer" className="inline-block px-6 py-3 rounded-md text-white font-semibold text-sm" style={{ backgroundColor: ctaBg, fontFamily }}>{p.ctaText || "Shop Now"}</a></div>}
-                                  </>
-                                )}
-                              </div>
-                          </div>
-                          );
-                        }
-                        if (msg.content) {
+                        return <p className="whitespace-pre-wrap text-sm">Generation complete.</p>;
+                      }
+                      if (msg.content) {
                         const isImageWithOutput = msg.tool === "image" && (msg.imageUrls?.length ?? 0) > 0;
                         const looksLikeModelPrompt =
                           isImageWithOutput &&
@@ -3879,7 +4550,10 @@ ${bodyRows}
                         }
                         return null;
                       })()}
-                    {msg.imageUrls && msg.imageUrls.length > 0 && !(msg.tool === "email" && msg.emailPayload) && (
+                    {msg.tool !== "image" &&
+                      msg.imageUrls &&
+                      msg.imageUrls.length > 0 &&
+                      !(msg.tool === "email" && msg.emailPayload) && (
                       <div className="flex flex-col gap-2 w-full">
                         {msg.imageUrls.map((url, j) => {
                           const isExpired = failedMediaUrls.includes(url);
@@ -3909,7 +4583,7 @@ ${bodyRows}
                               <img
                                 src={url}
                                 alt=""
-                                className="w-full h-auto object-cover rounded-2xl"
+                                className="w-full max-h-[min(88vh,920px)] h-auto object-contain rounded-2xl bg-muted/20"
                                 onError={() => setFailedMediaUrls((prev) => (prev.includes(url) ? prev : [...prev, url]))}
                               />
                             </button>
@@ -3959,7 +4633,7 @@ ${bodyRows}
                         })}
                       </div>
                     )}
-                    {msg.videoUrl && (
+                    {msg.videoUrl && msg.tool !== "video" && (
                       <div className="rounded-2xl overflow-hidden relative group/vid">
                         {failedMediaUrls.includes(msg.videoUrl) ? (
                           <div className="flex flex-col items-center justify-center gap-2 min-h-[200px] p-4 text-center text-sm text-muted-foreground bg-muted/30 rounded-2xl border border-border">
@@ -4159,7 +4833,7 @@ ${bodyRows}
                                 <img
                                   src={pendingPreviewUrls[j]}
                                   alt=""
-                                  className="w-full h-full object-cover"
+                                  className="w-full h-full object-contain"
                                 />
                               ) : null}
                               <button
@@ -4195,6 +4869,7 @@ ${bodyRows}
               )}
               {inputActionRow}
         </div>
+      </div>
       </div>
       {imagePreviewUrl && (
         <div
@@ -4238,7 +4913,7 @@ ${bodyRows}
         aria-label="Add images"
         onChange={handleFileSelect}
       />
-      </div>
     </div>
+    </>
   );
 }

@@ -65,7 +65,6 @@ export function BillingUpgradeModal({ currentPlan, buttonClassName }: BillingUpg
           body: JSON.stringify({
             plan: plan.key,
             billing: "monthly",
-            skipTrial: true,
           }),
         });
         const data = await res.json();
@@ -111,7 +110,7 @@ export function BillingUpgradeModal({ currentPlan, buttonClassName }: BillingUpg
         type="button"
         onClick={handleOpen}
         className={cn(
-          "inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 rounded-xl px-3 mt-4",
+          "inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-10 rounded-xl px-3 min-w-[120px]",
           buttonClassName
         )}
       >

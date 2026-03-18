@@ -2,8 +2,7 @@ import { supabase } from "../lib/supabase.js";
 import { PLAN_CONFIG } from "../lib/plan-config.js";
 import crypto from "crypto";
 
-const TRIAL_DURATION_DAYS = 7;
-const TRIAL_CREDITS = 250;
+const FREE_CREDITS = 100;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -36,7 +35,6 @@ interface FindOrCreateUserParams {
  * Returns the internal user row.
  */
 export async function findOrCreateUser(params: FindOrCreateUserParams) {
-  // Try to find existing user
   const { data: existing } = await supabase
     .from("users")
     .select("*")
@@ -45,7 +43,6 @@ export async function findOrCreateUser(params: FindOrCreateUserParams) {
 
   if (existing) return { user: existing, created: false };
 
-  // Create new user
   const { data: newUser, error } = await supabase
     .from("users")
     .insert({
@@ -68,28 +65,21 @@ interface EnsureWorkspaceParams {
   email?: string;
   name?: string;
   avatarUrl?: string;
-  workspaceName?: string;  // from onboarding; fallback to email prefix
+  workspaceName?: string;
 }
 
 /**
  * Ensures the user exists and has at least one workspace.
  * Called on first login (or every login — idempotent).
- *
- * Flow:
- * 1. Find or create the user row.
- * 2. Check if user already owns a workspace → return it.
- * 3. If not, create a trial workspace + workspace_members + credit transaction.
  */
 export async function ensureWorkspace(params: EnsureWorkspaceParams) {
-  // 1. Find or create user
-  const { user, created: userCreated } = await findOrCreateUser({
+  const { user } = await findOrCreateUser({
     authProviderId: params.authProviderId,
     email: params.email,
     name: params.name,
     avatarUrl: params.avatarUrl,
   });
 
-  // 2. Check for existing workspace membership
   const { data: memberships } = await supabase
     .from("workspace_members")
     .select("workspace_id, role, workspaces(*)")
@@ -98,12 +88,11 @@ export async function ensureWorkspace(params: EnsureWorkspaceParams) {
   if (memberships && memberships.length > 0) {
     return {
       user,
-      workspace: (memberships[0] as any).workspaces,
+      workspace: (memberships[0] as { workspaces: unknown }).workspaces,
       created: false,
     };
   }
 
-  // 3. Create trial workspace
   const wsName =
     params.workspaceName?.trim() ||
     (params.email ? `${emailPrefix(params.email)}'s Workspace` : "My Workspace");
@@ -111,19 +100,22 @@ export async function ensureWorkspace(params: EnsureWorkspaceParams) {
   const baseSlug = slugify(wsName);
   const slug = `${baseSlug}-${crypto.randomBytes(3).toString("hex")}`;
 
-  const trialEndsAt = new Date();
-  trialEndsAt.setDate(trialEndsAt.getDate() + TRIAL_DURATION_DAYS);
+  const maxWorkspaces = PLAN_CONFIG["free"]?.maxWorkspaces ?? 1;
 
-  const maxWorkspaces = PLAN_CONFIG["trial"]?.maxWorkspaces ?? 1;
-
+  // Free plan workspace.
+  // 100 credits, no expiry.
+  // User can generate any mix of 1K images,
+  // 4K images, emails, within their credits.
+  // No video. No full campaign.
+  // Visible locked features prompt upgrade.
   const { data: workspace, error: wsError } = await supabase
     .from("workspaces")
     .insert({
       name: wsName,
       owner_id: user.id,
-      plan: "trial",
-      credits: TRIAL_CREDITS,
-      trial_ends_at: trialEndsAt.toISOString(),
+      plan: "free",
+      credits: FREE_CREDITS,
+      trial_ends_at: null,
       slug,
       max_workspaces: maxWorkspaces,
     })
@@ -132,7 +124,6 @@ export async function ensureWorkspace(params: EnsureWorkspaceParams) {
 
   if (wsError) throw new Error(`Failed to create workspace: ${wsError.message}`);
 
-  // 4. Add user as owner
   const { error: memberError } = await supabase
     .from("workspace_members")
     .insert({
@@ -144,29 +135,27 @@ export async function ensureWorkspace(params: EnsureWorkspaceParams) {
   if (memberError)
     throw new Error(`Failed to add workspace member: ${memberError.message}`);
 
-  // 5. Log initial credit grant
   const { error: creditError } = await supabase
     .from("credit_transactions")
     .insert({
       workspace_id: workspace.id,
       user_id: user.id,
       type: "trial_grant",
-      amount: TRIAL_CREDITS,
-      balance_after: TRIAL_CREDITS,
-      description: "Trial credits granted on signup",
+      amount: FREE_CREDITS,
+      balance_after: FREE_CREDITS,
+      description: "Free plan credits",
     });
 
   if (creditError)
     console.error("Failed to log credit transaction:", creditError.message);
 
-  // 6. Audit log
   await supabase.from("audit_events").insert({
     workspace_id: workspace.id,
     user_id: user.id,
     action: "workspace.created",
     resource_type: "workspace",
     resource_id: workspace.id,
-    metadata: { plan: "trial", credits: TRIAL_CREDITS },
+    metadata: { plan: "free", credits: FREE_CREDITS },
   });
 
   return { user, workspace, created: true };
@@ -174,10 +163,6 @@ export async function ensureWorkspace(params: EnsureWorkspaceParams) {
 
 // ─── Check workspace creation limit ──────────────────────────────────────────
 
-/**
- * Check if a user can create another workspace based on their current plan.
- * Uses workspaces.max_workspaces from DB (set on create/plan change).
- */
 export async function canCreateWorkspace(userId: string): Promise<boolean> {
   const { data: owned } = await supabase
     .from("workspace_members")

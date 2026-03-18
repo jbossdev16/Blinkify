@@ -20,7 +20,7 @@ export const metadata: Metadata = {
   title:
     "Blinkify — AI Ad Creative Generator | Product Photo to Campaign in 3 Minutes",
   description:
-    "Turn one product photo into a complete marketing campaign in 3 minutes. AI-generated Meta ads, TikTok creatives, product videos, and email marketing — all brand-consistent. Free trial, no designer needed.",
+    "Turn one product photo into a complete marketing campaign in 3 minutes. AI-generated Meta ads, TikTok creatives, product videos, and email marketing — all brand-consistent. Free plan to start.",
   keywords: [
     "AI ad creative generator",
     "AI marketing tool for ecommerce",

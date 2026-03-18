@@ -32,7 +32,7 @@ import {
 import { VIDEO_MODELS, VIDEO_MODEL_FALLBACK, VIDEO_INITIAL_SECONDS } from "../lib/veo.js";
 import { isUuid } from "../lib/validation.js";
 import { SIGNED_URL_EXPIRY_SECONDS, EMAIL_ASSETS_BUCKET } from "../lib/storage-constants.js";
-import { getPlanConfig } from "../lib/plan-config.js";
+import { getPlanConfig, getFullCampaignPricing } from "../lib/plan-config.js";
 import {
   generateCampaignImagePrompts,
   generateCampaignContent,
@@ -46,22 +46,6 @@ const router = Router();
 const IMAGE_BUCKET = "generated-images";
 const VIDEO_BUCKET = "generated-videos";
 const PROJECT_ASSETS_BUCKET = "project-assets";
-
-/* ─── Credit costs (fixed for campaign) ──────────────────────────────────────── */
-
-const CREDITS = {
-  claude: 5,
-  meta_feed_image_1: 10,
-  meta_feed_image_2: 10,
-  meta_feed_image_3: 10,
-  story_image_1: 10,
-  story_image_2: 10,
-  story_image_3: 10,
-  video_16x9: 150,
-  video_9x16: 100,
-} as const;
-
-const TOTAL_CAMPAIGN_CREDITS = Object.values(CREDITS).reduce((a, b) => a + b, 0);
 
 /* ─── SSE helper ─────────────────────────────────────────────────────────────── */
 
@@ -699,24 +683,61 @@ router.post(
       return;
     }
 
-    /* ── Credits check ─────────────────────────────────────────────────── */
-
     const { data: workspace } = await supabase
       .from("workspaces")
       .select("credits, plan")
       .eq("id", workspaceId)
       .single();
 
-    if (!workspace || (workspace.credits ?? 0) < TOTAL_CAMPAIGN_CREDITS) {
+    if (!workspace) {
       res.status(402).json({
-        error: `Insufficient credits. Full Campaign requires ${TOTAL_CAMPAIGN_CREDITS} credits. You have ${workspace?.credits ?? 0}.`,
+        error: "Workspace not found.",
+        code: "WORKSPACE_NOT_FOUND",
       });
       return;
     }
 
-    if (!getPlanConfig(workspace.plan ?? "trial").videoEnabled) {
+    const planConfig = getPlanConfig(workspace.plan ?? "free");
+
+    if (!planConfig.fullCampaignEnabled) {
       res.status(403).json({
-        error: "Video generation is not available on your current plan. Upgrade to use Full Campaign.",
+        error:
+          "Full Campaign is not available on " +
+          "your current plan. Upgrade to " +
+          "Professional or Agency to unlock it.",
+        code: "PLAN_UPGRADE_REQUIRED",
+        feature: "full_campaign",
+        requiredPlan: "pro",
+      });
+      return;
+    }
+
+    if (!planConfig.videoEnabled) {
+      res.status(403).json({
+        error:
+          "Video generation is not available " +
+          "on your current plan. Upgrade to " +
+          "Professional or Agency.",
+        code: "PLAN_UPGRADE_REQUIRED",
+        feature: "video",
+        requiredPlan: "pro",
+      });
+      return;
+    }
+
+    const cqRaw = req.body?.campaignQuality;
+    const campaignQuality: "1K" | "4K" =
+      cqRaw === "4K" || cqRaw === "4k" ? "4K" : "1K";
+    const fc = getFullCampaignPricing(campaignQuality);
+
+    if ((workspace.credits ?? 0) < fc.total) {
+      res.status(402).json({
+        error:
+          `Insufficient credits. Full Campaign (${campaignQuality}) requires ${fc.total} credits. You have ${workspace.credits ?? 0}.`,
+        code: "INSUFFICIENT_CREDITS",
+        creditsRequired: fc.total,
+        creditsAvailable: workspace.credits ?? 0,
+        campaignQuality,
       });
       return;
     }
@@ -804,7 +825,12 @@ router.post(
     let clientDisconnected = false;
     req.on("close", () => { clientDisconnected = true; });
 
-    sendSSE(res, { task: "campaign_started", campaign_id: campaignId });
+    sendSSE(res, {
+      task: "campaign_started",
+      campaign_id: campaignId,
+      campaign_quality: campaignQuality,
+      credits_budget: fc.total,
+    });
 
     /* ── Step 1: Two parallel Claude calls ─────────────────────────────── */
 
@@ -847,12 +873,11 @@ router.post(
     }
 
     const claudeTime = (Date.now() - claudeStart) / 1000;
-    totalCreditsUsed += CREDITS.claude;
-    await deductCredits(workspaceId, user.id, CREDITS.claude, "Full Campaign: Claude intelligence");
     const imageStyleChosen = imageOutput?.image_feed_1?.style_chosen ?? imageOutput?.image_story_1?.style_chosen ?? null;
     sendSSE(res, {
       task: "claude_json", status: "complete",
-      credits_used: CREDITS.claude, time_taken: claudeTime,
+      credits_used: 0,
+      time_taken: claudeTime,
       ...(imageStyleChosen && { image_style_chosen: imageStyleChosen }),
     });
     console.log("[Campaign] Both Claude calls complete in", claudeTime, "s");
@@ -901,12 +926,12 @@ router.post(
       taskId: string,
       prompt: string,
       aspectRatio: AspectRatio,
-      creditsKey: keyof typeof CREDITS,
+      creditAmount: number,
+      imageSize: ImageSize,
       includeLogo: boolean
     ): Promise<TaskResult> {
       sendSSE(res, { task: taskId, status: "in_progress" });
       const start = Date.now();
-      const creditAmount = CREDITS[creditsKey];
       const passLogo = includeLogo ? logoBase64 : undefined;
       const passLogoMime = includeLogo ? logoMimeType : undefined;
       let buf: Buffer | null = null;
@@ -914,8 +939,8 @@ router.post(
       for (let attempt = 1; attempt <= MAX_IMAGE_ATTEMPTS; attempt++) {
         try {
           buf = attempt <= 3
-            ? await generateCampaignImage(prompt, aspectRatio, imgSystemInstruction, "1K", productImageBase64, productImageMimeType, passLogo, passLogoMime)
-            : await generateCampaignImageFallbackOnly(prompt, aspectRatio, imgSystemInstruction, "1K", productImageBase64, productImageMimeType, passLogo, passLogoMime);
+            ? await generateCampaignImage(prompt, aspectRatio, imgSystemInstruction, imageSize, productImageBase64, productImageMimeType, passLogo, passLogoMime)
+            : await generateCampaignImageFallbackOnly(prompt, aspectRatio, imgSystemInstruction, imageSize, productImageBase64, productImageMimeType, passLogo, passLogoMime);
           if (buf && buf.length > 0) break;
         } catch (err) {
           lastErr = err instanceof Error ? err : new Error(String(err));
@@ -960,15 +985,15 @@ router.post(
       taskId: string,
       prompt: string,
       aspectRatio: AspectRatio,
-      creditsKey: keyof typeof CREDITS,
+      creditAmount: number,
+      imageSize: ImageSize,
       includeLogo: boolean
     ): Promise<TaskResult> {
-      const creditAmount = CREDITS[creditsKey];
       const passLogo = includeLogo ? logoBase64 : undefined;
       const passLogoMime = includeLogo ? logoMimeType : undefined;
       try {
-        let buf: Buffer | null = await generateCampaignImage(prompt, aspectRatio, imgSystemInstruction, "1K", productImageBase64, productImageMimeType, passLogo, passLogoMime);
-        if (!buf || buf.length === 0) buf = await generateCampaignImageFallbackOnly(prompt, aspectRatio, imgSystemInstruction, "1K", productImageBase64, productImageMimeType, passLogo, passLogoMime);
+        let buf: Buffer | null = await generateCampaignImage(prompt, aspectRatio, imgSystemInstruction, imageSize, productImageBase64, productImageMimeType, passLogo, passLogoMime);
+        if (!buf || buf.length === 0) buf = await generateCampaignImageFallbackOnly(prompt, aspectRatio, imgSystemInstruction, imageSize, productImageBase64, productImageMimeType, passLogo, passLogoMime);
         if (!buf || buf.length === 0) return { task: taskId, error: "No image returned from model" };
         const genId = crypto.randomUUID();
         await supabase.from("generations").insert({
@@ -995,12 +1020,14 @@ router.post(
       }
     }
 
-    const feed1 = runOneImageTask("meta_feed_image_1", feed1Prompt, "4:5", "meta_feed_image_1", true);
-    const feed2 = runOneImageTask("meta_feed_image_2", feed2Prompt, "4:5", "meta_feed_image_2", true);
-    const feed3 = runOneImageTask("meta_feed_image_3", feed3Prompt, "4:5", "meta_feed_image_3", true);
-    const story1 = runOneImageTask("story_image_1", story1Prompt, "9:16", "story_image_1", true);
-    const story2 = runOneImageTask("story_image_2", story2Prompt, "9:16", "story_image_2", true);
-    const story3 = runOneImageTask("story_image_3", story3Prompt, "9:16", "story_image_3", true);
+    const imgCr = fc.perImage;
+    const imgSz = fc.imageSize;
+    const feed1 = runOneImageTask("meta_feed_image_1", feed1Prompt, "4:5", imgCr, imgSz, true);
+    const feed2 = runOneImageTask("meta_feed_image_2", feed2Prompt, "4:5", imgCr, imgSz, true);
+    const feed3 = runOneImageTask("meta_feed_image_3", feed3Prompt, "4:5", imgCr, imgSz, true);
+    const story1 = runOneImageTask("story_image_1", story1Prompt, "9:16", imgCr, imgSz, true);
+    const story2 = runOneImageTask("story_image_2", story2Prompt, "9:16", imgCr, imgSz, true);
+    const story3 = runOneImageTask("story_image_3", story3Prompt, "9:16", imgCr, imgSz, true);
 
     const videoVeo = imageOutput!.video_veo;
     const negativePrompt = typeof videoVeo.negative_prompt === "string" && videoVeo.negative_prompt.trim() ? videoVeo.negative_prompt.trim() : undefined;
@@ -1013,12 +1040,11 @@ router.post(
       prompt: string,
       modelId: string,
       aspectRatio: "16:9" | "9:16",
-      resolution: "1080p" | "720p",
-      creditsKey: keyof typeof CREDITS
+      resolution: "1080p" | "720p" | "4k",
+      creditAmount: number
     ): Promise<TaskResult> {
       sendSSE(res, { task: taskId, status: "in_progress" });
       const start = Date.now();
-      const creditAmount = CREDITS[creditsKey];
       let imageForVeo: { imageBytes: string; mimeType: string } | undefined;
       let withoutReferenceImage = false;
       if (referenceImageUrl) {
@@ -1137,6 +1163,7 @@ router.post(
         return (v && (v as PromiseFulfilledResult<TaskResult>).value) ?? null;
       }),
     ]).then((r) => (r ?? null));
+    const vCr = fc.perVideo;
     const video16x9Promise = firstFeedPromise.then((r) =>
       runCampaignVideoTask(
         "video_16x9",
@@ -1144,8 +1171,8 @@ router.post(
         videoVeo.prompt_16x9,
         VIDEO_MODELS.standard,
         "16:9",
-        "1080p",
-        "video_16x9"
+        fc.videoRes169,
+        vCr
       )
     );
     const video9x16Promise = firstStoryPromise.then((r) =>
@@ -1155,21 +1182,21 @@ router.post(
         videoVeo.prompt_9x16,
         VIDEO_MODELS.fast,
         "9:16",
-        "720p",
-        "video_9x16"
+        fc.videoRes916,
+        vCr
       )
     );
 
     const imageResults = await Promise.allSettled([feed1, feed2, feed3, story1, story2, story3]);
     let imageSettled = imageResults.map((r) => (r.status === "fulfilled" ? r.value : { task: "unknown", error: String((r as PromiseRejectedResult).reason) }));
 
-    const imageTaskParams: Record<string, { prompt: string; aspectRatio: AspectRatio; creditsKey: keyof typeof CREDITS; includeLogo: boolean }> = {
-      meta_feed_image_1: { prompt: feed1Prompt, aspectRatio: "4:5", creditsKey: "meta_feed_image_1", includeLogo: true },
-      meta_feed_image_2: { prompt: feed2Prompt, aspectRatio: "4:5", creditsKey: "meta_feed_image_2", includeLogo: true },
-      meta_feed_image_3: { prompt: feed3Prompt, aspectRatio: "4:5", creditsKey: "meta_feed_image_3", includeLogo: true },
-      story_image_1: { prompt: story1Prompt, aspectRatio: "9:16", creditsKey: "story_image_1", includeLogo: true },
-      story_image_2: { prompt: story2Prompt, aspectRatio: "9:16", creditsKey: "story_image_2", includeLogo: true },
-      story_image_3: { prompt: story3Prompt, aspectRatio: "9:16", creditsKey: "story_image_3", includeLogo: true },
+    const imageTaskParams: Record<string, { prompt: string; aspectRatio: AspectRatio; includeLogo: boolean }> = {
+      meta_feed_image_1: { prompt: feed1Prompt, aspectRatio: "4:5", includeLogo: true },
+      meta_feed_image_2: { prompt: feed2Prompt, aspectRatio: "4:5", includeLogo: true },
+      meta_feed_image_3: { prompt: feed3Prompt, aspectRatio: "4:5", includeLogo: true },
+      story_image_1: { prompt: story1Prompt, aspectRatio: "9:16", includeLogo: true },
+      story_image_2: { prompt: story2Prompt, aspectRatio: "9:16", includeLogo: true },
+      story_image_3: { prompt: story3Prompt, aspectRatio: "9:16", includeLogo: true },
     };
     const failedImageTasks = imageSettled.filter((r) => r.error && imageTaskParams[r.task]);
     if (failedImageTasks.length > 0) {
@@ -1179,7 +1206,7 @@ router.post(
       const retryResults = await Promise.all(
         failedImageTasks.map((f) => {
           const p = imageTaskParams[f.task]!;
-          return runOneImageTaskSingleAttempt(f.task, p.prompt, p.aspectRatio, p.creditsKey, p.includeLogo);
+          return runOneImageTaskSingleAttempt(f.task, p.prompt, p.aspectRatio, imgCr, imgSz, p.includeLogo);
         })
       );
       for (const ret of retryResults) {
@@ -1244,9 +1271,17 @@ router.post(
           }
           const emailHtml = emailHtmls[0] ?? "";
           console.log("[Campaign] 2 email HTML variants assembled");
+          totalCreditsUsed += fc.emailBundle;
+          await deductCredits(
+            workspaceId,
+            user.id,
+            fc.emailBundle,
+            `Full Campaign: 2 marketing emails (${campaignQuality})`
+          );
           sendSSE(res, {
             task: "email_html", status: "complete",
-            credits_used: 0, time_taken: 0,
+            credits_used: fc.emailBundle,
+            time_taken: 0,
             email_html: emailHtml,
             email_htmls: emailHtmls,
             email_copy: emailCopies[0],

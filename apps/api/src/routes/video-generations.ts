@@ -79,7 +79,7 @@ router.post(
         .eq("id", workspaceId)
         .single();
 
-      if (!getPlanConfig(wsForPlan?.plan ?? "trial").videoEnabled) {
+      if (!getPlanConfig(wsForPlan?.plan ?? "free").videoEnabled) {
         res.status(403).json({ error: "Video generation is not available on your current plan. Upgrade to use this feature." });
         return;
       }
@@ -222,7 +222,7 @@ router.post(
         .eq("id", workspaceId)
         .single();
 
-      if (!getPlanConfig(workspace?.plan ?? "trial").videoEnabled) {
+      if (!getPlanConfig(workspace?.plan ?? "free").videoEnabled) {
         res.status(403).json({ error: "Video generation is not available on your current plan. Upgrade to use this feature." });
         return;
       }

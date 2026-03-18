@@ -3,6 +3,8 @@
  * Models: Blinkify Standard (quality) | Blinkify Fast (speed).
  */
 
+import { CREDIT_COSTS } from "./plan-config.js";
+
 /** User-facing model labels → Gemini model IDs */
 export const VIDEO_MODELS = {
   standard: "veo-3.1-generate-preview",
@@ -41,9 +43,11 @@ export function extendsNeeded(_targetSeconds: number): number {
   return 0;
 }
 
-/** Credit cost by resolution: Standard (1080p) = 100, Ultra (4K) = 150. */
+/** Credit cost by resolution (aligned with plan-config VIDEO / campaign). */
 export function videoCreditCost(resolution: VideoResolution): number {
-  return resolution === "4k" ? 150 : 100;
+  return resolution === "4k"
+    ? Math.round(CREDIT_COSTS.VIDEO * 1.5)
+    : CREDIT_COSTS.VIDEO;
 }
 
 /** Timeout: 2× typical generation (8s video ≈ 2–5 min; use 10 min base × 2) */

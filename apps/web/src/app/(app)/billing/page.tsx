@@ -1,5 +1,6 @@
 import { getWorkspaces } from "@/lib/api";
 import { PLAN_MAX_CREDITS } from "@/lib/constants";
+import Link from "next/link";
 import { TrendingUp, Coins } from "lucide-react";
 import { BillingSpendingChart } from "@/components/dashboard/billing-spending-chart";
 import { BillingCreditUsageCard } from "@/components/dashboard/billing-credit-usage-card";
@@ -7,7 +8,7 @@ import { BillingCreditUsageCard } from "@/components/dashboard/billing-credit-us
 export const dynamic = "force-dynamic";
 
 export default async function BillingPage() {
-  let plan = "trial";
+  let plan = "free";
   let credits = 0;
   let workspaces: { id: string; plan: string; credits: number }[] | null = null;
   try {
@@ -29,6 +30,15 @@ export default async function BillingPage() {
 
   return (
     <div className="p-6 lg:p-10">
+      <section className="mb-8">
+        <h2 className="text-lg font-semibold mb-3">Manage Plan</h2>
+        <Link
+          href="/setup-plan"
+          className="inline-flex items-center justify-center h-10 px-4 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity"
+        >
+          Choose or change plan
+        </Link>
+      </section>
       <section className="mb-8">
         <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
           <Coins className="size-5 shrink-0" style={{ color: "#007aff" }} />

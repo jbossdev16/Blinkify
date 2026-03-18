@@ -5,6 +5,11 @@ import { requireSuperAdmin } from "../middleware/requireSuperAdmin.js";
 import { supabase } from "../lib/supabase.js";
 import { PLAN_CONFIG, VALID_PLANS } from "../lib/plan-config.js";
 import { isUuid } from "../lib/validation.js";
+import {
+  clampCreditsAfterGrant,
+  creditsAfterDowngradeToFree,
+  isFreePlanKey,
+} from "../lib/workspace-credits.js";
 
 const router = Router();
 
@@ -69,10 +74,17 @@ router.patch("/workspaces/:id/plan", ...adminChain, async (req: Request, res: Re
       return;
     }
 
+    const newCredits = isFreePlanKey(plan)
+      ? creditsAfterDowngradeToFree(existing.credits ?? 0)
+      : clampCreditsAfterGrant(
+          plan,
+          Math.max(existing.credits ?? 0, config.maxCredits)
+        );
+
     const updates: Record<string, unknown> = {
       plan,
       max_workspaces: config.maxWorkspaces,
-      credits: config.maxCredits,
+      credits: newCredits,
     };
 
     if (plan !== "trial") {
@@ -111,8 +123,8 @@ router.patch("/workspaces/:id/plan", ...adminChain, async (req: Request, res: Re
       workspace_id: workspaceId,
       user_id: adminUser.id,
       type: "admin_plan_change",
-      amount: config.maxCredits - (existing.credits ?? 0),
-      balance_after: config.maxCredits,
+      amount: newCredits - (existing.credits ?? 0),
+      balance_after: newCredits,
       description: `Plan changed from ${existing.plan} to ${plan} by admin`,
     });
 
@@ -125,7 +137,7 @@ router.patch("/workspaces/:id/plan", ...adminChain, async (req: Request, res: Re
       metadata: {
         from: existing.plan,
         to: plan,
-        credits: config.maxCredits,
+        credits: newCredits,
         brandsArchived: activeProjects && activeProjects.length > config.maxBrands
           ? activeProjects.length - config.maxBrands
           : 0,

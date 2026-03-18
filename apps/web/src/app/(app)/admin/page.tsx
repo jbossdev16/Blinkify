@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4001";
 
-const VALID_PLANS = ["trial", "standard", "pro", "agency", "enterprise"];
+const VALID_PLANS = ["free", "trial", "standard", "pro", "agency", "enterprise"];
 
 interface AdminWorkspace {
   id: string;

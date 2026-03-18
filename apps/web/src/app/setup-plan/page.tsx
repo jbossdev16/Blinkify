@@ -233,7 +233,7 @@ export default function SetupPlanPage() {
           <div className="shrink-0 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-sm text-black pb-4 border-b border-zinc-100">
             <span className="flex items-center gap-1.5">
               <Sparkles className="size-3.5 text-primary" aria-hidden />
-              Free Trial
+              Choose your plan
             </span>
             <span className="flex items-center gap-1.5">
               <CreditCard className="size-3.5 text-primary" aria-hidden />

@@ -1,4 +1,5 @@
 import { GoogleGenAI, createPartFromBase64, createPartFromText } from "@google/genai";
+import { CREDIT_COSTS, getEmailCreditCost } from "./plan-config.js";
 
 const apiKey = process.env.GEMINI_API_KEY;
 
@@ -99,15 +100,12 @@ export type ImageSize = (typeof IMAGE_SIZES)[number];
 
 /** Credit cost per image generation based on resolution. */
 export function creditCost(imageSize: ImageSize): number {
-  return imageSize === "4K" ? 25 : 10;
+  return imageSize === "4K" ? CREDIT_COSTS.IMAGE_4K : CREDIT_COSTS.IMAGE_1K;
 }
 
 /** Credit cost for email marketing: (imageSize, numberOfImages) → total credits. */
 export function emailCreditCost(imageSize: ImageSize, numberOfImages: 1 | 2 | 3): number {
-  if (imageSize === "1K") {
-    return numberOfImages === 1 ? 15 : numberOfImages === 2 ? 30 : 50;
-  }
-  return numberOfImages === 1 ? 30 : numberOfImages === 2 ? 60 : 100;
+  return getEmailCreditCost(numberOfImages, imageSize === "4K" ? "4K" : "1K");
 }
 
 /** Temperature range and default for image generation (0 = deterministic, 2 = max creativity). */

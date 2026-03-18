@@ -18,6 +18,7 @@ import adStylesRoutes from "./routes/ad-styles.js";
 import adminRoutes from "./routes/admin";
 import checkoutRoutes from "./routes/checkout";
 import waitlistRoutes from "./routes/waitlist";
+import webhookRoutes from "./routes/webhook";
 import { runCleanupFailedGenerations } from "./lib/cleanup-failed-generations";
 import { runCleanupUnsavedGenerations } from "./lib/cleanup-unsaved-generations";
 import { ensureEmailAssetsBucket } from "./lib/storage-constants";
@@ -53,7 +54,7 @@ app.use(
   })
 );
 app.use(morgan("combined"));
-// Allow large payloads for /generate (base64 reference images; up to 10)
+app.use("/webhooks", webhookRoutes);
 app.use(express.json({ limit: "50mb" }));
 
 // ─── Public routes ───────────────────────────────────────────────────────────

@@ -88,7 +88,7 @@ export function SettingsContent({ onClose, plan, credits, initialTab }: Settings
         {activeTab === "general" && <GeneralTab showHeading={false} />}
         {activeTab === "security" && <SecurityTab showHeading={false} />}
         {activeTab === "account" && <AccountTab showHeading={false} />}
-        {activeTab === "plan" && <ManagePlanTab plan={plan ?? "trial"} credits={credits ?? 0} />}
+        {activeTab === "plan" && <ManagePlanTab plan={plan ?? "free"} credits={credits ?? 0} />}
       </div>
     </div>
   );
@@ -194,13 +194,13 @@ function ManagePlanTab({ plan, credits }: { plan: string; credits: number }) {
         <button
           type="button"
           onClick={() => { setCancelError(""); setCancelModalOpen(true); }}
-          className="cursor-pointer flex items-center justify-center h-10 rounded-xl bg-card border border-border text-foreground text-sm font-medium hover:bg-destructive hover:text-destructive-foreground hover:border-destructive transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 min-w-[120px]"
+          className="mt-0 cursor-pointer flex items-center justify-center h-10 rounded-xl bg-card border border-border text-foreground text-sm font-medium hover:bg-destructive hover:text-destructive-foreground hover:border-destructive focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 min-w-[120px]"
         >
           Cancel
         </button>
         <BillingUpgradeModal
           currentPlan={plan}
-          buttonClassName="cursor-pointer flex items-center justify-center h-10 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 hover:bg-primary transition-opacity border-0 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 min-w-[120px]"
+          buttonClassName="!mt-0 cursor-pointer flex items-center justify-center h-10 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 hover:bg-primary border-0 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 min-w-[120px]"
         />
       </div>
       {cancelModalOpen && typeof document !== "undefined" &&

@@ -18,17 +18,12 @@ import { cn } from "@/lib/utils";
 /* ─── Filter options (match image/video generation tabs) ──────────────────── */
 
 /* Match creative studio labels */
+/** Align with Creative Studio (1:1, 9:16, 16:9) + Full Campaign feed (4:5). */
 const IMAGE_ASPECT_RATIOS = [
   { value: "1:1", label: "Square (1:1)" },
   { value: "4:5", label: "Instagram Feed (4:5)" },
-  { value: "5:4", label: "Landscape Photo (5:4)" },
-  { value: "3:4", label: "Portrait (3:4)" },
-  { value: "4:3", label: "Presentation (4:3)" },
-  { value: "2:3", label: "Tall Portrait (2:3)" },
-  { value: "3:2", label: "Photo Print (3:2)" },
   { value: "9:16", label: "Story / Reel (9:16)" },
   { value: "16:9", label: "Landscape Ad (16:9)" },
-  { value: "21:9", label: "Banner (21:9)" },
 ];
 
 const VIDEO_ASPECT_RATIOS = [
@@ -45,6 +40,11 @@ const VIDEO_MODEL_LABELS: Record<string, string> = {
   "veo-3.1-generate-preview": "Blinkify Standard",
   "veo-3.1-fast-generate-preview": "Blinkify Fast",
 };
+
+const VIDEO_MODEL_FILTER_VALUES = [
+  { value: "veo-3.1-generate-preview", label: "Blinkify Standard" },
+  { value: "veo-3.1-fast-generate-preview", label: "Blinkify Fast" },
+] as const;
 
 function videoModelLabel(raw: string | undefined): string | null {
   if (!raw) return null;
@@ -162,6 +162,7 @@ export function AssetCollectionView({ workspaceId, embedded }: AssetCollectionVi
   const [imageAspectFilter, setImageAspectFilter] = useState<string>("");
   const [videoAspectFilter, setVideoAspectFilter] = useState<string>("");
   const [videoResolutionFilter, setVideoResolutionFilter] = useState<string>("");
+  const [videoModelFilter, setVideoModelFilter] = useState<string>("");
   /** Grid row tracks to show (3-col bento); +6 per "View More". Resets on refresh / filter change / remount. */
   const [visibleRowBudget, setVisibleRowBudget] = useState(6);
   const fetchAbortedRef = useRef(false);
@@ -224,14 +225,18 @@ export function AssetCollectionView({ workspaceId, embedded }: AssetCollectionVi
           const filterRes = videoResolutionFilter.toLowerCase();
           if (!res || res !== filterRes) return false;
         }
+        if (videoModelFilter) {
+          const m = (item.metadata?.model ?? "").trim();
+          if (!m || m !== videoModelFilter) return false;
+        }
       }
       return true;
     });
-  }, [items, typeFilter, imageAspectFilter, videoAspectFilter, videoResolutionFilter]);
+  }, [items, typeFilter, imageAspectFilter, videoAspectFilter, videoResolutionFilter, videoModelFilter]);
 
   useEffect(() => {
     setVisibleRowBudget(6);
-  }, [typeFilter, imageAspectFilter, videoAspectFilter, videoResolutionFilter]);
+  }, [typeFilter, imageAspectFilter, videoAspectFilter, videoResolutionFilter, videoModelFilter]);
 
   const displayedItems = useMemo(
     () => sliceItemsWithinRowBudget(filteredItems, visibleRowBudget),
@@ -309,6 +314,7 @@ export function AssetCollectionView({ workspaceId, embedded }: AssetCollectionVi
     setImageAspectFilter("");
     setVideoAspectFilter("");
     setVideoResolutionFilter("");
+    setVideoModelFilter("");
     setVisibleRowBudget(6);
     fetchItems();
   }
@@ -558,6 +564,36 @@ export function AssetCollectionView({ workspaceId, embedded }: AssetCollectionVi
                         className={cn(
                           "px-2.5 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer",
                           videoResolutionFilter === r.value
+                            ? "bg-primary text-white"
+                            : "bg-secondary/60 text-[#000000] dark:text-white/80 hover:text-foreground"
+                        )}
+                      >
+                        {r.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <p className="text-xs font-normal text-[#000000] dark:text-white/70 mb-1.5">Video model</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setVideoModelFilter("")}
+                      className={cn(
+                        "px-2.5 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer",
+                        !videoModelFilter ? "bg-primary text-white" : "bg-secondary/60 text-[#000000] dark:text-white/80 hover:text-foreground"
+                      )}
+                    >
+                      Any
+                    </button>
+                    {VIDEO_MODEL_FILTER_VALUES.map((r) => (
+                      <button
+                        key={r.value}
+                        type="button"
+                        onClick={() => setVideoModelFilter(r.value)}
+                        className={cn(
+                          "px-2.5 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer",
+                          videoModelFilter === r.value
                             ? "bg-primary text-white"
                             : "bg-secondary/60 text-[#000000] dark:text-white/80 hover:text-foreground"
                         )}
