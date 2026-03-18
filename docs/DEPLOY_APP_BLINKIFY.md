@@ -21,12 +21,25 @@ Both **blinkify.ai** and **app.blinkify.ai** deploy from the same `apps/web` cod
 
 ## Vercel projects
 
+### Web deploy (marketing + app) — two valid setups
+
+Vercel’s Next.js step **always** looks for **`web/.next`** next to the deployment root after Turbo builds a package named `web`. It does **not** honor `outputDirectory: apps/web/.next` for that trace step, so you get **`ENOENT … path0/web/.next/routes-manifest.json`** even when the real build is in **`apps/web/.next`**.
+
+**Option A — Root = repository root (default in repo)**  
+- **Root Directory:** empty (repo root).  
+- Uses **`vercel.json`** at repo root: after `turbo build`, copies **`apps/web/.next` → `web/.next`** so the trace finds `routes-manifest.json`.  
+- **`--force`** avoids Turbo remote-cache hits that skip writing `.next`.
+
+**Option B — Root = `apps`**  
+- **Root Directory:** `apps`.  
+- Uses **`apps/vercel.json`**: `cd .. && npm install` / `turbo build`; **`outputDirectory: web/.next`** resolves to **`apps/web/.next`** (no copy).  
+- Clear **Build / Output overrides** in the dashboard so this file wins.
+
 ### 1. blinkify.ai (marketing)
 
-- **Root Directory:** **repository root** (leave empty / `.` — not `apps`). Root `vercel.json` uses `outputDirectory: "apps/web/.next"`; if Root is `apps`, Vercel looks for `web/.next` at the wrong base and you get `ENOENT … routes-manifest.json`, or `apps/apps/web/.next` if you set output to `apps/web/.next` under Root `apps`.
+- **Root / config:** same as § above (Option A or B).
 - **Framework:** Next.js (auto)
 - **Domain:** `blinkify.ai`
-- **Turbo on Vercel:** Root `vercel.json` runs `turbo … --force`. A remote **cache hit** can skip `next build` and leave no `.next` on the builder → `ENOENT … routes-manifest.json`. `--force` always materializes `apps/web/.next`.
 
 **Environment Variables (Production):**
 
@@ -57,7 +70,7 @@ Deploy → copy the project URL (e.g. `https://blinkify-api.vercel.app`). This i
 
 ### 3. app.blinkify.ai (web app)
 
-- **Root Directory:** **repository root** (same as marketing). Install/build run from monorepo root (`npm install`, `turbo run build --filter=web`).
+- **Root / config:** same as marketing (Option A or B).
 - **Framework:** Next.js (auto)
 - **Domain:** `app.blinkify.ai`
 
@@ -81,8 +94,8 @@ Deploy → copy the project URL (e.g. `https://blinkify-api.vercel.app`). This i
 
 | Project | Root | Domain | Key env |
 |---------|------|--------|---------|
-| Marketing | repo root | **blinkify.ai** | `NEXT_PUBLIC_APP_URL=https://blinkify.ai` |
+| Marketing | repo root *or* `apps` | **blinkify.ai** | `NEXT_PUBLIC_APP_URL=https://blinkify.ai` |
 | API | `apps/api` | **blinkify-api.vercel.app** | `WEB_ORIGIN=https://app.blinkify.ai` |
-| App | repo root | **app.blinkify.ai** | `NEXT_PUBLIC_APP_URL=https://app.blinkify.ai`, `API_BACKEND_URL=https://blinkify-api.vercel.app` |
+| App | repo root *or* `apps` | **app.blinkify.ai** | `NEXT_PUBLIC_APP_URL=https://app.blinkify.ai`, `API_BACKEND_URL=https://blinkify-api.vercel.app` |
 
 The app uses Next.js rewrites to proxy `/auth/*`, `/workspaces/*`, `/checkout/*`, etc. to the API. Middleware handles cross-domain redirects so users always land on the correct domain.

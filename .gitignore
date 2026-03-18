@@ -1,3 +1,6 @@
+# Vercel repo-root deploy copies Next output here for the Next.js trace step
+/web
+
 node_modules
 .next
 dist
