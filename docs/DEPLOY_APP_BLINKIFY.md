@@ -23,7 +23,7 @@ Both **blinkify.ai** and **app.blinkify.ai** deploy from the same `apps/web` cod
 
 ### 1. blinkify.ai (marketing)
 
-- **Root Directory:** `apps` (required: post-build looks for `web/.next` under this root; using `apps/web` causes ENOENT for `routes-manifest.json`)
+- **Root Directory:** **repository root** (leave empty / `.` — not `apps`). Root `vercel.json` uses `outputDirectory: "apps/web/.next"`; if Root is `apps`, Vercel looks for `web/.next` at the wrong base and you get `ENOENT … routes-manifest.json`, or `apps/apps/web/.next` if you set output to `apps/web/.next` under Root `apps`.
 - **Framework:** Next.js (auto)
 - **Domain:** `blinkify.ai`
 
@@ -56,7 +56,7 @@ Deploy → copy the project URL (e.g. `https://blinkify-api.vercel.app`). This i
 
 ### 3. app.blinkify.ai (web app)
 
-- **Root Directory:** `apps` (same as marketing; root `vercel.json` uses `outputDirectory: "web/.next"` and install/build run from repo root via `cd ..`)
+- **Root Directory:** **repository root** (same as marketing). Install/build run from monorepo root (`npm install`, `turbo run build --filter=web`).
 - **Framework:** Next.js (auto)
 - **Domain:** `app.blinkify.ai`
 
@@ -80,8 +80,8 @@ Deploy → copy the project URL (e.g. `https://blinkify-api.vercel.app`). This i
 
 | Project | Root | Domain | Key env |
 |---------|------|--------|---------|
-| Marketing | `apps/web` | **blinkify.ai** | `NEXT_PUBLIC_APP_URL=https://blinkify.ai` |
+| Marketing | repo root | **blinkify.ai** | `NEXT_PUBLIC_APP_URL=https://blinkify.ai` |
 | API | `apps/api` | **blinkify-api.vercel.app** | `WEB_ORIGIN=https://app.blinkify.ai` |
-| App | `apps/web` | **app.blinkify.ai** | `NEXT_PUBLIC_APP_URL=https://app.blinkify.ai`, `API_BACKEND_URL=https://blinkify-api.vercel.app` |
+| App | repo root | **app.blinkify.ai** | `NEXT_PUBLIC_APP_URL=https://app.blinkify.ai`, `API_BACKEND_URL=https://blinkify-api.vercel.app` |
 
 The app uses Next.js rewrites to proxy `/auth/*`, `/workspaces/*`, `/checkout/*`, etc. to the API. Middleware handles cross-domain redirects so users always land on the correct domain.
