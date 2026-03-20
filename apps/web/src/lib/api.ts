@@ -111,9 +111,12 @@ export const getWorkspaces = cache(() =>
   apiFetch<{ workspaces: Workspace[] }>("/workspaces")
 );
 
-export const getWorkspaceProjects = cache((workspaceId: string) =>
-  apiFetch<{ projects: Project[] }>(`/workspaces/${workspaceId}/projects`)
-);
+/** No React cache() — after save/refresh we must not reuse a stale project list. Fetch is uncached. */
+export function getWorkspaceProjects(workspaceId: string) {
+  return apiFetch<{ projects: Project[] }>(`/workspaces/${workspaceId}/projects`, {
+    cache: "no-store",
+  });
+}
 
 export async function getProjectAssets(
   workspaceId: string,

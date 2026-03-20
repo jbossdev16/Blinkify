@@ -35,10 +35,51 @@ import {
   resolveGenerationImageUrl,
 } from "../lib/storage-constants.js";
 import { getEmailTemplate, buildTemplateImagePromptSuffix, loadTemplateImage, buildTemplateReplacePrompt } from "../lib/email-templates.js";
+import {
+  fetchExternalBrandLogoBuffer,
+  inferLogoMimeType,
+  isExternalBrandLogoRef,
+  urlFromExternalBrandLogoRef,
+} from "../lib/brand-logo-ref.js";
 
 const router = Router();
 const BUCKET = "generated-images";
 const PROJECT_ASSETS_BUCKET = "project-assets";
+
+/** Storage path or `external:https://...` from Apply Brand when SVG / upload fallback. */
+async function loadProjectBrandLogoForInputs(
+  brandLogo: string
+): Promise<{ data: string; mimeType: string } | null> {
+  try {
+    if (isExternalBrandLogoRef(brandLogo)) {
+      const u = urlFromExternalBrandLogoRef(brandLogo);
+      if (!u) return null;
+      const got = await fetchExternalBrandLogoBuffer(u);
+      if (!got) return null;
+      return {
+        data: got.buf.toString("base64"),
+        mimeType: inferLogoMimeType(got.contentType, u),
+      };
+    }
+    const { data: blob, error: downloadErr } = await supabase.storage
+      .from(PROJECT_ASSETS_BUCKET)
+      .download(brandLogo);
+    if (downloadErr || !blob) return null;
+    const buf = Buffer.from(await blob.arrayBuffer());
+    const ext = brandLogo.split(".").pop()?.toLowerCase() ?? "png";
+    const mimeMap: Record<string, string> = {
+      png: "image/png",
+      jpg: "image/jpeg",
+      jpeg: "image/jpeg",
+      webp: "image/webp",
+      gif: "image/gif",
+      svg: "image/svg+xml",
+    };
+    return { data: buf.toString("base64"), mimeType: mimeMap[ext] ?? "image/png" };
+  } catch {
+    return null;
+  }
+}
 const MAX_INPUT_IMAGES = 10;
 const MIN_NUMBER_OF_IMAGES = 1;
 const MAX_NUMBER_OF_IMAGES = 4;
@@ -298,22 +339,8 @@ router.post(
       let inputImages = userImages;
       if (project.brand_logo && typeof project.brand_logo === "string") {
         try {
-          const { data: blob, error: downloadErr } = await supabase.storage
-            .from(PROJECT_ASSETS_BUCKET)
-            .download(project.brand_logo);
-          if (!downloadErr && blob) {
-            const buf = Buffer.from(await blob.arrayBuffer());
-            const base64 = buf.toString("base64");
-            const ext = project.brand_logo.split(".").pop()?.toLowerCase() ?? "png";
-            const mimeMap: Record<string, string> = {
-              png: "image/png",
-              jpg: "image/jpeg",
-              jpeg: "image/jpeg",
-              webp: "image/webp",
-              gif: "image/gif",
-            };
-            const logoMime = mimeMap[ext] ?? "image/png";
-            const logoImage = { data: base64, mimeType: logoMime };
+          const logoImage = await loadProjectBrandLogoForInputs(project.brand_logo);
+          if (logoImage) {
             inputImages = [logoImage, ...userImages.slice(0, MAX_INPUT_IMAGES - 1)];
           }
         } catch {
@@ -792,22 +819,8 @@ router.post(
       const inputImages: { data: string; mimeType: string }[] = [];
       if (project.brand_logo && typeof project.brand_logo === "string") {
         try {
-          const { data: blob, error: downloadErr } = await supabase.storage
-            .from(PROJECT_ASSETS_BUCKET)
-            .download(project.brand_logo);
-          if (!downloadErr && blob) {
-            const buf = Buffer.from(await blob.arrayBuffer());
-            const base64 = buf.toString("base64");
-            const ext = project.brand_logo.split(".").pop()?.toLowerCase() ?? "png";
-            const mimeMap: Record<string, string> = {
-              png: "image/png",
-              jpg: "image/jpeg",
-              jpeg: "image/jpeg",
-              webp: "image/webp",
-              gif: "image/gif",
-            };
-            inputImages.push({ data: base64, mimeType: mimeMap[ext] ?? "image/png" });
-          }
+          const logoImage = await loadProjectBrandLogoForInputs(project.brand_logo);
+          if (logoImage) inputImages.push(logoImage);
         } catch {
           // continue without logo
         }
@@ -1059,10 +1072,14 @@ router.post(
 
       let brand_logo_url: string | null = null;
       if (project.brand_logo && typeof project.brand_logo === "string") {
-        const { data: signed } = await supabase.storage
-          .from(PROJECT_ASSETS_BUCKET)
-          .createSignedUrl(project.brand_logo, EMAIL_LOGO_SIGNED_EXPIRY_SECONDS);
-        brand_logo_url = signed?.signedUrl ?? null;
+        if (isExternalBrandLogoRef(project.brand_logo)) {
+          brand_logo_url = urlFromExternalBrandLogoRef(project.brand_logo);
+        } else {
+          const { data: signed } = await supabase.storage
+            .from(PROJECT_ASSETS_BUCKET)
+            .createSignedUrl(project.brand_logo, EMAIL_LOGO_SIGNED_EXPIRY_SECONDS);
+          brand_logo_url = signed?.signedUrl ?? null;
+        }
       }
       const websiteUrl =
         typeof project.website_url === "string" && project.website_url.trim()

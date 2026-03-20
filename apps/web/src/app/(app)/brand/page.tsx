@@ -10,6 +10,7 @@ import { redirect } from "next/navigation";
 import { CreateProjectFlow } from "@/components/dashboard/create-project-flow";
 import { ProjectSettings } from "@/components/dashboard/project-settings";
 import { getPlanFeatures } from "@/lib/constants";
+import { DotGridBg } from "@/components/ui/dot-grid-bg";
 
 export const dynamic = "force-dynamic";
 
@@ -100,11 +101,16 @@ export default async function BrandPage(props: BrandPageProps) {
     : null;
 
   return (
-    <ProjectSettings
-      project={selectedProject}
-      workspaceId={workspace.id}
-      logoUrl={logoUrl}
-      brandMode
-    />
+    <div className="relative min-h-full">
+      <DotGridBg />
+      <div className="relative z-10 min-h-full">
+        <ProjectSettings
+          project={selectedProject}
+          workspaceId={workspace.id}
+          logoUrl={logoUrl}
+          brandMode
+        />
+      </div>
+    </div>
   );
 }

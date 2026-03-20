@@ -12,17 +12,17 @@ import {
   X,
   Play,
   LayoutGrid,
+  ChevronDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /* ─── Filter options (match image/video generation tabs) ──────────────────── */
 
 /* Match creative studio labels */
-/** Align with Creative Studio (1:1, 9:16, 16:9) + Full Campaign feed (4:5). */
+/** Feed 4:5, story 9:16, landscape 16:9 (no separate 1:1 filter — use "Any"). */
 const IMAGE_ASPECT_RATIOS = [
-  { value: "1:1", label: "Square (1:1)" },
   { value: "4:5", label: "Instagram Feed (4:5)" },
-  { value: "9:16", label: "Story / Reel (9:16)" },
+  { value: "9:16", label: "Story" },
   { value: "16:9", label: "Landscape Ad (16:9)" },
 ];
 
@@ -134,6 +134,8 @@ interface AssetItem {
   videoGenerationId?: string;
   type: "image" | "video";
   url: string | null;
+  /** Present when API returns it; used for brand-scoped filtering. */
+  projectId?: string;
   projectName: string;
   prompt: string | null;
   createdAt: string;
@@ -155,9 +157,12 @@ interface AssetCollectionViewProps {
 
 export function AssetCollectionView({ workspaceId, embedded }: AssetCollectionViewProps) {
   const [items, setItems] = useState<AssetItem[]>([]);
+  const [projects, setProjects] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedItem, setExpandedItem] = useState<AssetItem | null>(null);
+  const [brandProjectId, setBrandProjectId] = useState<string | null>(null);
+  const [brandMenuOpen, setBrandMenuOpen] = useState(false);
   const [typeFilter, setTypeFilter] = useState<"all" | "image" | "video">("all");
   const [imageAspectFilter, setImageAspectFilter] = useState<string>("");
   const [videoAspectFilter, setVideoAspectFilter] = useState<string>("");
@@ -166,6 +171,7 @@ export function AssetCollectionView({ workspaceId, embedded }: AssetCollectionVi
   /** Grid row tracks to show (3-col bento); +6 per "View More". Resets on refresh / filter change / remount. */
   const [visibleRowBudget, setVisibleRowBudget] = useState(6);
   const fetchAbortedRef = useRef(false);
+  const brandMenuRef = useRef<HTMLDivElement>(null);
 
   const fetchItems = useCallback(async (silent = false) => {
     if (!workspaceId) return;
@@ -200,6 +206,20 @@ export function AssetCollectionView({ workspaceId, embedded }: AssetCollectionVi
   }, [fetchItems]);
 
   useEffect(() => {
+    if (!workspaceId) return;
+    let cancelled = false;
+    apiClientFetch<{ projects?: { id: string; name: string }[] }>(`/workspaces/${workspaceId}/projects`)
+      .then((res) => {
+        if (cancelled || !Array.isArray(res.projects)) return;
+        setProjects(res.projects.map((p) => ({ id: p.id, name: p.name })));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [workspaceId]);
+
+  useEffect(() => {
     const handler = () => {
       if (document.visibilityState === "visible") fetchItems(true);
     };
@@ -207,8 +227,27 @@ export function AssetCollectionView({ workspaceId, embedded }: AssetCollectionVi
     return () => document.removeEventListener("visibilitychange", handler);
   }, [fetchItems]);
 
+  useEffect(() => {
+    if (!brandMenuOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (brandMenuRef.current && !brandMenuRef.current.contains(e.target as Node)) {
+        setBrandMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [brandMenuOpen]);
+
   const filteredItems = useMemo(() => {
     return items.filter((item) => {
+      if (brandProjectId) {
+        if (item.projectId) {
+          if (item.projectId !== brandProjectId) return false;
+        } else {
+          const brandName = projects.find((p) => p.id === brandProjectId)?.name;
+          if (!brandName || item.projectName !== brandName) return false;
+        }
+      }
       if (typeFilter === "image" && item.type !== "image") return false;
       if (typeFilter === "video" && item.type !== "video") return false;
       if (item.type === "image" && imageAspectFilter) {
@@ -232,11 +271,27 @@ export function AssetCollectionView({ workspaceId, embedded }: AssetCollectionVi
       }
       return true;
     });
-  }, [items, typeFilter, imageAspectFilter, videoAspectFilter, videoResolutionFilter, videoModelFilter]);
+  }, [
+    items,
+    brandProjectId,
+    projects,
+    typeFilter,
+    imageAspectFilter,
+    videoAspectFilter,
+    videoResolutionFilter,
+    videoModelFilter,
+  ]);
 
   useEffect(() => {
     setVisibleRowBudget(6);
-  }, [typeFilter, imageAspectFilter, videoAspectFilter, videoResolutionFilter, videoModelFilter]);
+  }, [
+    brandProjectId,
+    typeFilter,
+    imageAspectFilter,
+    videoAspectFilter,
+    videoResolutionFilter,
+    videoModelFilter,
+  ]);
 
   const displayedItems = useMemo(
     () => sliceItemsWithinRowBudget(filteredItems, visibleRowBudget),
@@ -310,6 +365,7 @@ export function AssetCollectionView({ workspaceId, embedded }: AssetCollectionVi
   }
 
   function handleRefresh() {
+    setBrandProjectId(null);
     setTypeFilter("all");
     setImageAspectFilter("");
     setVideoAspectFilter("");
@@ -318,6 +374,11 @@ export function AssetCollectionView({ workspaceId, embedded }: AssetCollectionVi
     setVisibleRowBudget(6);
     fetchItems();
   }
+
+  const brandButtonLabel =
+    brandProjectId != null
+      ? (projects.find((p) => p.id === brandProjectId)?.name ?? "Brand")
+      : "All brands";
 
   return (
     <div className={containerClass}>
@@ -430,7 +491,7 @@ export function AssetCollectionView({ workspaceId, embedded }: AssetCollectionVi
                     onClick={() => setVisibleRowBudget((r) => r + 6)}
                     className="px-5 py-2.5 rounded-xl text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
                   >
-                    View more <span className="opacity-90 font-normal">(6 more rows)</span>
+                    View More
                   </button>
                 </div>
               )}
@@ -443,16 +504,59 @@ export function AssetCollectionView({ workspaceId, embedded }: AssetCollectionVi
       {/* Right sidebar: filter panel (sticky like main sidebar on lg) */}
       <aside className="w-full lg:w-64 shrink-0 order-first lg:order-none lg:sticky lg:top-6 lg:self-start">
         <div className="rounded-2xl border border-black/5 dark:border-border bg-white dark:bg-card shadow-sm overflow-hidden p-5 lg:p-6 space-y-4 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto">
-          <div className="flex items-center justify-between gap-2 mb-2">
-            <div className="flex items-center gap-2">
-              <LayoutGrid className="size-3.5 text-[#000000] dark:text-white" />
-              <span className="text-xs font-normal text-[#000000] dark:text-white">Filters</span>
+          <div className="relative w-full" ref={brandMenuRef}>
+            <button
+              type="button"
+              onClick={() => setBrandMenuOpen((v) => !v)}
+              className="w-full flex items-center justify-between gap-2 rounded-xl border border-border bg-background px-3 py-2.5 text-left text-sm font-medium text-[#000000] dark:text-white hover:bg-secondary/40 transition-colors"
+            >
+              <span className="truncate min-w-0">{brandButtonLabel}</span>
+              <ChevronDown className={cn("size-4 shrink-0 text-muted-foreground", brandMenuOpen && "rotate-180")} />
+            </button>
+            {brandMenuOpen && (
+              <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-52 overflow-y-auto rounded-xl border border-border bg-card py-1 shadow-lg">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBrandProjectId(null);
+                    setBrandMenuOpen(false);
+                  }}
+                  className={cn(
+                    "w-full px-3 py-2 text-left text-xs font-medium hover:bg-secondary/60",
+                    brandProjectId == null && "bg-secondary/40"
+                  )}
+                >
+                  All brands
+                </button>
+                {projects.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => {
+                      setBrandProjectId(p.id);
+                      setBrandMenuOpen(false);
+                    }}
+                    className={cn(
+                      "w-full px-3 py-2 text-left text-xs font-medium hover:bg-secondary/60 truncate",
+                      brandProjectId === p.id && "bg-secondary/40"
+                    )}
+                  >
+                    {p.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <LayoutGrid className="size-3.5 shrink-0 text-[#000000] dark:text-white" />
+              <span className="text-xs font-normal text-[#000000] dark:text-white truncate">Filters</span>
             </div>
             <button
               type="button"
               onClick={handleRefresh}
               disabled={loading}
-              className="size-8 flex items-center justify-center rounded-lg text-[#000000] hover:bg-secondary/60 hover:text-foreground transition-colors disabled:opacity-50 disabled:cursor-default"
+              className="size-8 shrink-0 flex items-center justify-center rounded-lg text-[#000000] hover:bg-secondary/60 hover:text-foreground transition-colors disabled:opacity-50 disabled:cursor-default"
               title="Refresh & reset filters"
             >
               <RotateCw className={cn("size-4", loading && "animate-spin")} />

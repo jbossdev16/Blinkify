@@ -222,6 +222,7 @@ router.get(
         videoGenerationId?: string;
         type: "image" | "video";
         url: string | null;
+        projectId: string;
         projectName: string;
         prompt: string | null;
         createdAt: string;
@@ -240,6 +241,7 @@ router.get(
             generationId: row.generation_id,
             type: "image",
             url,
+            projectId: gen?.project_id ?? "",
             projectName,
             prompt: gen?.prompt ?? null,
             createdAt: row.created_at,
@@ -259,6 +261,7 @@ router.get(
             videoGenerationId: row.video_generation_id,
             type: "video",
             url,
+            projectId: vid?.project_id ?? "",
             projectName,
             prompt: vid?.prompt ?? null,
             createdAt: row.created_at,

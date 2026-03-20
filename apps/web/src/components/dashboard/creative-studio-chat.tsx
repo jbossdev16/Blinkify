@@ -35,6 +35,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { renderContentWithBold } from "@/lib/render-content-with-bold";
 import { getPlanFeatures, imageCreditCost, emailCreditCost, videoCreditCost } from "@/lib/constants";
 import { UpgradeModal } from "@/components/ui/upgrade-modal";
+import { DotGridBg } from "@/components/ui/dot-grid-bg";
 import { toast } from "sonner";
 import { isEmailTemplateId, type EmailTemplateId } from "@/lib/email-templates";
 import { buildStandaloneMarketingEmailHtml } from "@/lib/standalone-email-html";
@@ -1124,6 +1125,22 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
             })
             .catch(() => {});
         }
+      } else {
+        setFullCampaignGeneration({
+          status: "idle",
+          steps: [],
+          creditsUsed: 0,
+          brandName: "",
+          campaignGoal: null,
+          videoCountdownSeconds: null,
+          imageStyleChosen: null,
+        });
+        setFullCampaignResults(null);
+        setFullCampaignSwipeSlide(0);
+        setCampaignResultsByMsgIndex({});
+        setSelectedCampaignMsgIndex(null);
+        setCurrentCampaignMsgIndex(null);
+        fullCampaignLastUserMsgIndexRef.current = null;
       }
 
       setHydrated(true);
@@ -3433,7 +3450,6 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
 
   /** Chat column width: 50% wider than opened sidebar (256 * 1.5 = 384) */
   const CHAT_WIDTH_PX = 384;
-  const fullCampaignComplete = fullCampaignGeneration.status === "complete";
   const slideLabels = ["Posts", "Video", "Email"] as const;
 
   const { showFullCampaignLeft, standalonePreview } = useMemo(() => {
@@ -3530,7 +3546,11 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
     return { showFullCampaignLeft: false as const, standalonePreview: null as Standalone };
   }, [messages, fullCampaignGeneration.status, fullCampaignResults]);
 
-  const resultsPanelSegmentBar = fullCampaignGeneration.status === "generating" ? (
+  const fullCampaignUsesTabs =
+    fullCampaignGeneration.status === "generating" ||
+    fullCampaignGeneration.status === "complete";
+
+  const resultsPanelSegmentBar = fullCampaignUsesTabs ? (
     <div className="shrink-0 border-b border-border bg-[#ffffff] dark:bg-background flex items-center gap-2 px-3 h-10 w-full text-sm font-medium text-foreground">
       {slideLabels.map((label, idx) => (
         <button
@@ -3585,6 +3605,14 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
                     }
                     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
                     saveCreativeStudioChatToSupabase(workspaceId, projectId, stateRef.current);
+                    try {
+                      localStorage.setItem(
+                        `blinkify:creativeStudio:lastProjectId:${workspaceId}`,
+                        p.id
+                      );
+                    } catch {
+                      /* ignore */
+                    }
                     setHydrated(false);
                     setMessages([]);
                     setPrompt("");
@@ -3597,6 +3625,21 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
                     setLikedSnippets([]);
                     setDislikedSnippets([]);
                     setSelectedEmailTemplateId(null);
+                    setFullCampaignGeneration({
+                      status: "idle",
+                      steps: [],
+                      creditsUsed: 0,
+                      brandName: "",
+                      campaignGoal: null,
+                      videoCountdownSeconds: null,
+                      imageStyleChosen: null,
+                    });
+                    setFullCampaignResults(null);
+                    setFullCampaignSwipeSlide(0);
+                    setCampaignResultsByMsgIndex({});
+                    setSelectedCampaignMsgIndex(null);
+                    setCurrentCampaignMsgIndex(null);
+                    fullCampaignLastUserMsgIndexRef.current = null;
                     setActiveProject(p);
                     setBrandPickerOpen(false);
                   }}
@@ -3893,12 +3936,13 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
       {/* Results panel (middle): always present when has messages so chat stays fixed on the right */}
       <div
         ref={fullCampaignResultsRef}
-        className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden bg-[#fafafa] dark:bg-secondary/20"
+        className="relative flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden bg-[#fafafa] dark:bg-secondary/20"
       >
+        <DotGridBg position="absolute" />
         {showFullCampaignLeft ? (
           <>
           {resultsPanelSegmentBar}
-          {fullCampaignGeneration.status === "generating" ? (
+          {fullCampaignUsesTabs ? (
           <div className={cn("flex-1 min-h-0 flex items-center justify-center overflow-hidden", fullCampaignSwipeSlide === 0 ? "p-2 overflow-y-auto" : "p-10")}>
           <div className={cn("w-full min-w-0", fullCampaignSwipeSlide === 0 ? "min-h-full flex flex-col justify-start" : "h-full flex flex-col items-center justify-center gap-6")}>
             {/* Posts — 3 columns: 4:5 feed above 9:16 story per column; 5px gap, scale to fit */}
@@ -4358,7 +4402,7 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
           </div>
         ) : (
           <div className="flex-1 min-h-0 flex items-center justify-center p-10 text-sm text-muted-foreground text-center px-6">
-            Results will appear here when generation is complete.
+            Results will show here.
           </div>
         )}
       </div>

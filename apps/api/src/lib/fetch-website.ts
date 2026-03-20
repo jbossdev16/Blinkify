@@ -57,8 +57,10 @@ export interface WebsiteExtract {
   description: string;
   ogDescription: string;
   ogImage: string;
-  /** Best logo URL for brand: og:image, then apple-touch-icon/icon, then /favicon.ico */
+  /** Best logo URL for brand (prefers raster so uploads/API accept it). */
   suggestedLogoUrl: string;
+  /** First non-SVG candidate for storage and vision APIs; empty if only SVG/data URLs exist. */
+  suggestedRasterLogoUrl: string;
   /** URL best suited for color extraction (actual logo): apple-touch-icon, then icon, then favicon. Prefer over og:image so colors come from the logo, not a social preview. */
   logoUrlForColors: string;
   themeColor: string;
@@ -74,6 +76,17 @@ export interface WebsiteExtract {
   aboutSnippet?: string;
   isShopify?: boolean;
   shopifyProducts?: string;
+  socialLinks?: {
+    instagram?: string;
+    tiktok?: string;
+    facebook?: string;
+    x?: string;
+    linkedin?: string;
+    pinterest?: string;
+    youtube?: string;
+    contact_email?: string;
+    address?: string;
+  };
 }
 
 /**
@@ -84,6 +97,102 @@ const SECONDARY_PAGE_TIMEOUT_MS = 5_000;
 const SHOPIFY_PRODUCTS_TIMEOUT_MS = 5_000;
 const ABOUT_SNIPPET_MAX_CHARS = 2000;
 const SHOPIFY_PRODUCTS_MAX_CHARS = 1500;
+
+function isLikelySvgUrl(imageUrl: string): boolean {
+  if (!imageUrl) return false;
+  const lower = imageUrl.split("?")[0].toLowerCase();
+  if (lower.endsWith(".svg")) return true;
+  if (lower.startsWith("data:image/svg")) return true;
+  return false;
+}
+
+function cleanTitleForBrandName(rawTitle: string): string {
+  const t = rawTitle.trim();
+  if (!t) return "";
+  const parts = t.split(/\s*[|\u2013\u2014]\s*/).map((s) => s.trim());
+  const first = parts[0] || t;
+  return first.length > 80 ? first.slice(0, 80).trim() : first;
+}
+
+function normalizeLdType(t: unknown): string[] {
+  if (typeof t === "string") return [t];
+  if (Array.isArray(t)) return t.filter((x): x is string => typeof x === "string");
+  return [];
+}
+
+function collectLdNames(node: unknown, names: string[]): void {
+  if (!node || typeof node !== "object") return;
+  const o = node as Record<string, unknown>;
+  if (Array.isArray(o["@graph"])) {
+    for (const g of o["@graph"]) collectLdNames(g, names);
+  }
+  const types = normalizeLdType(o["@type"]);
+  const isBrandish = types.some((type) =>
+    /Organization|Corporation|Brand|WebSite|LocalBusiness|SoftwareApplication|ProfessionalService|OnlineStore|Restaurant/i.test(
+      type
+    )
+  );
+  if (isBrandish && typeof o.name === "string") {
+    const n = o.name.trim();
+    if (n && n.length <= 120 && !/^https?:\/\//i.test(n)) names.push(n);
+  }
+  if (typeof o.alternateName === "string") {
+    const n = o.alternateName.trim();
+    if (n && n.length <= 120 && !/^https?:\/\//i.test(n)) names.push(n);
+  }
+  const pub = o.publisher;
+  if (pub && typeof pub === "object") collectLdNames(pub, names);
+  const parent = o.parentOrganization;
+  if (parent && typeof parent === "object") collectLdNames(parent, names);
+}
+
+function extractJsonLdBrandNames($: cheerio.CheerioAPI): string[] {
+  const names: string[] = [];
+  $('script[type="application/ld+json"]').each((_, el) => {
+    try {
+      const raw = $(el).html();
+      if (!raw?.trim()) return;
+      const data = JSON.parse(raw.trim()) as unknown;
+      const items = Array.isArray(data) ? data : [data];
+      for (const item of items) collectLdNames(item, names);
+    } catch {
+      // ignore invalid JSON-LD
+    }
+  });
+  return [...new Set(names)];
+}
+
+function hostnameBrandLabel(hostname: string): string {
+  const base = hostname.replace(/^www\./i, "").split(".")[0] ?? "";
+  if (!base) return "";
+  return base.charAt(0).toUpperCase() + base.slice(1).toLowerCase();
+}
+
+function pickBestSiteName(opts: {
+  jsonLdNames: string[];
+  applicationName: string;
+  ogSiteName: string;
+  ogTitle: string;
+  twitterTitle: string;
+  title: string;
+  hostname: string;
+}): string {
+  const { jsonLdNames, applicationName, ogSiteName, ogTitle, twitterTitle, title, hostname } = opts;
+  const clean = (s: string) => s.trim();
+  for (const n of jsonLdNames) {
+    if (n && n.length <= 80) return n.slice(0, 80);
+  }
+  if (applicationName) return clean(applicationName).slice(0, 80);
+  if (ogSiteName) return clean(ogSiteName).slice(0, 80);
+  const ogClean = cleanTitleForBrandName(ogTitle);
+  if (ogClean) return ogClean;
+  if (twitterTitle) return clean(twitterTitle).slice(0, 80);
+  const titleClean = cleanTitleForBrandName(title);
+  if (titleClean) return titleClean;
+  const fromHost = hostnameBrandLabel(hostname);
+  if (fromHost) return fromHost;
+  return clean(title).slice(0, 80) || "Brand";
+}
 
 export async function fetchAndParseWebsite(url: string): Promise<WebsiteExtract> {
   const normalizedUrl = (() => {
@@ -165,18 +274,36 @@ export async function fetchAndParseWebsite(url: string): Promise<WebsiteExtract>
     const getMeta = (selector: string): string =>
       $(selector).attr("content")?.trim() ?? "";
     const title = $("title").first().text().trim();
+    let hostname = "";
+    try {
+      hostname = new URL(normalizedUrl).hostname;
+    } catch {
+      hostname = "";
+    }
     const description =
       getMeta('meta[name="description"]') ||
       getMeta('meta[property="og:description"]');
     const ogImage =
       getMeta('meta[property="og:image"]') ||
       getMeta('meta[name="twitter:image"]');
-    const appleTouchIcon = $('link[rel="apple-touch-icon"]').attr("href")?.trim();
-    const icon = $('link[rel="icon"]').attr("href")?.trim();
     const faviconFallback = resolveUrl("/favicon.ico", url);
     const ogResolved = resolveUrl(ogImage, url);
-    const appleResolved = appleTouchIcon ? resolveUrl(appleTouchIcon, url) : "";
-    const iconResolved = icon ? resolveUrl(icon, url) : "";
+
+    const appleUrls: string[] = [];
+    $('link[rel="apple-touch-icon"], link[rel="apple-touch-icon-precomposed"]').each((_, el) => {
+      const href = $(el).attr("href")?.trim();
+      if (href) appleUrls.push(resolveUrl(href, url));
+    });
+    const appleResolved =
+      appleUrls.find((u) => u && !isLikelySvgUrl(u)) || appleUrls[0] || "";
+
+    const iconUrls: string[] = [];
+    $('link[rel="icon"], link[rel="shortcut icon"]').each((_, el) => {
+      const href = $(el).attr("href")?.trim();
+      if (href) iconUrls.push(resolveUrl(href, url));
+    });
+    const iconResolved =
+      iconUrls.find((u) => u && !isLikelySvgUrl(u)) || iconUrls[0] || "";
 
     let pageLogoUrl = "";
     $("img").each((_, el) => {
@@ -203,25 +330,43 @@ export async function fetchAndParseWebsite(url: string): Promise<WebsiteExtract>
       if (first) pageLogoUrl = resolveUrl(first, url);
     }
 
+    const rasterPriority = [appleResolved, iconResolved, faviconFallback, ogResolved, pageLogoUrl].filter(
+      Boolean
+    ) as string[];
+    const suggestedRasterLogoUrl = rasterPriority.find((u) => !isLikelySvgUrl(u)) || "";
+
+    const displayOrder = [pageLogoUrl, ogResolved, appleResolved, iconResolved, faviconFallback].filter(
+      Boolean
+    ) as string[];
     const suggestedLogoUrl =
-      pageLogoUrl ||
-      ogResolved ||
-      appleResolved ||
-      iconResolved ||
-      faviconFallback;
+      suggestedRasterLogoUrl ||
+      displayOrder.find((u) => !isLikelySvgUrl(u)) ||
+      displayOrder[0] ||
+      "";
+
     const logoUrlForColors =
       appleResolved ||
       iconResolved ||
       faviconFallback ||
-      pageLogoUrl ||
+      (!isLikelySvgUrl(pageLogoUrl) ? pageLogoUrl : "") ||
       ogResolved;
     const rawTheme =
       getMeta('meta[name="theme-color"]') ||
       getMeta('meta[name="msapplication-TileColor"]');
     const themeColor = (rawTheme ? normalizeHexTo6(rawTheme) ?? rawTheme : "") as string;
-    const siteName =
-      getMeta('meta[property="og:site_name"]') ||
-      title;
+    const applicationName = getMeta('meta[name="application-name"]');
+    const ogSiteName = getMeta('meta[property="og:site_name"]');
+    const ogTitle = getMeta('meta[property="og:title"]');
+    const twitterTitle = getMeta('meta[name="twitter:title"]');
+    const siteName = pickBestSiteName({
+      jsonLdNames: extractJsonLdBrandNames($),
+      applicationName,
+      ogSiteName,
+      ogTitle,
+      twitterTitle,
+      title,
+      hostname,
+    });
 
     let bodySnippet = "";
     const main =
@@ -289,6 +434,21 @@ export async function fetchAndParseWebsite(url: string): Promise<WebsiteExtract>
       }
     }
 
+    function mergeSocialLinks(
+      a: NonNullable<WebsiteExtract["socialLinks"]> | undefined,
+      b: NonNullable<WebsiteExtract["socialLinks"]> | undefined
+    ): NonNullable<WebsiteExtract["socialLinks"]> | undefined {
+      if (!a && !b) return undefined;
+      const out: NonNullable<WebsiteExtract["socialLinks"]> = { ...(a ?? {}) };
+      for (const [k, v] of Object.entries(b ?? {})) {
+        if (!v) continue;
+        const key = k as keyof NonNullable<WebsiteExtract["socialLinks"]>;
+        if (!out[key]) out[key] = v;
+      }
+      return out;
+    }
+
+    let socialLinks = extractSocialLinks($, normalizedUrl);
     let aboutSnippet: string | undefined;
     const secondaryPaths = [
       "/about",
@@ -319,6 +479,7 @@ export async function fetchAndParseWebsite(url: string): Promise<WebsiteExtract>
         if (!secCt.toLowerCase().includes("text/html")) continue;
         const secHtml = await secRes.text();
         const $sec = cheerio.load(secHtml);
+        socialLinks = mergeSocialLinks(socialLinks, extractSocialLinks($sec, secUrl));
         const secMain =
           $sec("main").first().text() ||
           $sec("article").first().text() ||
@@ -342,6 +503,7 @@ export async function fetchAndParseWebsite(url: string): Promise<WebsiteExtract>
       ogDescription: getMeta('meta[property="og:description"]'),
       ogImage: ogResolved,
       suggestedLogoUrl: suggestedLogoUrl || ogResolved,
+      suggestedRasterLogoUrl: suggestedRasterLogoUrl || (suggestedLogoUrl && !isLikelySvgUrl(suggestedLogoUrl) ? suggestedLogoUrl : ""),
       logoUrlForColors: logoUrlForColors || suggestedLogoUrl || ogResolved,
       themeColor,
       siteName,
@@ -352,10 +514,66 @@ export async function fetchAndParseWebsite(url: string): Promise<WebsiteExtract>
       aboutSnippet: aboutSnippet || undefined,
       isShopify: isShopify || undefined,
       shopifyProducts: shopifyProducts || undefined,
+      socialLinks: socialLinks || undefined,
     };
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function normalizeSocialUrl(href: string, base: string): string | null {
+  if (!href) return null;
+  const raw = href.trim();
+  if (!raw || raw.startsWith("#") || raw.startsWith("javascript:")) return null;
+  if (raw.startsWith("mailto:")) return raw;
+  const resolved = resolveUrl(raw, base);
+  if (!/^https?:\/\//i.test(resolved)) return null;
+  return resolved;
+}
+
+function extractSocialLinks(
+  $: cheerio.CheerioAPI,
+  base: string
+): NonNullable<WebsiteExtract["socialLinks"]> | undefined {
+  const out: NonNullable<WebsiteExtract["socialLinks"]> = {};
+  const candidates: string[] = [];
+  $("a[href]").each((_, el) => {
+    const href = $(el).attr("href");
+    if (href) candidates.push(href);
+  });
+  for (const href of candidates) {
+    const normalized = normalizeSocialUrl(href, base);
+    if (!normalized) continue;
+    const lower = normalized.toLowerCase();
+    if (!out.instagram && /instagram\.com\//.test(lower)) out.instagram = normalized;
+    else if (!out.tiktok && /tiktok\.com\//.test(lower)) out.tiktok = normalized;
+    else if (!out.facebook && /facebook\.com\//.test(lower)) out.facebook = normalized;
+    else if (!out.x && (/(^https?:\/\/x\.com\/)/.test(lower) || /twitter\.com\//.test(lower))) out.x = normalized;
+    else if (!out.linkedin && /linkedin\.com\//.test(lower)) out.linkedin = normalized;
+    else if (!out.pinterest && /pinterest\./.test(lower)) out.pinterest = normalized;
+    else if (!out.youtube && /(youtube\.com\/|youtu\.be\/)/.test(lower)) out.youtube = normalized;
+    else if (!out.contact_email && lower.startsWith("mailto:")) {
+      const email = normalized.replace(/^mailto:/i, "").split("?")[0]?.trim();
+      if (email) out.contact_email = email;
+    }
+  }
+
+  if (!out.contact_email) {
+    const emailText = $("a[href^='mailto:']").first().attr("href") ?? "";
+    const email = emailText.replace(/^mailto:/i, "").split("?")[0]?.trim();
+    if (email) out.contact_email = email;
+  }
+
+  const addressCandidate =
+    $("address").first().text().trim() ||
+    $("[itemprop='address']").first().text().trim() ||
+    $("[class*='address' i], [id*='address' i]").first().text().trim();
+  if (addressCandidate) {
+    const collapsed = addressCandidate.replace(/\s+/g, " ").trim().slice(0, 240);
+    if (collapsed) out.address = collapsed;
+  }
+
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 function resolveUrl(href: string, base: string): string {

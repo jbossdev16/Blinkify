@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { getWorkspaces } from "@/lib/api";
 import { NoProjectEmptyState } from "@/components/dashboard/no-project-empty-state";
 import { AssetCollectionView } from "@/components/dashboard/asset-collection-view";
+import { DotGridBg } from "@/components/ui/dot-grid-bg";
 
 export const dynamic = "force-dynamic";
 
@@ -27,8 +28,13 @@ export default async function AssetCollectionPage() {
   }
 
   return (
-    <Suspense fallback={<div className="flex items-center justify-center min-h-[50vh]">Loading…</div>}>
-      <AssetCollectionView workspaceId={workspace.id} />
-    </Suspense>
+    <div className="relative min-h-full">
+      <DotGridBg />
+      <div className="relative z-10 min-h-full">
+        <Suspense fallback={<div className="flex items-center justify-center min-h-[50vh]">Loading…</div>}>
+          <AssetCollectionView workspaceId={workspace.id} />
+        </Suspense>
+      </div>
+    </div>
   );
 }

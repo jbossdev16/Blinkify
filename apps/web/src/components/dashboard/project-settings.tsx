@@ -353,7 +353,12 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
   const [applyingBrand, setApplyingBrand] = useState(false);
   /** After save we set state from the API response. Skip syncing from project for a short window so router.refresh() / cached server data doesn't overwrite with stale brand_colors. */
   const lastSaveAtRef = useRef<number>(0);
-  const SAVE_SYNC_GRACE_MS = 3000;
+  const SAVE_SYNC_GRACE_MS = 10_000;
+  /** Ignore project props older than our last successful save (stale RSC/cache) so website_url / social_links are not reverted. */
+  const staleProjectGuardRef = useRef<{ projectId: string; minUpdatedAtMs: number } | null>(null);
+  /** Apply Brand set a name that is not saved yet — don't let project prop sync revert it to "Brand 1" etc. */
+  const pendingImportedBrandNameRef = useRef<string | null>(null);
+  const lastProjectIdForSyncRef = useRef(project.id);
 
   // Sync local state when project prop changes (e.g. initial load or navigation).
   // Skip syncing for a short time after save so we don't revert to stale project from refresh.
@@ -361,8 +366,29 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
     if (lastSaveAtRef.current && Date.now() - lastSaveAtRef.current < SAVE_SYNC_GRACE_MS) {
       return;
     }
+    if (project.id !== lastProjectIdForSyncRef.current) {
+      lastProjectIdForSyncRef.current = project.id;
+      pendingImportedBrandNameRef.current = null;
+      staleProjectGuardRef.current = null;
+    }
+    const guard = staleProjectGuardRef.current;
+    if (guard && guard.projectId === project.id && project.updated_at) {
+      const rowMs = new Date(project.updated_at).getTime();
+      if (!Number.isNaN(rowMs) && rowMs < guard.minUpdatedAtMs) {
+        return;
+      }
+      staleProjectGuardRef.current = null;
+    }
     setAppliedLogoUrl(null);
-    setName(project.name);
+    const pending = pendingImportedBrandNameRef.current;
+    if (pending !== null && project.name.trim() !== pending) {
+      // Keep local name until Save persists it (or user switches project, which cleared pending above).
+    } else {
+      setName(project.name);
+      if (pending !== null && project.name.trim() === pending) {
+        pendingImportedBrandNameRef.current = null;
+      }
+    }
     setDescription(project.description ?? "");
     setTargetAudience(project.target_audience ?? "");
     const c = project.brand_colors ?? [];
@@ -399,6 +425,8 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
     project.brand_guidelines,
     project.website_url,
     project.social_links,
+    project.id,
+    project.updated_at,
   ]);
 
   const brandColorsForSave = brandMode
@@ -444,10 +472,14 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
     try {
       if (brandMode && appliedLogoUrl && appliedLogoUrl.startsWith("http")) {
         try {
-          await setProjectLogoFromUrl(workspaceId, project.id, appliedLogoUrl);
-          setAppliedLogoUrl(null);
+          const logoRes = await setProjectLogoFromUrl(workspaceId, project.id, appliedLogoUrl);
+          if (logoRes.ok) {
+            setAppliedLogoUrl(null);
+          } else {
+            toast.error(`${logoRes.error} Other settings will still save.`);
+          }
         } catch {
-          toast.error("Logo could not be set from URL; other settings saved.");
+          toast.error("Could not save logo from URL. Saving your other brand settings.");
         }
       }
       const updatedProject = await updateProject(workspaceId, project.id, {
@@ -459,6 +491,7 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
         font_styles: Object.keys(fontStyles).length > 0 ? fontStyles : null,
         brand_guidelines: guidelinesForSave.trim() || null,
         website_url: websiteUrlTrimmed || null,
+        social_links: serializeSocialLinksForApi(socialLinks),
       });
       lastSaveAtRef.current = Date.now();
       setName(updatedProject.name);
@@ -487,6 +520,11 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
       setColorSlotGradients(Array.from({ length: COLOR_SLOT_COUNT }, (_, i) => slotGradients[i] ?? { angle: 90, colors: [] }));
       setWebsiteUrl(updatedProject.website_url ?? "");
       setSocialLinks(socialLinksFromProject(updatedProject.social_links));
+      pendingImportedBrandNameRef.current = null;
+      const savedAt = updatedProject.updated_at ? new Date(updatedProject.updated_at).getTime() : 0;
+      if (!Number.isNaN(savedAt) && savedAt > 0) {
+        staleProjectGuardRef.current = { projectId: project.id, minUpdatedAtMs: savedAt };
+      }
       toast.success("Settings saved.");
       router.refresh();
     } catch (err: unknown) {
@@ -622,16 +660,22 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
     }
     setError("");
     setApplyingBrand(true);
-    lastSaveAtRef.current = Date.now();
     try {
       const result = await analyzeWebsite(workspaceId, project.id, url);
       const suggestions = result.suggestions;
       const extract = result.extract ?? {};
-      if (
-        suggestions.brand_name &&
-        (!name || name.trim() === "" || name === "My Brand")
-      ) {
-        setName(suggestions.brand_name.slice(0, 100));
+      const fromSuggestion =
+        typeof suggestions.brand_name === "string" ? suggestions.brand_name.trim() : "";
+      const fromExtract =
+        typeof extract.siteName === "string" ? extract.siteName.trim() : "";
+      const importedName = (fromSuggestion || fromExtract).slice(0, 100);
+      if (importedName) {
+        setName(importedName);
+        if (importedName !== (project.name ?? "").trim()) {
+          pendingImportedBrandNameRef.current = importedName;
+        } else {
+          pendingImportedBrandNameRef.current = null;
+        }
       }
       const descriptionText = suggestions.description?.trim() || "Brand project for ad creatives.";
       const guidelinesText = suggestions.brand_guidelines?.trim() || "Professional tone. Clear visuals.";
@@ -640,6 +684,12 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
       if (typeof suggestions.brand_tone === "string" && suggestions.brand_tone.trim()) setBrandTone(suggestions.brand_tone.trim());
       if (typeof suggestions.brand_industry === "string" && suggestions.brand_industry.trim()) setBrandIndustry(suggestions.brand_industry.trim());
       if (typeof suggestions.target_audience === "string" && suggestions.target_audience.trim()) setTargetAudience(suggestions.target_audience.trim().slice(0, 500));
+      if (suggestions.social_links && typeof suggestions.social_links === "object") {
+        setSocialLinks((prev) => ({
+          ...prev,
+          ...socialLinksFromProject(suggestions.social_links),
+        }));
+      }
       const primaryFont = suggestions.primary_font ?? extract.primaryFont;
       if (typeof primaryFont === "string" && primaryFont.trim()) {
         setBrandFonts([{ name: primaryFont.trim(), type: "preset" }]);
@@ -650,7 +700,10 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
       setBrandColors(padded);
       setColorSlotModes(Array.from({ length: COLOR_SLOT_COUNT }, () => "solid"));
       setColorSlotGradients(Array.from({ length: COLOR_SLOT_COUNT }, (_, i) => ({ angle: 90, colors: padded[i] ? [padded[i]] : [] })));
-      const extractedLogoUrl = result.extract?.suggestedLogoUrl?.trim();
+      const extractedLogoUrl =
+        (result.extract?.suggestedRasterLogoUrl?.trim() ||
+          result.extract?.suggestedLogoUrl?.trim()) ??
+        "";
       if (extractedLogoUrl && extractedLogoUrl.startsWith("http")) {
         setAppliedLogoUrl(extractedLogoUrl);
       }
@@ -680,13 +733,32 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
 
           {/* Website link + Apply Brand */}
           <div className="w-full max-w-6xl mx-auto mb-8 rounded-2xl border border-border bg-card p-6 sm:p-8 shadow-sm">
-            <div className="flex items-center gap-2 mb-1">
-              <Link className="size-4 text-foreground shrink-0" />
-              <h3 className="text-base font-semibold text-foreground">Website link</h3>
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6 mb-4">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <Link className="size-4 text-foreground shrink-0" />
+                  <h3 className="text-base font-semibold text-foreground">Website link</h3>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Your store or brand URL. Used for email marketing: CTA buttons and clickable images will link to this URL. Click Apply Brand to pull description, guidelines, and colors from this URL into the options below.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={saving || !hasChanges}
+                className="h-10 px-6 shrink-0 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 disabled:pointer-events-none sm:self-start"
+              >
+                {saving ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin inline-block mr-2 align-middle" />
+                    Saving…
+                  </>
+                ) : (
+                  "Save Changes"
+                )}
+              </button>
             </div>
-            <p className="text-sm text-muted-foreground mb-4">
-              Your store or brand URL. Used for email marketing: CTA buttons and clickable images will link to this URL. Click Apply Brand to pull description, guidelines, and colors from this URL into the options below.
-            </p>
             <div className="flex flex-wrap items-center gap-3">
               <input
                 type="url"
@@ -1212,25 +1284,6 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
               </div>
             </BrandCard>
 
-          </div>
-          <div className="w-full max-w-6xl mx-auto mt-8 grid grid-cols-6 gap-6">
-            <div className="col-start-3 col-span-2 flex justify-center">
-              <button
-                type="button"
-                onClick={handleSave}
-                disabled={saving || !hasChanges}
-                className="h-10 px-6 w-full rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 disabled:pointer-events-none"
-              >
-                {saving ? (
-                  <>
-                    <Loader2 className="size-4 animate-spin inline-block mr-2 align-middle" />
-                    Saving…
-                  </>
-                ) : (
-                  "Save Changes"
-                )}
-              </button>
-            </div>
           </div>
         </div>
       ) : (

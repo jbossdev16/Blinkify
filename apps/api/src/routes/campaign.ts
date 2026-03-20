@@ -14,6 +14,12 @@ import { Router, Request, Response } from "express";
 import { requireAuth } from "../middleware/auth.js";
 import { ensureCurrentUser } from "../middleware/currentUser.js";
 import { supabase } from "../lib/supabase.js";
+import {
+  fetchExternalBrandLogoBuffer,
+  inferLogoMimeType,
+  isExternalBrandLogoRef,
+  urlFromExternalBrandLogoRef,
+} from "../lib/brand-logo-ref.js";
 import { GenerateVideosOperation } from "@google/genai";
 import {
   gemini,
@@ -334,6 +340,7 @@ async function fetchBrandLogoAsBase64(storagePath: string): Promise<{ data: stri
       jpeg: "image/jpeg",
       webp: "image/webp",
       gif: "image/gif",
+      svg: "image/svg+xml",
     };
     const mimeType = mimeMap[ext] ?? "image/png";
     return { data, mimeType };
@@ -456,7 +463,8 @@ async function pollVideoUntilDone(
 function assembleEmailHtml(
   htmlTemplate: string,
   imageUrls: string[],
-  brandWebsite: string
+  brandWebsite: string,
+  socialLinks?: CampaignParams["socialLinks"]
 ): { html: string; valid: boolean; errors: string[] } {
   const errors: string[] = [];
 
@@ -470,6 +478,45 @@ function assembleEmailHtml(
     .replace(/\{\{EMAIL_IMAGE_3\}\}/g, imageUrls[2] || "")
     .replace(/\{\{CTA_URL\}\}/g, brandWebsite || "#")
     .replace(/\{\{UNSUBSCRIBE_URL\}\}/g, unsubscribeUrl);
+
+  // Reliability fallback: if user configured social links but model omitted them, inject a compact social+contact block.
+  const socialEntries = Object.entries(socialLinks ?? {}).filter(
+    ([k, v]) =>
+      typeof v === "string" &&
+      v.trim().length > 0 &&
+      !["contact_email", "address"].includes(k)
+  ) as Array<[string, string]>;
+  const hasAnyConfiguredSocial = socialEntries.length > 0;
+  const hasAnyConfiguredUrlInHtml =
+    hasAnyConfiguredSocial &&
+    socialEntries.some(([, v]) => html.toLowerCase().includes(v.trim().toLowerCase()));
+
+  if (hasAnyConfiguredSocial && !hasAnyConfiguredUrlInHtml) {
+    const safe = (s: string) =>
+      s
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    const linkRow = socialEntries
+      .map(([k, v]) => {
+        const label = k === "x" ? "X" : k.charAt(0).toUpperCase() + k.slice(1);
+        return `<a href="${safe(v.trim())}" style="display:inline-block;margin:0 8px;color:#666666;text-decoration:underline;font-size:12px;">${safe(label)}</a>`;
+      })
+      .join("");
+    const contactEmail = typeof socialLinks?.contact_email === "string" ? socialLinks.contact_email.trim() : "";
+    const address = typeof socialLinks?.address === "string" ? socialLinks.address.trim() : "";
+    const contactLine = contactEmail
+      ? `<p style="margin:8px 0 0;font-size:12px;color:#888888;"><a href="mailto:${safe(contactEmail)}" style="color:#888888;text-decoration:underline;">${safe(contactEmail)}</a></p>`
+      : "";
+    const addressLine = address
+      ? `<p style="margin:6px 0 0;font-size:11px;color:#999999;font-style:italic;">${safe(address)}</p>`
+      : "";
+    const injected = `<div style="padding:20px 24px;text-align:center;background:#ffffff;"><p style="margin:0 0 10px;font-size:12px;color:#999999;text-transform:uppercase;letter-spacing:1px;">Stay Connected</p><div>${linkRow}</div>${contactLine}${addressLine}</div>`;
+    if (/<\/body>/i.test(html)) html = html.replace(/<\/body>/i, `${injected}</body>`);
+    else html += injected;
+    errors.push("Model omitted configured social links; injected fallback social block.");
+  }
 
   const remainingPlaceholders = html.match(/\{\{[A-Z_]+\}\}/g);
   if (remainingPlaceholders) {
@@ -566,8 +613,9 @@ router.get(
     const email2 = claudeOutput.email_2 as Record<string, string> | undefined;
     const templates = [email1?.html_template, email2?.html_template].filter((t): t is string => typeof t === "string" && t.length > 0);
     if (templates.length >= 1 && metaImageUrls.length > 0 && storyImageUrls.length > 0) {
-      const { data: project } = await supabase.from("projects").select("website_url").eq("id", projectId).single();
+      const { data: project } = await supabase.from("projects").select("website_url, social_links").eq("id", projectId).single();
       const brandWebsite = (project?.website_url as string | null)?.trim() || "#";
+      const socialLinks = (project?.social_links as CampaignParams["socialLinks"] | null) ?? undefined;
       const successFeed = metaImageUrls.filter(Boolean);
       const successStory = storyImageUrls.filter(Boolean);
       const emailImageCombos: [string, string, string][] = [
@@ -577,7 +625,7 @@ router.get(
       const reassembled: string[] = [];
       for (let i = 0; i < templates.length; i++) {
         const combo = emailImageCombos[Math.min(i, emailImageCombos.length - 1)]!;
-        const { html } = assembleEmailHtml(templates[i]!, combo, brandWebsite);
+        const { html } = assembleEmailHtml(templates[i]!, combo, brandWebsite, socialLinks);
         reassembled.push(html);
       }
       if (reassembled.length > 0) {
@@ -791,10 +839,14 @@ router.post(
 
     let brandLogoUrl: string | undefined;
     if (project.brand_logo && typeof project.brand_logo === "string") {
-      const { data: logoSigned } = await supabase.storage
-        .from(PROJECT_ASSETS_BUCKET)
-        .createSignedUrl(project.brand_logo, 604800);
-      brandLogoUrl = logoSigned?.signedUrl ?? undefined;
+      if (isExternalBrandLogoRef(project.brand_logo)) {
+        brandLogoUrl = urlFromExternalBrandLogoRef(project.brand_logo) ?? undefined;
+      } else {
+        const { data: logoSigned } = await supabase.storage
+          .from(PROJECT_ASSETS_BUCKET)
+          .createSignedUrl(project.brand_logo, 604800);
+        brandLogoUrl = logoSigned?.signedUrl ?? undefined;
+      }
     }
 
     const rawSocial = project.social_links as Record<string, unknown> | null;
@@ -1293,7 +1345,7 @@ router.post(
             const htmlTemplate = variant.html_template;
             if (!htmlTemplate) throw new Error(`Claude did not return html_template for email_${i + 1}`);
             const combo = emailImageCombos[comboIndices[i]!]!;
-            const { html, valid, errors } = assembleEmailHtml(htmlTemplate, combo, brandWebsite);
+            const { html, valid, errors } = assembleEmailHtml(htmlTemplate, combo, brandWebsite, socialLinks);
             emailHtmls.push(html);
             emailCopies.push({
               subject_line: variant.subject_line,

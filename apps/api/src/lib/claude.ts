@@ -1162,10 +1162,12 @@ This may be any type of business — ecommerce store, restaurant, agency, SaaS, 
 function buildBrandAnalysisPrompt(extract: WebsiteExtract): string {
   const sections: string[] = [];
 
+  const nameSignal = (extract.siteName ?? "").trim() || (extract.title ?? "").trim() || "unknown";
   sections.push(
     "## WEBSITE DATA\n" +
       `URL: ${extract.url ?? "unknown"}\n` +
-      `Site name: ${extract.siteName ?? extract.title ?? "unknown"}\n` +
+      `Primary brand name (from JSON-LD + meta + title — use this as brand_name when it clearly identifies the business): ${nameSignal}\n` +
+      `Document <title> (may include tagline): ${(extract.title ?? "").trim() || "none"}\n` +
       `Meta description: ${extract.description ?? extract.ogDescription ?? "none"}\n` +
       (extract.themeColor ? `Brand color detected from meta: ${extract.themeColor}\n` : "") +
       (extract.ctaColor ? `CTA/button color detected from CSS: ${extract.ctaColor}\n` : "") +
@@ -1202,7 +1204,7 @@ function buildBrandAnalysisPrompt(extract: WebsiteExtract): string {
 Analyze this brand and return ONLY this exact JSON:
 
 {
-  "brand_name": "Official brand name, cleaned up from site title or name. Max 50 chars.",
+  "brand_name": "Official brand name. Prefer Primary brand name above when it matches the business; otherwise derive from the strongest on-page signal. Never use generic page titles like Home or Welcome. Max 50 chars.",
 
   "brand_description": "2-3 sentence brand description written as if for the brand's own About page. What they do, who they serve, what makes them different. Specific — not generic. Works for any business type. Max 300 chars.",
 
@@ -1231,6 +1233,16 @@ CRITICAL RULES:
   return sections.join("\n\n");
 }
 
+/** Claude returns 400 invalid_request when bytes are corrupt, oversized, wrong format, etc. */
+function claudeRejectedVisionInput(status: number, body: string): boolean {
+  if (status !== 400) return false;
+  const lower = body.toLowerCase();
+  if (lower.includes("could not process image")) return true;
+  if (lower.includes("image_too_large")) return true;
+  if (lower.includes("invalid_request_error") && lower.includes("image")) return true;
+  return false;
+}
+
 export async function analyzeBrandFromWebsite(
   extract: WebsiteExtract,
   logoBase64?: string,
@@ -1238,35 +1250,43 @@ export async function analyzeBrandFromWebsite(
 ): Promise<BrandAnalysisResult> {
   const promptText = buildBrandAnalysisPrompt(extract);
 
-  const userContent: ContentBlock[] = [];
+  const allowedVisionMimes = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
+  const safeLogoMime =
+    typeof logoMimeType === "string" && allowedVisionMimes.has(logoMimeType)
+      ? (logoMimeType as "image/png" | "image/jpeg" | "image/gif" | "image/webp")
+      : undefined;
+  const canSendImage = !!(logoBase64 && safeLogoMime);
 
-  if (logoBase64 && logoMimeType) {
-    userContent.push({
-      type: "image",
-      source: {
-        type: "base64",
-        media_type: logoMimeType as "image/png" | "image/jpeg" | "image/gif" | "image/webp",
-        data: logoBase64,
-      },
-    });
-    userContent.push({
-      type: "text",
-      text:
-        "The image above is this brand's logo. Use it to inform your analysis of their visual style, color palette, and brand tone.\n\n" +
-        promptText,
-    });
-  } else {
-    userContent.push({
-      type: "text",
-      text: promptText,
-    });
+  function buildUserContent(includeImage: boolean): ContentBlock[] {
+    const blocks: ContentBlock[] = [];
+    if (includeImage && logoBase64 && safeLogoMime) {
+      blocks.push({
+        type: "image",
+        source: {
+          type: "base64",
+          media_type: safeLogoMime,
+          data: logoBase64,
+        },
+      });
+      blocks.push({
+        type: "text",
+        text:
+          "The image above is this brand's logo. Use it to inform your analysis of their visual style, color palette, and brand tone.\n\n" +
+          promptText,
+      });
+    } else {
+      blocks.push({ type: "text", text: promptText });
+    }
+    return blocks;
   }
 
-  const MAX_ATTEMPTS = 3;
+  let useImage = canSendImage;
+  const MAX_ATTEMPTS = 5;
   let lastError: unknown;
 
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     try {
+      const userContent = buildUserContent(useImage);
       const response = await fetch(ANTHROPIC_API_URL, {
         method: "POST",
         headers: {
@@ -1284,6 +1304,13 @@ export async function analyzeBrandFromWebsite(
 
       if (!response.ok) {
         const body = await response.text();
+        if (claudeRejectedVisionInput(response.status, body) && useImage) {
+          console.warn(
+            "[ApplyBrand] Claude could not process logo image; retrying brand analysis without vision."
+          );
+          useImage = false;
+          continue;
+        }
         const err = new Error(`Claude API error ${response.status}: ${body.slice(0, 500)}`);
         (err as Error & { status?: number }).status = response.status;
         throw err;

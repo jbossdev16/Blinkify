@@ -12,6 +12,11 @@ import { fetchAndParseWebsite, buildCssColors } from "../lib/fetch-website.js";
 import { analyzeBrandFromWebsite, BrandAnalysisResult } from "../lib/claude.js";
 import type { WebsiteExtract } from "../lib/fetch-website.js";
 import { extractGeminiErrorMessage } from "../lib/gemini.js";
+import {
+  externalBrandLogoRefFromUrl,
+  isExternalBrandLogoRef,
+  urlFromExternalBrandLogoRef,
+} from "../lib/brand-logo-ref.js";
 
 const router = Router();
 
@@ -33,6 +38,33 @@ const upload = multer({
     else cb(new Error(`Unsupported file type: ${file.mimetype}`));
   },
 });
+
+/** Claude vision rejects or errors on huge payloads; stay under typical limits. */
+const LOGO_MAX_BYTES_FOR_CLAUDE = 1_800_000;
+
+const CLAUDE_VISION_MIMES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
+
+/** Detect raster format from magic bytes (Content-Type is often wrong for CDNs / favicons). */
+function sniffClaudeVisionMime(buf: ArrayBuffer): string | null {
+  const u = new Uint8Array(buf.byteLength > 64 ? buf.slice(0, 64) : buf);
+  if (u.length < 12) return null;
+  if (u[0] === 0x89 && u[1] === 0x50 && u[2] === 0x4e && u[3] === 0x47) return "image/png";
+  if (u[0] === 0xff && u[1] === 0xd8 && u[2] === 0xff) return "image/jpeg";
+  if (u[0] === 0x47 && u[1] === 0x49 && u[2] === 0x46 && u[3] === 0x38) return "image/gif";
+  if (
+    u[0] === 0x52 &&
+    u[1] === 0x49 &&
+    u[2] === 0x46 &&
+    u[3] === 0x46 &&
+    u[8] === 0x57 &&
+    u[9] === 0x45 &&
+    u[10] === 0x42 &&
+    u[11] === 0x50
+  ) {
+    return "image/webp";
+  }
+  return null;
+}
 
 const FONT_WEIGHTS = ["light", "normal", "medium", "semibold", "bold"] as const;
 const FONT_SIZES = ["small", "medium", "large"] as const;
@@ -483,7 +515,8 @@ router.put(
 
       if (result.error?.message?.includes("column") && Object.keys(brandUpdates).length > 0) {
         // Some brand columns may not exist yet — retry without optional ones
-        const { font_styles: _fs, website_url: _wu, ...brandWithoutOptional } = brandUpdates;
+        const { font_styles: _fs, website_url: _wu, social_links: _sl, ...brandWithoutOptional } =
+          brandUpdates;
         const fallbackUpdates =
           Object.keys(brandWithoutOptional).length > 0
             ? { ...updates, ...brandWithoutOptional }
@@ -682,15 +715,6 @@ router.post(
         res.status(400).json({ error: "Could not download image from URL" });
         return;
       }
-      const contentType = fetchRes.headers.get("content-type") ?? "";
-      if (!contentType.toLowerCase().startsWith("image/")) {
-        res.status(400).json({ error: "URL did not return an image" });
-        return;
-      }
-      if (contentType.toLowerCase().includes("svg")) {
-        res.status(400).json({ error: "SVG logos are not supported. Please use a PNG, JPEG, or WebP image." });
-        return;
-      }
       const buf = Buffer.from(await fetchRes.arrayBuffer());
       if (buf.length > LOGO_MAX_BYTES) {
         res.status(400).json({ error: "Image too large (max 5MB)" });
@@ -701,27 +725,50 @@ router.post(
         return;
       }
 
-      const ext = contentType.split("/")[1]?.replace(/[^a-z0-9]/i, "") || "png";
-      const path = `${workspaceId}/${projectId}/logo_${crypto.randomUUID()}.${ext}`;
+      const headerCt = (fetchRes.headers.get("content-type") ?? "").split(";")[0]!.trim().toLowerCase();
+      const headUtf8 = buf.subarray(0, Math.min(512, buf.length)).toString("utf8").trimStart();
+      const looksLikeSvg =
+        headUtf8.startsWith("<svg") ||
+        (headUtf8.startsWith("<?xml") && /<svg[\s>]/i.test(headUtf8)) ||
+        /^<!DOCTYPE\s+svg/i.test(headUtf8);
+      const urlLooksSvg = /\.svg(\?|$)/i.test(url.split("?")[0] ?? "");
+      const isSvg = headerCt.includes("svg") || urlLooksSvg || looksLikeSvg;
 
-      const { error: uploadErr } = await supabase.storage
-        .from(BUCKET)
-        .upload(path, buf, { contentType: contentType.split(";")[0].trim(), upsert: true });
-
-      if (uploadErr) {
-        console.error("Set logo from URL upload error:", uploadErr);
-        res.status(500).json({ error: "Failed to save logo" });
+      if (!headerCt.startsWith("image/") && !isSvg) {
+        res.status(400).json({ error: "URL did not return an image" });
         return;
+      }
+
+      let nextBrandLogo: string;
+      if (isSvg) {
+        // Supabase Storage often disallows image/svg+xml — store canonical URL instead.
+        nextBrandLogo = externalBrandLogoRefFromUrl(url);
+      } else {
+        const storageMime = headerCt || "image/png";
+        const ext = headerCt.split("/")[1]?.replace(/[^a-z0-9]/i, "") || "png";
+        const path = `${workspaceId}/${projectId}/logo_${crypto.randomUUID()}.${ext}`;
+        const { error: uploadErr } = await supabase.storage
+          .from(BUCKET)
+          .upload(path, buf, { contentType: storageMime, upsert: true });
+        if (uploadErr) {
+          console.warn(
+            "[set-logo-from-url] Storage upload failed; saving external logo URL reference instead:",
+            uploadErr
+          );
+          nextBrandLogo = externalBrandLogoRefFromUrl(url);
+        } else {
+          nextBrandLogo = path;
+        }
       }
 
       const { error: updateErr } = await supabase
         .from("projects")
-        .update({ brand_logo: path, updated_at: new Date().toISOString() })
+        .update({ brand_logo: nextBrandLogo, updated_at: new Date().toISOString() })
         .eq("id", projectId)
         .eq("workspace_id", workspaceId);
 
       if (updateErr) throw updateErr;
-      res.json({ brand_logo: path });
+      res.json({ brand_logo: nextBrandLogo });
     } catch (err: unknown) {
       if (err instanceof Error && err.name === "AbortError") {
         res.status(408).json({ error: "Request timed out" });
@@ -800,20 +847,55 @@ router.post(
       // Brand analysis uses Claude (our best model for brand/website understanding)
       let logoBase64: string | undefined;
       let logoMimeType: string | undefined;
-      if (extract.suggestedLogoUrl) {
+      const primaryVisionUrl =
+        (extract.suggestedRasterLogoUrl || "").trim() || extract.suggestedLogoUrl;
+      const visionCandidates = [
+        ...new Set(
+          [primaryVisionUrl, extract.ogImage].filter(
+            (u): u is string => typeof u === "string" && u.startsWith("http")
+          )
+        ),
+      ];
+      for (const tryUrl of visionCandidates) {
+        if (logoBase64) break;
         try {
-          const logoRes = await fetch(extract.suggestedLogoUrl, {
+          const logoRes = await fetch(tryUrl, {
             signal: AbortSignal.timeout(5000),
+            headers: {
+              "User-Agent": "Mozilla/5.0 (compatible; BlinkifyBrandBot/1.0)",
+            },
           });
-          if (logoRes.ok) {
-            const buffer = await logoRes.arrayBuffer();
+          if (!logoRes.ok) continue;
+          const buffer = await logoRes.arrayBuffer();
+          if (buffer.byteLength > LOGO_MAX_BYTES_FOR_CLAUDE) {
+            console.warn(
+              `[ApplyBrand] Logo too large for Claude vision (${buffer.byteLength} bytes); trying next candidate`
+            );
+            continue;
+          }
+          const sniffed = sniffClaudeVisionMime(buffer);
+          const ct = logoRes.headers.get("content-type") ?? "";
+          const headerMime = ct.startsWith("image/") ? ct.split(";")[0]!.trim() : "";
+          const mime =
+            sniffed ?? (CLAUDE_VISION_MIMES.has(headerMime) ? headerMime : null);
+          if (mime && CLAUDE_VISION_MIMES.has(mime)) {
             logoBase64 = Buffer.from(buffer).toString("base64");
-            const ct = logoRes.headers.get("content-type") ?? "image/png";
-            logoMimeType = ct.startsWith("image/") ? ct.split(";")[0]!.trim() : "image/png";
+            logoMimeType = mime;
+            if (sniffed && headerMime && sniffed !== headerMime) {
+              console.warn(
+                `[ApplyBrand] Logo Content-Type (${headerMime}) did not match bytes (${sniffed}); using sniffed mime for Claude`
+              );
+            }
+            break;
           }
         } catch {
-          console.warn("[ApplyBrand] Logo fetch failed, proceeding without vision");
+          // try next URL
         }
+      }
+      if (!logoBase64 && visionCandidates.length > 0) {
+        console.warn(
+          "[ApplyBrand] No raster image for AI vision (e.g. SVG-only logos). Analysis uses page text/meta; SVG can still be stored when you save."
+        );
       }
 
       const claudeResult = await analyzeBrandFromWebsite(extract, logoBase64, logoMimeType);
@@ -846,8 +928,17 @@ router.post(
       while (colorsPadded.length < 3) colorsPadded.push(defaults[colorsPadded.length] ?? "#000000");
       const finalColors = colorsPadded.slice(0, 3);
 
+      const extractedSiteName = (extract.siteName ?? "").trim();
+      const claudeBrand = (claudeResult.brand_name ?? "").trim();
+      const brandNameFromAnalysis =
+        !claudeBrand
+          ? extractedSiteName || "Brand"
+          : /^(home|welcome|official website|untitled)$/i.test(claudeBrand) && extractedSiteName
+            ? extractedSiteName
+            : claudeBrand;
+
       const suggestions = {
-        brand_name: claudeResult.brand_name,
+        brand_name: brandNameFromAnalysis.slice(0, 100),
         description: claudeResult.brand_description,
         brand_guidelines: claudeResult.brand_guidelines,
         brand_tone: claudeResult.brand_tone,
@@ -855,6 +946,7 @@ router.post(
         target_audience: (claudeResult.target_audience ?? "").slice(0, 200),
         primary_font: (claudeResult.primary_font || extract.primaryFont || "").trim(),
         suggestedColors: finalColors,
+        social_links: extract.socialLinks ?? {},
       };
 
       res.json({ extract, suggestions });
@@ -996,6 +1088,12 @@ router.get(
 
       if (error || !project?.brand_logo) {
         res.json({ url: null });
+        return;
+      }
+
+      if (isExternalBrandLogoRef(project.brand_logo)) {
+        const external = urlFromExternalBrandLogoRef(project.brand_logo);
+        res.json({ url: external });
         return;
       }
 

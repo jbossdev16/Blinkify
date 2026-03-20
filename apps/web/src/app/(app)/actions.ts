@@ -125,6 +125,7 @@ export interface AnalyzeWebsiteResult {
     description?: string;
     ogImage?: string;
     suggestedLogoUrl?: string;
+    suggestedRasterLogoUrl?: string;
     themeColor?: string;
     siteName?: string;
     bodySnippet?: string;
@@ -139,19 +140,40 @@ export interface AnalyzeWebsiteResult {
     brand_industry?: string;
     target_audience?: string;
     primary_font?: string;
+    social_links?: {
+      instagram?: string;
+      tiktok?: string;
+      facebook?: string;
+      x?: string;
+      linkedin?: string;
+      pinterest?: string;
+      youtube?: string;
+      contact_email?: string;
+      address?: string;
+    };
   };
 }
+
+/** Server action must not throw on expected API errors — Next would surface a 500 on POST. */
+export type SetProjectLogoFromUrlResult =
+  | { ok: true; brand_logo: string }
+  | { ok: false; error: string };
 
 export async function setProjectLogoFromUrl(
   workspaceId: string,
   projectId: string,
   url: string
-): Promise<{ brand_logo: string }> {
+): Promise<SetProjectLogoFromUrlResult> {
   const supabase = await createSupabaseServerClient();
   const {
     data: { session },
   } = await supabase.auth.getSession();
   if (!session?.access_token) throw new Error("Not authenticated");
+
+  const trimmed = url.trim();
+  if (trimmed.startsWith("data:image/svg")) {
+    return { ok: false, error: "Pasted SVG data URLs cannot be fetched server-side. Use an https:// link or upload a file." };
+  }
 
   const res = await fetch(
     `${API_URL}/workspaces/${workspaceId}/projects/${projectId}/set-logo-from-url`,
@@ -161,15 +183,24 @@ export async function setProjectLogoFromUrl(
         Authorization: `Bearer ${session.access_token}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ url: url.trim() }),
+      body: JSON.stringify({ url: trimmed }),
     }
   );
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error((data as { error?: string }).error ?? `Failed to set logo: ${res.status}`);
+  if (!res.ok) {
+    return {
+      ok: false,
+      error: (data as { error?: string }).error ?? `Failed to set logo (${res.status})`,
+    };
+  }
   revalidatePath("/creative-studio");
   revalidatePath("/brand");
   revalidatePath(`/projects/${projectId}`);
-  return data as { brand_logo: string };
+  const brand_logo = (data as { brand_logo?: string }).brand_logo;
+  if (typeof brand_logo !== "string" || !brand_logo) {
+    return { ok: false, error: "Invalid response from server" };
+  }
+  return { ok: true, brand_logo };
 }
 
 export async function analyzeWebsite(
