@@ -26,6 +26,8 @@ const nextConfig: NextConfig = {
       { source: "/invitations/:path*", destination: `${apiBackend}/invitations/:path*` },
       { source: "/admin/:path*", destination: `${apiBackend}/admin/:path*` },
       { source: "/waitlist/:path*", destination: `${apiBackend}/waitlist/:path*` },
+      { source: "/ad-styles", destination: `${apiBackend}/ad-styles` },
+      { source: "/ad-styles/:path*", destination: `${apiBackend}/ad-styles/:path*` },
     ];
   },
   images: {

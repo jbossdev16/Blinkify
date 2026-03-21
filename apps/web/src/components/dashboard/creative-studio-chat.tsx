@@ -31,6 +31,7 @@ import { cn } from "@/lib/utils";
 import { Spinner } from "@/components/ui/spinner";
 import type { Project } from "@/lib/api";
 import { apiClientFetch } from "@/lib/api-client";
+import { browserApiUrl } from "@/lib/browser-api-base";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { renderContentWithBold } from "@/lib/render-content-with-bold";
 import { getPlanFeatures, imageCreditCost, emailCreditCost, videoCreditCost } from "@/lib/constants";
@@ -218,6 +219,33 @@ interface StoredCreativeMessage {
   fullCampaignRequest?: boolean;
   /** User message image attachments (data URLs) so they persist across refresh */
   attachedImageUrls?: string[];
+}
+
+/** Keeps JSONB small — avoids timeouts on `creative_studio_chats.data` reads/writes. */
+const MAX_STORED_CREATIVE_MESSAGES = 100;
+/** Rough cap for base64 data URLs persisted per user message (~100KB). */
+const MAX_ATTACHED_DATA_URL_CHARS = 100_000;
+
+function clampAttachedImageUrlsForStorage(urls: string[] | undefined): string[] | undefined {
+  if (!urls?.length) return undefined;
+  const out: string[] = [];
+  let total = 0;
+  for (const u of urls) {
+    if (total + u.length > MAX_ATTACHED_DATA_URL_CHARS) break;
+    out.push(u);
+    total += u.length;
+  }
+  return out.length > 0 ? out : undefined;
+}
+
+/** Drop huge email HTML when session can be rehydrated by campaign id (reduces disk I/O). */
+function slimCampaignStateForPersistence(cs: SavedCampaignState): SavedCampaignState {
+  const results = { ...cs.results };
+  if (results.campaignId) {
+    delete results.emailHtml;
+    delete results.emailHtmls;
+  }
+  return { ...cs, results };
 }
 
 function standaloneAdImageLayoutClass(aspect: ImageAspectRatio, n: number): string {
@@ -432,12 +460,34 @@ async function loadCreativeStudioChatFromSupabase(workspaceId: string, projectId
   /** True when we read a row from DB; false when error or no row (so we don't overwrite with empty). */
   loadedFromDb: boolean;
 }> {
-  const supabase = createSupabaseBrowserClient();
-  const { data, error } = await supabase
-    .from("creative_studio_chats")
-    .select("data")
-    .eq("project_id", projectId)
-    .maybeSingle();
+  let data: { data?: unknown } | null = null;
+  let error: { message?: string } | null = null;
+  try {
+    const supabase = createSupabaseBrowserClient();
+    const res = await supabase
+      .from("creative_studio_chats")
+      .select("data")
+      .eq("project_id", projectId)
+      .maybeSingle();
+    data = res.data;
+    error = res.error;
+  } catch {
+    return {
+      messages: [],
+      prompt: "",
+      selectedTool: "image",
+      imageOptions: defaultImageOptions(),
+      videoOptions: defaultVideoOptions(),
+      emailOptions: defaultEmailOptions(),
+      continuationPrompts: [],
+      imageSlidePrompts: [],
+      likedSnippets: [],
+      dislikedSnippets: [],
+      selectedEmailTemplateId: null,
+      campaignState: null,
+      loadedFromDb: false,
+    };
+  }
 
   if (error || !data?.data) {
     return {
@@ -549,59 +599,79 @@ async function saveCreativeStudioChatToSupabase(
     dislikedSnippets: string[];
     selectedEmailTemplateId: EmailTemplateId | null;
     campaignState?: SavedCampaignState | null;
+  },
+  options?: {
+    /** When state.campaignState is null, merge this so we do not wipe a completed campaign (avoids extra SELECT). */
+    preservedCampaignWhenNull?: SavedCampaignState | null;
+    /** Set false on full chat reset so DB campaign row is cleared. Default true. */
+    mergePreservedCampaign?: boolean;
   }
 ): Promise<void> {
-  const supabase = createSupabaseBrowserClient();
-  const messagesToSave = state.messages.filter(
-    (m) => !(m.role === "assistant" && m.generating)
-  );
-  const storedMessages: StoredCreativeMessage[] = messagesToSave.map((m) => ({
-    role: m.role,
-    content: m.content,
-    timestamp: m.timestamp,
-    ...(m.tool != null && { tool: m.tool }),
-    ...(m.stages != null && { stages: m.stages }),
-    ...(m.generationId != null && { generationId: m.generationId }),
-    ...(m.generationIds?.length && { generationIds: m.generationIds }),
-    ...(m.imageUrls?.length && { hasImage: true }),
-    ...(m.emailPayload && { emailPayload: m.emailPayload }),
-    ...(m.signedImageUrls?.length && { signedImageUrls: m.signedImageUrls }),
-    ...(m.fullCampaignRequest && { fullCampaignRequest: true }),
-    ...(m.role === "user" && m.attachedImageUrls?.length && { attachedImageUrls: m.attachedImageUrls }),
-  }));
+  try {
+    const supabase = createSupabaseBrowserClient();
+    const messagesToSave = state.messages.filter(
+      (m) => !(m.role === "assistant" && m.generating)
+    );
+    const cappedMessages =
+      messagesToSave.length > MAX_STORED_CREATIVE_MESSAGES
+        ? messagesToSave.slice(-MAX_STORED_CREATIVE_MESSAGES)
+        : messagesToSave;
+    const storedMessages: StoredCreativeMessage[] = cappedMessages.map((m) => {
+      const persistSigned =
+        m.signedImageUrls?.length &&
+        !(m.generationIds?.length || m.generationId);
+      return {
+        role: m.role,
+        content: m.content,
+        timestamp: m.timestamp,
+        ...(m.tool != null && { tool: m.tool }),
+        ...(m.stages != null && { stages: m.stages }),
+        ...(m.generationId != null && { generationId: m.generationId }),
+        ...(m.generationIds?.length && { generationIds: m.generationIds }),
+        ...(m.imageUrls?.length && { hasImage: true }),
+        ...(m.emailPayload && { emailPayload: m.emailPayload }),
+        ...(persistSigned && { signedImageUrls: m.signedImageUrls }),
+        ...(m.fullCampaignRequest && { fullCampaignRequest: true }),
+        ...(m.role === "user" &&
+          m.attachedImageUrls?.length && {
+            attachedImageUrls: clampAttachedImageUrlsForStorage(m.attachedImageUrls),
+          }),
+      };
+    });
 
-  let campaignStateToWrite: SavedCampaignState | null | undefined = state.campaignState;
-  if (campaignStateToWrite == null) {
-    const { data: existing } = await supabase
-      .from("creative_studio_chats")
-      .select("data")
-      .eq("project_id", projectId)
-      .maybeSingle();
-    const existingData = existing?.data as { campaignState?: SavedCampaignState | null } | undefined;
-    if (existingData?.campaignState != null) campaignStateToWrite = existingData.campaignState;
-  }
+    const mergePreserved = options?.mergePreservedCampaign !== false;
+    let campaignStateToWrite: SavedCampaignState | null | undefined = state.campaignState;
+    if (campaignStateToWrite == null && mergePreserved) {
+      campaignStateToWrite = options?.preservedCampaignWhenNull ?? null;
+    }
+    if (campaignStateToWrite != null) {
+      campaignStateToWrite = slimCampaignStateForPersistence(campaignStateToWrite);
+    }
 
-  await supabase.from("creative_studio_chats").upsert(
-    {
-      workspace_id: workspaceId,
-      project_id: projectId,
-      data: {
-        messages: storedMessages,
-        prompt: state.prompt,
-        selectedTool: state.selectedTool,
-        imageOptions: state.imageOptions,
-        videoOptions: state.videoOptions,
-        emailOptions: state.emailOptions,
-        continuationPrompts: state.continuationPrompts,
-        imageSlidePrompts: state.imageSlidePrompts,
-        likedSnippets: state.likedSnippets.slice(0, PREFERENCE_SNIPPETS_MAX),
-        dislikedSnippets: state.dislikedSnippets.slice(0, PREFERENCE_SNIPPETS_MAX),
-        selectedEmailTemplateId: state.selectedEmailTemplateId ?? null,
-        ...(campaignStateToWrite != null && { campaignState: campaignStateToWrite }),
+    await supabase.from("creative_studio_chats").upsert(
+      {
+        workspace_id: workspaceId,
+        project_id: projectId,
+        data: {
+          messages: storedMessages,
+          prompt: state.prompt,
+          selectedTool: state.selectedTool,
+          imageOptions: state.imageOptions,
+          videoOptions: state.videoOptions,
+          emailOptions: state.emailOptions,
+          continuationPrompts: state.continuationPrompts,
+          imageSlidePrompts: state.imageSlidePrompts,
+          likedSnippets: state.likedSnippets.slice(0, PREFERENCE_SNIPPETS_MAX),
+          dislikedSnippets: state.dislikedSnippets.slice(0, PREFERENCE_SNIPPETS_MAX),
+          selectedEmailTemplateId: state.selectedEmailTemplateId ?? null,
+          ...(campaignStateToWrite != null && { campaignState: campaignStateToWrite }),
+        },
       },
-    },
-    { onConflict: "project_id" }
-  );
+      { onConflict: "project_id" }
+    );
+  } catch {
+    /* network / Supabase unreachable — avoid unhandled rejection */
+  }
 }
 
 /** Tools → Email: left panel shows HTML only; images in iframe open preview (download there) and save to collection on load. */
@@ -769,8 +839,7 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
   const fetchAdStyles = useCallback(() => {
     if (adStylesLoadRef.current !== "idle") return;
     adStylesLoadRef.current = "loading";
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4001";
-    fetch(`${apiUrl}/ad-styles`)
+    fetch(browserApiUrl("/ad-styles"))
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (data?.styles != null && typeof data.styles === "object") {
@@ -922,6 +991,10 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const pollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Skips Supabase upsert when serialized state unchanged (reduces WAL / disk I/O). */
+  const lastCreativeSavePayloadRef = useRef<string>("");
+  /** Last completed campaign to merge when autosave has no campaignState (avoids SELECT on `creative_studio_chats`). */
+  const preservedCampaignForSaveRef = useRef<SavedCampaignState | null>(null);
   const generationAbortRef = useRef<AbortController | null>(null);
   /** Tracks current load context so image/video URL fetches only apply when still relevant (avoids hydration lost to effect cleanup). */
   const hydrationContextRef = useRef<{ workspaceId: string; projectId: string } | null>(null);
@@ -1085,6 +1158,7 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
 
       if (loaded.campaignState) {
         const cs = loaded.campaignState;
+        preservedCampaignForSaveRef.current = slimCampaignStateForPersistence(cs);
         const cq = cs.generation.campaignQuality;
         if (cq === "1K" || cq === "4K") setFullCampaignQuality(cq);
         setFullCampaignGeneration({
@@ -1126,6 +1200,7 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
             .catch(() => {});
         }
       } else {
+        preservedCampaignForSaveRef.current = null;
         setFullCampaignGeneration({
           status: "idle",
           steps: [],
@@ -1214,6 +1289,8 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
           if (shouldRefresh) router.refresh();
         }).catch(() => {});
       }
+    }).catch(() => {
+      if (!cancelled) setHydrated(true);
     });
     return () => { cancelled = true; };
   }, [workspaceId, projectId, router, fetchAdStyles]);
@@ -1313,6 +1390,11 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
   }, [fullCampaignGeneration.status]);
 
   useEffect(() => {
+    lastCreativeSavePayloadRef.current = "";
+    preservedCampaignForSaveRef.current = null;
+  }, [workspaceId, projectId]);
+
+  useEffect(() => {
     if (!hydrated) return;
     if (messages.length === 0 && !loadedFromDbRef.current) return;
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
@@ -1333,7 +1415,10 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
               results: fullCampaignResults,
             }
           : null;
-      saveCreativeStudioChatToSupabase(workspaceId, projectId, {
+      if (campaignState != null) {
+        preservedCampaignForSaveRef.current = slimCampaignStateForPersistence(campaignState);
+      }
+      const payload = {
         messages,
         prompt,
         selectedTool,
@@ -1346,8 +1431,14 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
         dislikedSnippets,
         selectedEmailTemplateId,
         campaignState,
+      };
+      const key = JSON.stringify(payload);
+      if (key === lastCreativeSavePayloadRef.current) return;
+      lastCreativeSavePayloadRef.current = key;
+      saveCreativeStudioChatToSupabase(workspaceId, projectId, payload, {
+        preservedCampaignWhenNull: preservedCampaignForSaveRef.current,
       });
-    }, 500);
+    }, 1200);
     return () => {
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     };
@@ -1373,18 +1464,13 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
   useEffect(() => {
     let cancelled = false;
     apiClientFetch<{
-      items: Array<{ generationId?: string; videoGenerationId?: string }>;
-    }>(`/workspaces/${workspaceId}/asset-collection`)
+      generationIds: string[];
+      videoGenerationIds: string[];
+    }>(`/workspaces/${workspaceId}/asset-collection?mode=ids`)
       .then((res) => {
-        if (!cancelled && res.items) {
-          const genIds = new Set(
-            res.items.map((i) => i.generationId).filter(Boolean) as string[]
-          );
-          const videoIds = new Set(
-            res.items.map((i) => i.videoGenerationId).filter(Boolean) as string[]
-          );
-          setBookmarkedGenIds(genIds);
-          setBookmarkedVideoGenIds(videoIds);
+        if (!cancelled) {
+          setBookmarkedGenIds(new Set(res.generationIds ?? []));
+          setBookmarkedVideoGenIds(new Set(res.videoGenerationIds ?? []));
         }
       })
       .catch(() => {});
@@ -2997,7 +3083,10 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
       selectedEmailTemplateId: null as EmailTemplateId | null,
       campaignState: null,
     };
-    saveCreativeStudioChatToSupabase(workspaceId, projectId, clearedState);
+    preservedCampaignForSaveRef.current = null;
+    saveCreativeStudioChatToSupabase(workspaceId, projectId, clearedState, {
+      mergePreservedCampaign: false,
+    });
   }
 
   async function handleFullCampaignGenerate() {
@@ -3069,18 +3158,27 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
       }
     }
 
-    const supabase = createSupabaseBrowserClient();
-    const { data: { session } } = await supabase.auth.getSession();
-    const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4001";
+    let accessToken: string | undefined;
+    try {
+      const supabase = createSupabaseBrowserClient();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      accessToken = session?.access_token;
+    } catch {
+      toast.error("Could not reach the sign-in service. Check your network.");
+      setFullCampaignGeneration((prev) => ({ ...prev, status: "idle", steps: [] }));
+      return;
+    }
 
     try {
       const response = await fetch(
-        `${API_URL}/workspaces/${workspaceId}/projects/${projectId}/campaign/generate`,
+        browserApiUrl(`/workspaces/${workspaceId}/projects/${projectId}/campaign/generate`),
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            ...(session?.access_token && { Authorization: `Bearer ${session.access_token}` }),
+            ...(accessToken && { Authorization: `Bearer ${accessToken}` }),
           },
           body: JSON.stringify({
             productDescription: productDesc || undefined,
@@ -3271,7 +3369,10 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
 
       setFullCampaignGeneration((prev) => ({ ...prev, status: "complete" }));
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Campaign generation failed";
+      let msg = err instanceof Error ? err.message : "Campaign generation failed";
+      if (err instanceof TypeError && msg === "Failed to fetch") {
+        msg = "Could not reach the campaign API. Check that the backend is running or NEXT_PUBLIC_API_URL / rewrites.";
+      }
       toast.error(msg);
       setFullCampaignGeneration((prev) => ({ ...prev, status: "complete" }));
     }

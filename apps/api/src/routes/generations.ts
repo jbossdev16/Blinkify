@@ -46,6 +46,21 @@ const router = Router();
 const BUCKET = "generated-images";
 const PROJECT_ASSETS_BUCKET = "project-assets";
 
+/** List endpoint: omit text_response (large) to cut heap / disk read volume. */
+const GENERATIONS_LIST_COLUMNS =
+  "id, workspace_id, project_id, user_id, status, credits_used, prompt, result_url, error_message, created_at, aspect_ratio, model, batch_id, deleted_at";
+
+const GEN_LIST_SIGN_CONCURRENCY = 8;
+
+async function mapInChunks<T, R>(items: T[], chunkSize: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = [];
+  for (let i = 0; i < items.length; i += chunkSize) {
+    const chunk = items.slice(i, i + chunkSize);
+    out.push(...(await Promise.all(chunk.map(fn))));
+  }
+  return out;
+}
+
 /** Storage path or `external:https://...` from Apply Brand when SVG / upload fallback. */
 async function loadProjectBrandLogoForInputs(
   brandLogo: string
@@ -1171,7 +1186,7 @@ router.get(
 
       const { data: rows, error } = await supabase
         .from("generations")
-        .select("*")
+        .select(GENERATIONS_LIST_COLUMNS)
         .eq("workspace_id", workspaceId)
         .eq("project_id", projectId)
         .order("created_at", { ascending: false })
@@ -1179,16 +1194,15 @@ router.get(
 
       if (error) throw error;
 
-      // Attach URLs: public for email-assets, signed for generated-images
-      const withUrls = await Promise.all(
-        (rows ?? []).map(async (row) => {
-          if (row.status !== "completed" || !row.result_url) {
-            return { ...row, imageUrl: null };
-          }
-          const imageUrl = await resolveGenerationImageUrl(supabase.storage, row.result_url, BUCKET);
-          return { ...row, imageUrl };
-        })
-      );
+      // Attach URLs: public for email-assets, signed for generated-images (bounded concurrency).
+      const list = rows ?? [];
+      const withUrls = await mapInChunks(list, GEN_LIST_SIGN_CONCURRENCY, async (row) => {
+        if (row.status !== "completed" || !row.result_url) {
+          return { ...row, imageUrl: null as string | null };
+        }
+        const imageUrl = await resolveGenerationImageUrl(supabase.storage, row.result_url, BUCKET);
+        return { ...row, imageUrl };
+      });
 
       res.json({ generations: withUrls });
     } catch (err: unknown) {

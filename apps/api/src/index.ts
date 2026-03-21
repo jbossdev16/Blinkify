@@ -42,14 +42,32 @@ const allowedOrigins = (process.env.WEB_ORIGIN ?? "http://localhost:3000")
   .map((o) => o.trim())
   .filter(Boolean);
 
+/** Browsers treat localhost and 127.0.0.1 as different origins; allow both for local Next (port 3000). */
+function isHttpLocalNextDevOrigin(origin: string): boolean {
+  try {
+    const u = new URL(origin);
+    return (
+      u.protocol === "http:" &&
+      (u.hostname === "localhost" || u.hostname === "127.0.0.1") &&
+      u.port === "3000"
+    );
+  } catch {
+    return false;
+  }
+}
+
 app.use(
   cors({
     origin: (origin, cb) => {
-      if (!origin || allowedOrigins.includes(origin)) {
-        cb(null, origin ? origin : true);
-      } else {
-        cb(null, false);
+      if (!origin) {
+        cb(null, true);
+        return;
       }
+      if (allowedOrigins.includes(origin) || isHttpLocalNextDevOrigin(origin)) {
+        cb(null, origin);
+        return;
+      }
+      cb(null, false);
     },
   })
 );

@@ -1,6 +1,5 @@
 import { createSupabaseBrowserClient } from "./supabase";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4001";
+import { getBrowserApiBaseUrl } from "./browser-api-base";
 
 const IMAGE_GENERATION_TIMEOUT_MS = 150_000; // 2.5 min — server uses 2 min for Gemini
 
@@ -28,18 +27,25 @@ export async function apiClientFetch<T = unknown>(
 
   try {
     const supabase = createSupabaseBrowserClient();
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
+    let accessToken: string | undefined;
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      accessToken = session?.access_token;
+    } catch {
+      throw new Error(
+        "Could not reach the sign-in service. Check your network and Supabase URL / keys."
+      );
+    }
 
-    const res = await fetch(`${API_URL}${path}`, {
+    const base = getBrowserApiBaseUrl();
+    const res = await fetch(`${base}${path}`, {
       ...restInit,
       signal: controller?.signal ?? restInit.signal,
       headers: {
         "Content-Type": "application/json",
-        ...(session?.access_token && {
-          Authorization: `Bearer ${session.access_token}`,
-        }),
+        ...(accessToken && { Authorization: `Bearer ${accessToken}` }),
         ...restInit.headers,
       },
     });
@@ -72,6 +78,11 @@ export async function apiClientFetch<T = unknown>(
     if (err instanceof Error && err.name === "AbortError") {
       throw new Error(
         "Request took too long. Image and video generation can take 1–2 minutes; please try again."
+      );
+    }
+    if (err instanceof TypeError && err.message === "Failed to fetch") {
+      throw new Error(
+        "Could not reach the API. On local dev, start the backend (port 4001) and check NEXT_PUBLIC_API_URL."
       );
     }
     throw err;

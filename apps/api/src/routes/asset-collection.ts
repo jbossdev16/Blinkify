@@ -9,6 +9,22 @@ const router = Router();
 const IMAGES_BUCKET = "generated-images";
 const VIDEOS_BUCKET = "generated-videos";
 
+/** Limits concurrent Storage signed-URL calls to reduce disk / API spikes (Supabase I/O budget). */
+const STORAGE_SIGN_CONCURRENCY = 8;
+
+async function mapInChunks<T, R>(
+  items: T[],
+  chunkSize: number,
+  fn: (item: T) => Promise<R>
+): Promise<R[]> {
+  const out: R[] = [];
+  for (let i = 0; i < items.length; i += chunkSize) {
+    const chunk = items.slice(i, i + chunkSize);
+    out.push(...(await Promise.all(chunk.map(fn))));
+  }
+  return out;
+}
+
 /* ─── POST /:workspaceId/asset-collection ───────────────────────────────
    Bookmark an image or video to the workspace asset collection. */
 
@@ -145,15 +161,40 @@ router.get(
         return;
       }
 
+      /** Bookmark IDs only — no joins, no Storage; use for Creative Studio bookmark state. */
+      if (String(req.query.mode) === "ids") {
+        const { data: idRows, error: idErr } = await supabase
+          .from("workspace_asset_collection")
+          .select("generation_id, video_generation_id")
+          .eq("workspace_id", workspaceId);
+        if (idErr) throw idErr;
+        const generationIds = (idRows ?? [])
+          .map((r) => r.generation_id)
+          .filter((id): id is string => id != null);
+        const videoGenerationIds = (idRows ?? [])
+          .map((r) => r.video_generation_id)
+          .filter((id): id is string => id != null);
+        res.json({ generationIds, videoGenerationIds });
+        return;
+      }
+
+      const rawLimit = parseInt(String(req.query.limit ?? "120"), 10);
+      const limit = Math.min(Math.max(Number.isFinite(rawLimit) ? rawLimit : 120, 1), 250);
+      const rawOffset = parseInt(String(req.query.offset ?? "0"), 10);
+      const offset = Math.max(Number.isFinite(rawOffset) ? rawOffset : 0, 0);
+      const fetchCount = limit + 1;
+
       const { data: rows, error } = await supabase
         .from("workspace_asset_collection")
         .select("id, generation_id, video_generation_id, created_at")
         .eq("workspace_id", workspaceId)
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .range(offset, offset + fetchCount - 1);
 
       if (error) throw error;
 
-      const itemRows = rows ?? [];
+      const hasMore = (rows?.length ?? 0) > limit;
+      const itemRows = (rows ?? []).slice(0, limit);
       const genIds = itemRows.map((r) => r.generation_id).filter(Boolean) as string[];
       const vidIds = itemRows.map((r) => r.video_generation_id).filter(Boolean) as string[];
 
@@ -194,27 +235,21 @@ router.get(
           : { data: [] as { id: string; name: string }[] };
       const projectNames = new Map((projects ?? []).map((p) => [p.id, p.name]));
 
-      const imageUrlPromises = (gensRes.data ?? [])
-        .filter((g) => g.result_url)
-        .map((g) =>
-          resolveGenerationImageUrl(supabase.storage, g.result_url!, IMAGES_BUCKET).then(
-            (url) => [g.id, url] as const
-          )
-        );
-      const videoUrlPromises = (vidsRes.data ?? [])
-        .filter((v) => v.storage_path)
-        .map((v) =>
-          supabase.storage
-            .from(VIDEOS_BUCKET)
-            .createSignedUrl(v.storage_path!, SIGNED_URL_EXPIRY_SECONDS)
-            .then(({ data }) => [v.id, data?.signedUrl ?? null] as const)
-        );
-      const [imageUrls, videoUrls] = await Promise.all([
-        Promise.all(imageUrlPromises),
-        Promise.all(videoUrlPromises),
-      ]);
-      const imageUrlMap = new Map(imageUrls);
-      const videoUrlMap = new Map(videoUrls);
+      const gensWithUrls = (gensRes.data ?? []).filter((g) => g.result_url);
+      const imagePairs = await mapInChunks(gensWithUrls, STORAGE_SIGN_CONCURRENCY, async (g) => {
+        const url = await resolveGenerationImageUrl(supabase.storage, g.result_url!, IMAGES_BUCKET);
+        return [g.id, url] as const;
+      });
+      const imageUrlMap = new Map(imagePairs);
+
+      const vidsWithPath = (vidsRes.data ?? []).filter((v) => v.storage_path);
+      const videoPairs = await mapInChunks(vidsWithPath, STORAGE_SIGN_CONCURRENCY, async (v) => {
+        const { data } = await supabase.storage
+          .from(VIDEOS_BUCKET)
+          .createSignedUrl(v.storage_path!, SIGNED_URL_EXPIRY_SECONDS);
+        return [v.id, data?.signedUrl ?? null] as const;
+      });
+      const videoUrlMap = new Map(videoPairs);
 
       const items: Array<{
         id: string;
@@ -270,7 +305,7 @@ router.get(
         }
       }
 
-      res.json({ items });
+      res.json({ items, hasMore, limit, offset });
     } catch (err: unknown) {
       console.error("GET asset-collection error:", err);
       res.status(500).json({

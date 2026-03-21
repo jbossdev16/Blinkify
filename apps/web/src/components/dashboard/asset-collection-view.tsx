@@ -170,6 +170,9 @@ export function AssetCollectionView({ workspaceId, embedded }: AssetCollectionVi
   const [videoModelFilter, setVideoModelFilter] = useState<string>("");
   /** Grid row tracks to show (3-col bento); +6 per "View More". Resets on refresh / filter change / remount. */
   const [visibleRowBudget, setVisibleRowBudget] = useState(6);
+  /** More pages available from API (paginated to limit disk I/O per request). */
+  const [hasMoreServer, setHasMoreServer] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const fetchAbortedRef = useRef(false);
   const brandMenuRef = useRef<HTMLDivElement>(null);
 
@@ -181,11 +184,12 @@ export function AssetCollectionView({ workspaceId, embedded }: AssetCollectionVi
     }
     fetchAbortedRef.current = false;
     try {
-      const res = await apiClientFetch<{ items?: AssetItem[] }>(
-        `/workspaces/${workspaceId}/asset-collection`
+      const res = await apiClientFetch<{ items?: AssetItem[]; hasMore?: boolean }>(
+        `/workspaces/${workspaceId}/asset-collection?limit=100&offset=0`
       );
       if (!fetchAbortedRef.current) {
         setItems(Array.isArray(res.items) ? res.items : []);
+        setHasMoreServer(res.hasMore === true);
       }
     } catch (err) {
       if (!fetchAbortedRef.current && !silent) {
@@ -197,6 +201,34 @@ export function AssetCollectionView({ workspaceId, embedded }: AssetCollectionVi
       }
     }
   }, [workspaceId]);
+
+  const loadMoreFromServer = useCallback(async () => {
+    if (!workspaceId || loadingMore || !hasMoreServer) return;
+    setLoadingMore(true);
+    try {
+      const offset = items.length;
+      const res = await apiClientFetch<{ items?: AssetItem[]; hasMore?: boolean }>(
+        `/workspaces/${workspaceId}/asset-collection?limit=100&offset=${offset}`
+      );
+      const batch = Array.isArray(res.items) ? res.items : [];
+      setItems((prev) => {
+        const seen = new Set(prev.map((i) => i.id));
+        const merged = [...prev];
+        for (const it of batch) {
+          if (!seen.has(it.id)) {
+            merged.push(it);
+            seen.add(it.id);
+          }
+        }
+        return merged;
+      });
+      setHasMoreServer(res.hasMore === true);
+    } catch {
+      // ignore
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [workspaceId, loadingMore, hasMoreServer, items.length]);
 
   useEffect(() => {
     fetchItems();
@@ -492,6 +524,18 @@ export function AssetCollectionView({ workspaceId, embedded }: AssetCollectionVi
                     className="px-5 py-2.5 rounded-xl text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
                   >
                     View More
+                  </button>
+                </div>
+              )}
+              {hasMoreServer && (
+                <div className="mt-6 flex items-center justify-center">
+                  <button
+                    type="button"
+                    onClick={() => void loadMoreFromServer()}
+                    disabled={loadingMore}
+                    className="px-5 py-2.5 rounded-xl text-sm font-medium border border-border bg-background text-[#000000] dark:text-white hover:bg-secondary/60 transition-colors disabled:opacity-50"
+                  >
+                    {loadingMore ? "Loading…" : "Load older bookmarks"}
                   </button>
                 </div>
               )}
