@@ -31,10 +31,10 @@ ok(emailCreditCost("4K", 1) === 25, "emailCreditCost(4K, 1) === 25");
 ok(emailCreditCost("4K", 2) === 50, "emailCreditCost(4K, 2) === 50");
 ok(emailCreditCost("4K", 3) === 75, "emailCreditCost(4K, 3) === 75");
 
-// Video: 1080p = 50, 4k = 75
+// Standalone video tool: 1080p = 100, 4k = 150
 ok(VIDEO_RESOLUTIONS.length === 2 && VIDEO_RESOLUTIONS[0] === "1080p" && VIDEO_RESOLUTIONS[1] === "4k", "VIDEO_RESOLUTIONS is [1080p, 4k]");
-ok(videoCreditCost("1080p") === 50, "videoCreditCost(1080p) === 50");
-ok(videoCreditCost("4k") === 75, "videoCreditCost(4k) === 75");
+ok(videoCreditCost("1080p") === 100, "videoCreditCost(1080p) === 100");
+ok(videoCreditCost("4k") === 150, "videoCreditCost(4k) === 150");
 
 const fc1 = getFullCampaignPricing("1K");
 const fc4 = getFullCampaignPricing("4K");

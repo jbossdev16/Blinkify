@@ -99,7 +99,7 @@ export default function ResetPasswordPage() {
     <div className="min-h-screen flex items-center justify-center bg-muted/30 px-4">
       <div className="w-full max-w-[400px] rounded-2xl border bg-card p-8 shadow-sm">
         <Link href="/" className="inline-block mb-6">
-          <BlinkifyLogo variant="full" height={32} />
+          <BlinkifyLogo variant="full" height={26} />
         </Link>
         <h1 className="text-xl font-semibold text-foreground mb-2">Set new password</h1>
         <p className="text-sm text-muted-foreground mb-6">

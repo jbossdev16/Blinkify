@@ -29,7 +29,7 @@ export function LandingFooter() {
       <div className="max-w-[1200px] mx-auto px-4">
         <div className="grid grid-cols-12 gap-8">
           <div className="col-span-12 md:col-span-4 lg:col-span-4">
-            <BlinkifyLogo variant="full" height={40} href="/" className="text-xl" />
+            <BlinkifyLogo variant="full" height={30} href="/" className="text-xl" />
             <p className="mt-4 text-h6 font-normal max-w-[280px] leading-relaxed text-muted-foreground">
               Generate high-quality product images and ad creatives in seconds
               with AI.

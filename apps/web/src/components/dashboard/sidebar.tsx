@@ -25,6 +25,7 @@ import { getPlanFeatures } from "@/lib/constants";
 import { BlinkifyLogo } from "@/components/blinkify-logo";
 import { SettingsModal } from "@/components/dashboard/settings-modal";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
+import { useOnboarding } from "@/hooks/use-onboarding";
 import { ChevronDown as ChevronDownIcon, Plus } from "lucide-react";
 
 /* ─── Props ───────────────────────────────────────────────────────────── */
@@ -76,6 +77,47 @@ export function Sidebar({
   const [brandDropdownOpen, setBrandDropdownOpen] = useState(false);
   const [brandProjects, setBrandProjects] = useState<{ id: string; name: string }[]>([]);
   const [brandProjectsLoaded, setBrandProjectsLoaded] = useState(false);
+  const { getStep } = useOnboarding();
+  const [onboardingStep, setOnboardingStep] = useState("0");
+  const [creditsPulse, setCreditsPulse] = useState(false);
+  /** false until mounted — must not call isDone()/localStorage during SSR (server vs client DOM mismatch). */
+  const [showGettingStarted, setShowGettingStarted] = useState(false);
+
+  useEffect(() => {
+    setOnboardingStep(getStep());
+  }, [pathname]);
+
+  useEffect(() => {
+    const sync = () => setOnboardingStep(getStep());
+    window.addEventListener("blinkify:onboarding-change", sync);
+    return () => window.removeEventListener("blinkify:onboarding-change", sync);
+  }, [getStep]);
+
+  useEffect(() => {
+    const sync = () => {
+      try {
+        const step = window.localStorage.getItem("blinkify:onboarding:step") ?? "0";
+        setShowGettingStarted(step !== "done");
+      } catch {
+        setShowGettingStarted(false);
+      }
+    };
+    sync();
+    window.addEventListener("blinkify:onboarding-change", sync);
+    return () => window.removeEventListener("blinkify:onboarding-change", sync);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const generated = window.localStorage.getItem("blinkify:onboarding:generated") === "true";
+    const seen = window.localStorage.getItem("blinkify:onboarding:credits_anim_seen") === "true";
+    if (generated && !seen) {
+      setCreditsPulse(true);
+      window.localStorage.setItem("blinkify:onboarding:credits_anim_seen", "true");
+      const t = window.setTimeout(() => setCreditsPulse(false), 1000);
+      return () => window.clearTimeout(t);
+    }
+  }, []);
 
   useEffect(() => {
     if (!hasMultiBrand || brandProjectsLoaded) return;
@@ -140,13 +182,13 @@ export function Sidebar({
               onClick={onToggleCollapse}
               className="size-9 rounded-xl flex items-center justify-center overflow-hidden cursor-pointer hover:opacity-90 transition-opacity bg-background border border-border"
             >
-              <BlinkifyLogo variant="icon" height={22} />
+              <BlinkifyLogo variant="icon" height={18} />
             </button>
           </SidebarTooltip>
         ) : (
           <>
             {/* Expanded: full logo */}
-            <BlinkifyLogo variant="full" height={28} href="https://blinkify.ai" className="flex items-center" />
+            <BlinkifyLogo variant="full" height={22} href="https://blinkify.ai" className="flex items-center" priority />
 
             {/* Collapse button */}
             <button
@@ -259,9 +301,75 @@ export function Sidebar({
 
       {/* Bottom section */}
       <div className={cn("pb-4 space-y-1", collapsed ? "px-2" : "px-3")}>
+        {showGettingStarted && !collapsed && (
+          <div className="px-3 pb-2">
+            <div className="rounded-xl bg-secondary/60 border border-border p-3">
+              <p className="text-xs font-semibold text-foreground mb-2">Getting started</p>
+              <div className="flex items-center gap-2 mb-1.5">
+                <div
+                  className={cn(
+                    "w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold",
+                    onboardingStep === "done" || onboardingStep === "2"
+                      ? "bg-green-500 text-white"
+                      : onboardingStep === "1"
+                        ? "bg-primary text-white"
+                        : "bg-secondary border border-border text-muted-foreground"
+                  )}
+                >
+                  {onboardingStep === "done" || onboardingStep === "2" ? "✓" : "1"}
+                </div>
+                <span
+                  className={cn(
+                    "text-xs",
+                    onboardingStep === "done" || onboardingStep === "2"
+                      ? "text-muted-foreground line-through"
+                      : "text-foreground"
+                  )}
+                >
+                  Set up your brand
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div
+                  className={cn(
+                    "w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold",
+                    onboardingStep === "done"
+                      ? "bg-green-500 text-white"
+                      : onboardingStep === "2"
+                        ? "bg-primary text-white"
+                        : "bg-secondary border border-border text-muted-foreground"
+                  )}
+                >
+                  {onboardingStep === "done" ? "✓" : "2"}
+                </div>
+                <span
+                  className={cn(
+                    "text-xs",
+                    onboardingStep === "done" ? "text-muted-foreground line-through" : "text-foreground"
+                  )}
+                >
+                  Generate your first creative
+                </span>
+              </div>
+              <div className="mt-3 h-1 bg-secondary rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-primary rounded-full transition-all duration-500"
+                  style={{
+                    width:
+                      onboardingStep === "0" || onboardingStep === "1"
+                        ? "0%"
+                        : onboardingStep === "2"
+                          ? "50%"
+                          : "100%",
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
         {/* Credits card */}
         {credits !== null && !collapsed && (
-          <SidebarCreditsCard credits={credits} plan={plan ?? "free"} />
+          <SidebarCreditsCard credits={credits} plan={plan ?? "free"} pulse={creditsPulse} />
         )}
         {credits !== null && collapsed && (
           <SidebarTooltip label={`${credits} credits · Manage plan`} side="right" enabled>
@@ -459,7 +567,7 @@ export function sidebarPlanLabel(plan: string): string {
   return "Free";
 }
 
-function SidebarCreditsCard({ credits, plan }: { credits: number; plan: string }) {
+function SidebarCreditsCard({ credits, plan, pulse = false }: { credits: number; plan: string; pulse?: boolean }) {
   const router = useRouter();
   const label = sidebarPlanLabel(plan);
   const noCredits = credits === 0;
@@ -469,7 +577,9 @@ function SidebarCreditsCard({ credits, plan }: { credits: number; plan: string }
     <div className="px-3 py-2 space-y-2 text-sm text-foreground">
       <div className="flex items-center justify-between gap-2 w-full">
         <span className="text-muted-foreground shrink-0">Credits Left</span>
-        <span className="font-medium tabular-nums">{credits.toLocaleString()}</span>
+        <span className={cn("font-medium tabular-nums", pulse && "animate-pulse")}>
+          {credits.toLocaleString("en-US")}
+        </span>
       </div>
       <button
         type="button"

@@ -6,7 +6,7 @@ export default function NotFound() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-background px-4">
       <Link href="/" className="mb-8">
-        <BlinkifyLogo variant="full" height={28} className="text-xl" />
+        <BlinkifyLogo variant="full" height={22} className="text-xl" />
       </Link>
       <h1 className="text-6xl font-bold text-muted-foreground">404</h1>
       <p className="mt-2 text-lg text-muted-foreground text-center max-w-sm">

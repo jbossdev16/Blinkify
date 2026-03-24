@@ -229,6 +229,14 @@ async function generateCampaignImageFallbackOnly(
 
 /* ─── Upload image to storage ────────────────────────────────────────────────── */
 
+const STORAGE_UPLOAD_ATTEMPTS = 3;
+
+function isRetryableStorageError(message: string): boolean {
+  return /fetch failed|network|timeout|ECONNRESET|ETIMEDOUT|ECONNREFUSED|ENOTFOUND|503|502|504|socket|TLS/i.test(
+    message
+  );
+}
+
 async function uploadImageToStorage(
   imageBuffer: Buffer,
   workspaceId: string,
@@ -237,11 +245,27 @@ async function uploadImageToStorage(
   bucket: string
 ): Promise<string> {
   const storagePath = `${workspaceId}/${projectId}/${genId}.png`;
-  const { error } = await supabase.storage
-    .from(bucket)
-    .upload(storagePath, imageBuffer, { contentType: "image/png", upsert: false });
-  if (error) throw new Error(`Storage upload failed: ${error.message}`);
-  return storagePath;
+  let lastMsg = "upload failed";
+  for (let attempt = 0; attempt < STORAGE_UPLOAD_ATTEMPTS; attempt++) {
+    if (attempt > 0) {
+      await new Promise((r) => setTimeout(r, 500 * attempt));
+    }
+    try {
+      const { error } = await supabase.storage
+        .from(bucket)
+        .upload(storagePath, imageBuffer, { contentType: "image/png", upsert: false });
+      if (!error) return storagePath;
+      lastMsg = error.message;
+      if (attempt < STORAGE_UPLOAD_ATTEMPTS - 1 && isRetryableStorageError(lastMsg)) continue;
+      throw new Error(`Storage upload failed: ${lastMsg}`);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      lastMsg = msg;
+      if (attempt < STORAGE_UPLOAD_ATTEMPTS - 1 && isRetryableStorageError(msg)) continue;
+      throw e instanceof Error ? e : new Error(`Storage upload failed: ${msg}`);
+    }
+  }
+  throw new Error(`Storage upload failed: ${lastMsg}`);
 }
 
 /** Fetch image from URL and return base64 + mime for Veo lastFrame. */
@@ -1046,26 +1070,52 @@ router.post(
         return { task: taskId, error: msg };
       }
       const genId = crypto.randomUUID();
-      await supabase.from("generations").insert({
-        id: genId,
-        workspace_id: workspaceId,
-        project_id: projectId,
-        user_id: user.id,
-        prompt: prompt.slice(0, 4500),
-        aspect_ratio: aspectRatio,
-        model: IMAGE_MODEL,
-        credits_used: creditAmount,
-        status: "completed",
-      });
-      const storagePath = await uploadImageToStorage(buf, workspaceId, projectId, genId, IMAGE_BUCKET);
-      await supabase.from("generations").update({ result_url: storagePath }).eq("id", genId);
-      const url = await getImageUrl(storagePath, IMAGE_BUCKET);
-      totalCreditsUsed += creditAmount;
-      await deductCredits(workspaceId, user.id, creditAmount, `Full Campaign: ${taskId}`);
-      const elapsed = (Date.now() - start) / 1000;
-      console.log("[Campaign]", taskId, "complete in", elapsed, "s");
-      sendSSE(res, { task: taskId, status: "complete", result_url: url, credits_used: creditAmount, time_taken: elapsed, generation_id: genId });
-      return { task: taskId, url, generationId: genId, storagePath };
+      try {
+        const { error: insertErr } = await supabase.from("generations").insert({
+          id: genId,
+          workspace_id: workspaceId,
+          project_id: projectId,
+          user_id: user.id,
+          prompt: prompt.slice(0, 4500),
+          aspect_ratio: aspectRatio,
+          model: IMAGE_MODEL,
+          credits_used: creditAmount,
+          status: "processing",
+        });
+        if (insertErr) throw insertErr;
+        const storagePath = await uploadImageToStorage(buf, workspaceId, projectId, genId, IMAGE_BUCKET);
+        await supabase
+          .from("generations")
+          .update({ result_url: storagePath, status: "completed" })
+          .eq("id", genId);
+        const url = await getImageUrl(storagePath, IMAGE_BUCKET);
+        totalCreditsUsed += creditAmount;
+        await deductCredits(workspaceId, user.id, creditAmount, `Full Campaign: ${taskId}`);
+        const elapsed = (Date.now() - start) / 1000;
+        console.log("[Campaign]", taskId, "complete in", elapsed, "s");
+        sendSSE(res, {
+          task: taskId,
+          status: "complete",
+          result_url: url,
+          credits_used: creditAmount,
+          time_taken: elapsed,
+          generation_id: genId,
+        });
+        return { task: taskId, url, generationId: genId, storagePath };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error("[Campaign]", taskId, "storage or persist failed:", msg);
+        try {
+          await supabase
+            .from("generations")
+            .update({ status: "failed", error_message: msg.slice(0, 2000) })
+            .eq("id", genId);
+        } catch {
+          /* ignore */
+        }
+        sendSSE(res, { task: taskId, status: "failed", error: msg });
+        return { task: taskId, error: msg };
+      }
     }
 
     /** Single attempt for a failed image (used after 1-min wait). */
@@ -1079,12 +1129,14 @@ router.post(
     ): Promise<TaskResult> {
       const passLogo = includeLogo ? logoBase64 : undefined;
       const passLogoMime = includeLogo ? logoMimeType : undefined;
+      let genIdForRetry: string | undefined;
       try {
         let buf: Buffer | null = await generateCampaignImage(prompt, aspectRatio, imgSystemInstruction, imageSize, productImageBase64, productImageMimeType, passLogo, passLogoMime);
         if (!buf || buf.length === 0) buf = await generateCampaignImageFallbackOnly(prompt, aspectRatio, imgSystemInstruction, imageSize, productImageBase64, productImageMimeType, passLogo, passLogoMime);
         if (!buf || buf.length === 0) return { task: taskId, error: "No image returned from model" };
         const genId = crypto.randomUUID();
-        await supabase.from("generations").insert({
+        genIdForRetry = genId;
+        const { error: insertErr } = await supabase.from("generations").insert({
           id: genId,
           workspace_id: workspaceId,
           project_id: projectId,
@@ -1093,10 +1145,14 @@ router.post(
           aspect_ratio: aspectRatio,
           model: IMAGE_MODEL,
           credits_used: creditAmount,
-          status: "completed",
+          status: "processing",
         });
+        if (insertErr) throw insertErr;
         const storagePath = await uploadImageToStorage(buf, workspaceId, projectId, genId, IMAGE_BUCKET);
-        await supabase.from("generations").update({ result_url: storagePath }).eq("id", genId);
+        await supabase
+          .from("generations")
+          .update({ result_url: storagePath, status: "completed" })
+          .eq("id", genId);
         const url = await getImageUrl(storagePath, IMAGE_BUCKET);
         totalCreditsUsed += creditAmount;
         await deductCredits(workspaceId, user.id, creditAmount, `Full Campaign: ${taskId} (retry)`);
@@ -1104,6 +1160,18 @@ router.post(
         return { task: taskId, url, generationId: genId, storagePath };
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
+        console.error("[Campaign]", taskId, "retry task failed:", msg);
+        if (genIdForRetry) {
+          try {
+            await supabase
+              .from("generations")
+              .update({ status: "failed", error_message: msg.slice(0, 2000) })
+              .eq("id", genIdForRetry);
+          } catch {
+            /* ignore */
+          }
+        }
+        sendSSE(res, { task: taskId, status: "failed", error: msg });
         return { task: taskId, error: msg };
       }
     }

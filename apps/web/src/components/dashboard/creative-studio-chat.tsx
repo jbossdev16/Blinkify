@@ -40,6 +40,10 @@ import { DotGridBg } from "@/components/ui/dot-grid-bg";
 import { toast } from "sonner";
 import { isEmailTemplateId, type EmailTemplateId } from "@/lib/email-templates";
 import { buildStandaloneMarketingEmailHtml } from "@/lib/standalone-email-html";
+import { useOnboarding } from "@/hooks/use-onboarding";
+import { WelcomeModal } from "@/components/onboarding/welcome-modal";
+import { OnboardingCompleteModal } from "@/components/onboarding/onboarding-complete-modal";
+import { GenerationGuideBar, GenerationGuidePanel } from "@/components/onboarding/generation-guide";
 
 /* ─── Types ───────────────────────────────────────────────────────────── */
 
@@ -193,6 +197,84 @@ function fileToBase64(file: File): Promise<string> {
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
+}
+
+/** Per-image cap so full JSON body stays under typical host limits (e.g. Vercel ~4.5MB). */
+const API_IMAGE_MAX_BASE64_CHARS = 900_000;
+const API_IMAGE_MAX_PIXEL = 2048;
+
+/**
+ * Downscale/recompress raster images before POSTing to the API (avoids HTTP 413 on large uploads).
+ */
+async function fileToBase64ForApi(file: File): Promise<{ data: string; mimeType: string }> {
+  if (!file.type.startsWith("image/")) {
+    const data = await fileToBase64(file);
+    return { data, mimeType: file.type || "application/octet-stream" };
+  }
+  if (file.type === "image/svg+xml") {
+    const data = await fileToBase64(file);
+    if (data.length <= API_IMAGE_MAX_BASE64_CHARS) {
+      return { data, mimeType: "image/svg+xml" };
+    }
+    throw new Error("SVG is too large. Export as PNG or JPG and try again.");
+  }
+  try {
+    const bitmap = await createImageBitmap(file);
+    try {
+      let w = bitmap.width;
+      let h = bitmap.height;
+      const maxPx = API_IMAGE_MAX_PIXEL;
+      const scale = Math.min(1, maxPx / Math.max(w, h, 1));
+      w = Math.round(w * scale);
+      h = Math.round(h * scale);
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        const data = await fileToBase64(file);
+        if (data.length <= API_IMAGE_MAX_BASE64_CHARS) {
+          return { data, mimeType: file.type || "image/png" };
+        }
+        throw new Error("Could not process this image. Try a smaller JPG or PNG.");
+      }
+      let q = 0.88;
+      for (let round = 0; round < 28; round++) {
+        canvas.width = w;
+        canvas.height = h;
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, w, h);
+        ctx.drawImage(bitmap, 0, 0, w, h);
+        const dataUrl = canvas.toDataURL("image/jpeg", q);
+        const base64 = dataUrl.split(",")[1] ?? "";
+        if (base64.length <= API_IMAGE_MAX_BASE64_CHARS) {
+          return { data: base64, mimeType: "image/jpeg" };
+        }
+        q -= 0.06;
+        if (q < 0.42) {
+          q = 0.88;
+          const nw = Math.max(480, Math.floor(w * 0.82));
+          const nh = Math.max(480, Math.floor(h * 0.82));
+          if (nw >= w && nh >= h) break;
+          w = nw;
+          h = nh;
+        }
+      }
+      canvas.width = w;
+      canvas.height = h;
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, w, h);
+      ctx.drawImage(bitmap, 0, 0, w, h);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.42);
+      return { data: dataUrl.split(",")[1] ?? "", mimeType: "image/jpeg" };
+    } finally {
+      bitmap.close();
+    }
+  } catch {
+    const data = await fileToBase64(file);
+    if (data.length <= API_IMAGE_MAX_BASE64_CHARS) {
+      return { data, mimeType: file.type || "image/png" };
+    }
+    throw new Error("Image is too large. Try a smaller file or lower-resolution photo.");
+  }
 }
 
 function fileToDataUrl(file: File): Promise<string> {
@@ -785,6 +867,7 @@ interface CreativeStudioChatProps {
 }
 
 export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: CreativeStudioChatProps) {
+  const { getStep, isDone, brandDone, hasGenerated, markGenerated } = useOnboarding();
   const [activeProject, setActiveProject] = useState<Project>(project);
   const projectId = activeProject.id;
   const planFeatures = getPlanFeatures(plan);
@@ -922,6 +1005,9 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
     campaignId?: string;
   } | null>(null);
   const [fullCampaignSwipeSlide, setFullCampaignSwipeSlide] = useState(0);
+  const [onboardingStep, setOnboardingStep] = useState("0");
+  const [showWelcome, setShowWelcome] = useState(false);
+  const [showOnboardingCompleteModal, setShowOnboardingCompleteModal] = useState(false);
   const [selectedEmailVariant, setSelectedEmailVariant] = useState(0);
   const [campaignResultsByMsgIndex, setCampaignResultsByMsgIndex] = useState<Record<number, typeof fullCampaignResults>>({});
   const [selectedCampaignMsgIndex, setSelectedCampaignMsgIndex] = useState<number | null>(null);
@@ -1067,6 +1153,36 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    const step = getStep();
+    setOnboardingStep(step);
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const isNewUser = params.get("new") === "true";
+    const shouldShowWelcome =
+      (step === "0" || step === "") && (isNewUser || !brandDone()) && !isDone();
+    if (!shouldShowWelcome) return;
+    const t = window.setTimeout(() => setShowWelcome(true), 600);
+    return () => window.clearTimeout(t);
+  }, [getStep, brandDone, isDone]);
+
+  useEffect(() => {
+    if (isDone()) return;
+    if (!brandDone()) return;
+    if (hasGenerated()) return;
+    if (messages.length === 0) return;
+    const lastMessage = messages[messages.length - 1];
+    if (
+      lastMessage?.role === "assistant" &&
+      !lastMessage.generating &&
+      (lastMessage.imageUrls?.length ?? 0) > 0
+    ) {
+      markGenerated();
+      setOnboardingStep("done");
+      setShowOnboardingCompleteModal(true);
+    }
+  }, [messages, isDone, brandDone, hasGenerated, markGenerated]);
 
   useEffect(() => {
     const onBeforeUnload = () => {
@@ -1730,12 +1846,7 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
         const imageFiles = pendingFiles.filter((f) => f.type.startsWith("image/")).slice(0, MAX_INPUT_IMAGES);
         const inputImages =
           imageFiles.length > 0
-            ? await Promise.all(
-                imageFiles.map(async (f) => ({
-                  data: await fileToBase64(f),
-                  mimeType: f.type || "image/png",
-                }))
-              )
+            ? await Promise.all(imageFiles.map((f) => fileToBase64ForApi(f)))
             : [];
         const primaryHex = activeProject?.brand_colors?.[0] ?? "#000000";
         const secondaryHex = activeProject?.brand_colors?.[1] ?? "#000000";
@@ -2116,12 +2227,7 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
       const attachedUrls = imageFiles.length > 0 ? await Promise.all(imageFiles.map(fileToDataUrl)) : [];
       const attachedImagesForApi =
         imageFiles.length > 0
-          ? await Promise.all(
-              imageFiles.map(async (f) => ({
-                data: await fileToBase64(f),
-                mimeType: f.type || "image/png",
-              }))
-            )
+          ? await Promise.all(imageFiles.map((f) => fileToBase64ForApi(f)))
           : [];
 
       const userMsg: CreativeMessage = {
@@ -2195,17 +2301,9 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
         else if (intent === "email") setSelectedTool("email");
 
         if (doImageEdit) {
-          const imageFiles = pendingFiles
-            .filter((f) => f.type.startsWith("image/"))
-            .slice(0, MAX_INPUT_IMAGES);
           const inputImages =
             imageFiles.length > 0
-              ? await Promise.all(
-                  imageFiles.map(async (f) => ({
-                    data: await fileToBase64(f),
-                    mimeType: f.type || "image/png",
-                  }))
-                )
+              ? await Promise.all(imageFiles.map((f) => fileToBase64ForApi(f)))
               : [];
           const isReplyToImage = replyTo?.hasImage && replyToMessage?.generationId;
           const primaryHex = activeProject?.brand_colors?.[0] ?? "#000000";
@@ -2452,17 +2550,9 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
 
     try {
       if (selectedTool === "image") {
-        const imageFiles = pendingFiles
-          .filter((f) => f.type.startsWith("image/"))
-          .slice(0, MAX_INPUT_IMAGES);
         const inputImages =
           imageFiles.length > 0
-            ? await Promise.all(
-                imageFiles.map(async (f) => ({
-                  data: await fileToBase64(f),
-                  mimeType: f.type || "image/png",
-                }))
-              )
+            ? await Promise.all(imageFiles.map((f) => fileToBase64ForApi(f)))
             : [];
         const primaryHex = activeProject?.brand_colors?.[0] ?? "#000000";
         const secondaryHex = activeProject?.brand_colors?.[1] ?? "#000000";
@@ -2657,8 +2747,7 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
   const hasCreateTool = selectedTool === "image" || selectedTool === "video" || selectedTool === "email" || selectedTool === "full";
   const generationCost =
     selectedTool === "image"
-      ? imageCreditCost(imageOptions.resolution) *
-        (imageOptions.carousel && imageOptions.numberOfImages >= 2 ? imageOptions.numberOfImages : 1)
+      ? imageCreditCost(imageOptions.resolution) * Math.max(1, imageOptions.numberOfImages)
       : selectedTool === "video"
         ? videoCreditCost(videoOptions.resolution)
         : selectedTool === "email"
@@ -2683,6 +2772,18 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
           : true);
 
   const hasMessages = messages.length > 0;
+
+  const step2OnboardingActive = getStep() === "2";
+  const pendingImageOnboardingCount = pendingFiles.filter((f) => f.type.startsWith("image/")).length;
+  const step2InputFocus: "tools" | "plus" | "options" | "send" | null = !step2OnboardingActive
+    ? null
+    : selectedTool !== "image"
+      ? "tools"
+      : pendingImageOnboardingCount === 0
+        ? "plus"
+        : !imageCarouselValid
+          ? "options"
+          : "send";
 
   /* ─── Options panel content by tool ──────────────────────────────────── */
 
@@ -3769,7 +3870,13 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
   const inputActionRow = (
     <div className="flex items-center justify-between gap-2 flex-wrap pt-2 shrink-0">
       <div className="flex items-center gap-1.5 flex-wrap">
-        <div className="relative shrink-0" ref={plusMenuRef}>
+        <div
+          className={cn(
+            "relative shrink-0 rounded-lg",
+            step2InputFocus === "plus" && "ring-2 ring-primary ring-offset-2 ring-offset-background z-10 animate-pulse"
+          )}
+          ref={plusMenuRef}
+        >
           <button
             type="button"
             onClick={() => {
@@ -3834,7 +3941,13 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
             </div>
           )}
         </div>
-        <div className="relative shrink-0" ref={optionsRef}>
+        <div
+          className={cn(
+            "relative shrink-0 rounded-lg",
+            step2InputFocus === "options" && "ring-2 ring-primary ring-offset-2 ring-offset-background z-10 animate-pulse"
+          )}
+          ref={optionsRef}
+        >
           <button
             type="button"
             onClick={() => { setOptionsOpen((v) => !v); setToolsOpen(false); setBrandPickerOpen(false); setPlusMenuOpen(false); }}
@@ -3849,7 +3962,13 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
             </div>
           )}
         </div>
-        <div className="relative shrink-0" ref={toolsRef}>
+        <div
+          className={cn(
+            "relative shrink-0 rounded-lg",
+            step2InputFocus === "tools" && "ring-2 ring-primary ring-offset-2 ring-offset-background z-10 animate-pulse"
+          )}
+          ref={toolsRef}
+        >
           <button
             type="button"
             onClick={() => { setToolsOpen((v) => !v); setOptionsOpen(false); setBrandPickerOpen(false); setPlusMenuOpen(false); }}
@@ -3990,6 +4109,7 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
         disabled={selectedTool !== "full" && !canSend}
         className={cn(
           "size-8 rounded-lg bg-primary flex items-center justify-center text-white transition-opacity shrink-0 cursor-pointer",
+          step2InputFocus === "send" && "ring-2 ring-primary ring-offset-2 ring-offset-background animate-pulse",
           selectedTool !== "full" && !canSend && "disabled:opacity-40 disabled:cursor-default",
           selectedTool === "full" && !fullCampaignFormValid && "opacity-60",
           selectedTool === "full" && fullCampaignShake && "animate-shake"
@@ -4031,6 +4151,11 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
           feature={upgradeModal.feature}
           requiredPlan={upgradeModal.requiredPlan}
           onClose={() => setUpgradeModal(null)}
+        />
+      )}
+      {showWelcome && (
+        <WelcomeModal
+          onClose={() => setShowWelcome(false)}
         />
       )}
     <div className="flex flex-1 min-h-0 w-full overflow-hidden">
@@ -4503,7 +4628,7 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
           </div>
         ) : (
           <div className="flex-1 min-h-0 flex items-center justify-center p-10 text-sm text-muted-foreground text-center px-6">
-            Results will show here.
+            {onboardingStep === "2" && !isDone() ? <GenerationGuidePanel /> : "Results will show here."}
           </div>
         )}
       </div>
@@ -4547,7 +4672,7 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
               )}
             >
               {msg.role === "assistant" && (
-                <BlinkifyLogo variant="icon" height={20} className="mb-1.5 shrink-0" />
+                <BlinkifyLogo variant="icon" height={16} className="mb-1.5 shrink-0" />
               )}
               <div
                 className={cn(
@@ -4895,6 +5020,9 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
 
       {/* Input bar — attached to bottom of chat column */}
       <div className="shrink-0 border-t border-border bg-background w-full">
+        {onboardingStep === "2" && !isDone() && (
+          <GenerationGuideBar productAdded={pendingFiles.length > 0 || fullCampaignProductImage !== null} />
+        )}
         <div className="flex flex-col p-3">
               {replyingTo != null && (
                 <div className="flex items-center gap-2 mb-2 rounded-lg bg-primary/10 border border-primary/20 px-3 py-1.5 text-sm">

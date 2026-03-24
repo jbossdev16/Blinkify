@@ -23,6 +23,8 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { updateProject, deleteProject, uploadProjectLogo, setProjectLogoFromUrl, analyzeWebsite } from "@/app/(app)/actions";
 import type { Project, BrandFont, FontStyles, FontStyleElement } from "@/lib/api";
+import { BrandSetupGuide } from "@/components/onboarding/brand-setup-guide";
+import { useOnboarding } from "@/hooks/use-onboarding";
 
 /* ─── Constants ───────────────────────────────────────────────────────── */
 
@@ -305,6 +307,7 @@ interface Props {
 
 export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMode = false }: Props) {
   const router = useRouter();
+  const { getStep, isDone, markBrandDone } = useOnboarding();
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
@@ -351,6 +354,9 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
     socialLinksFromProject(project.social_links)
   );
   const [applyingBrand, setApplyingBrand] = useState(false);
+  const [onboardingStep, setOnboardingStep] = useState("0");
+  const [showApplyHint, setShowApplyHint] = useState(false);
+  const [showApplySuccess, setShowApplySuccess] = useState(false);
   /** After save we set state from the API response. Skip syncing from project for a short window so router.refresh() / cached server data doesn't overwrite with stale brand_colors. */
   const lastSaveAtRef = useRef<number>(0);
   const SAVE_SYNC_GRACE_MS = 10_000;
@@ -452,6 +458,7 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
     guidelinesForSave !== (project.brand_guidelines ?? "") ||
     JSON.stringify(serializeSocialLinksForApi(socialLinks)) !==
       JSON.stringify(serializeSocialLinksForApi(socialLinksFromProject(project.social_links)));
+  const showOnboardingGuide = brandMode && !isDone() && onboardingStep === "1";
 
   /* ── Save ── */
 
@@ -661,7 +668,13 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
     setError("");
     setApplyingBrand(true);
     try {
-      const result = await analyzeWebsite(workspaceId, project.id, url);
+      const outcome = await analyzeWebsite(workspaceId, project.id, url);
+      if (!outcome.ok) {
+        setError(outcome.error);
+        toast.error(outcome.error);
+        return;
+      }
+      const result = outcome.result;
       const suggestions = result.suggestions;
       const extract = result.extract ?? {};
       const fromSuggestion =
@@ -712,6 +725,10 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
           ? "Brand options and logo applied. Review below and click Save Changes to save."
           : "Brand options applied. Review the fields below and click Save Changes to save."
       );
+      if (showOnboardingGuide) {
+        setShowApplySuccess(true);
+        window.setTimeout(() => setShowApplySuccess(false), 3000);
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to apply brand from website");
       toast.error(err instanceof Error ? err.message : "Failed to apply brand");
@@ -720,11 +737,37 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
     }
   }
 
+  useEffect(() => {
+    setOnboardingStep(getStep());
+    // Intentionally run once on mount for onboarding UI.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!showOnboardingGuide) return;
+    setShowApplyHint(true);
+    const t = window.setTimeout(() => setShowApplyHint(false), 8000);
+    return () => window.clearTimeout(t);
+  }, [showOnboardingGuide]);
+
+  function handleOnboardingContinue() {
+    markBrandDone();
+    setOnboardingStep("2");
+    router.push("/creative-studio");
+  }
+
   return (
     <div>
       {brandMode ? (
         /* ─── Brand page: wide, 3-column cards ───────────────────────── */
         <div className="p-6 lg:p-10">
+          {showOnboardingGuide && (
+            <BrandSetupGuide
+              onComplete={handleOnboardingContinue}
+              brandName={name}
+              brandColor={brandColors[0]}
+            />
+          )}
           {error && (
             <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive mb-6">
               {error}
@@ -759,31 +802,49 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
                 )}
               </button>
             </div>
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-nowrap sm:items-center sm:gap-3">
               <input
                 type="url"
                 value={websiteUrl}
                 onChange={(e) => setWebsiteUrl(e.target.value)}
                 placeholder="https://yourstore.com"
-                className="flex-1 min-w-[220px] max-w-xl rounded-xl border border-input bg-background px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                className={cn(
+                  "w-full min-w-0 flex-1 rounded-xl border border-input bg-background px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 sm:h-10 sm:py-0 sm:leading-10",
+                  showOnboardingGuide && "onboarding-highlight-pulse"
+                )}
                 disabled={applyingBrand}
               />
-              <button
-                type="button"
-                onClick={handleApplyBrand}
-                disabled={applyingBrand || !websiteUrl.trim()}
-                className="rounded-xl bg-primary px-5 py-3 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50 disabled:pointer-events-none flex items-center gap-2"
-              >
-                {applyingBrand ? (
-                  <>
-                    <Loader2 className="size-4 animate-spin" />
-                    Applying…
-                  </>
-                ) : (
-                  "Apply Brand"
+              <div className="relative shrink-0 sm:self-center">
+                {showOnboardingGuide && showApplyHint && (
+                  <div className="absolute -top-9 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-foreground text-background px-2.5 py-1 text-[11px] sm:left-auto sm:right-0 sm:translate-x-0">
+                    ← Start here! Enter your URL
+                  </div>
                 )}
-              </button>
+                <button
+                  type="button"
+                  onClick={handleApplyBrand}
+                  disabled={applyingBrand || !websiteUrl.trim()}
+                  className={cn(
+                    "h-10 w-full sm:w-auto rounded-lg bg-primary px-5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:pointer-events-none inline-flex items-center justify-center gap-2",
+                    showOnboardingGuide && "onboarding-highlight-pulse"
+                  )}
+                >
+                  {applyingBrand ? (
+                    <>
+                      <Loader2 className="size-4 animate-spin" />
+                      Applying…
+                    </>
+                  ) : (
+                    "Apply Brand"
+                  )}
+                </button>
+              </div>
             </div>
+            {showOnboardingGuide && showApplySuccess && (
+              <p className="mt-2 text-xs text-green-600 dark:text-green-400 transition-opacity">
+                ✓ Brand data applied! Review and click Continue when ready.
+              </p>
+            )}
           </div>
 
           {/* Bento grid: explicit placement, no overlapping cells; rows expand to content */}
@@ -1634,6 +1695,20 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
         )}
         </div>
       )}
+      <style jsx global>{`
+        @keyframes highlight-pulse {
+          0%,
+          100% {
+            box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4);
+          }
+          50% {
+            box-shadow: 0 0 0 6px rgba(59, 130, 246, 0);
+          }
+        }
+        .onboarding-highlight-pulse {
+          animation: highlight-pulse 2s ease-in-out 3;
+        }
+      `}</style>
     </div>
   );
 }

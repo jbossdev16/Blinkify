@@ -471,7 +471,7 @@ export default function SignupPage() {
             <ArrowLeftIcon className="size-5" />
           </button>
           <Link href="/">
-            <BlinkifyLogo variant="full" height={32} />
+            <BlinkifyLogo variant="full" height={26} />
           </Link>
         </div>
 

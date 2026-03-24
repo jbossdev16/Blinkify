@@ -64,11 +64,21 @@ export async function apiClientFetch<T = unknown>(
             : "Image generation failed or timed out. Try again or a different prompt.";
         } else if (res.status === 503) {
           message = typeof body.error === "string" ? body.error : "Service temporarily unavailable. Please try again.";
+        } else if (res.status === 413) {
+          message =
+            typeof body.error === "string"
+              ? body.error
+              : "Request too large (images were too big). Try smaller images or fewer attachments.";
         } else {
           message = `API error ${res.status}`;
         }
       } else {
-        message = res.status === 503 ? "Service temporarily unavailable. Please try again." : `API error ${res.status}`;
+        message =
+          res.status === 413
+            ? "Request too large (images were too big). Try smaller images or fewer attachments."
+            : res.status === 503
+              ? "Service temporarily unavailable. Please try again."
+              : `API error ${res.status}`;
       }
       throw new Error(message);
     }

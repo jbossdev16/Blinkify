@@ -52,7 +52,7 @@ export function emailCreditCost(imageSize: "1K" | "4K", numberOfImages: 1 | 2 | 
   return numberOfImages === 1 ? 25 : numberOfImages === 2 ? 50 : 75;
 }
 
-/** Credit cost for video by resolution (must match API). */
+/** Credit cost for Creative Studio video tool by resolution (must match API `videoCreditCost`). */
 export function videoCreditCost(resolution: "1080p" | "4k"): number {
-  return resolution === "4k" ? 75 : 50;
+  return resolution === "4k" ? 150 : 100;
 }

@@ -43,11 +43,11 @@ export function extendsNeeded(_targetSeconds: number): number {
   return 0;
 }
 
-/** Credit cost by resolution (aligned with plan-config VIDEO / campaign). */
+/** Credit cost for the Creative Studio video tool only (not full campaign). */
 export function videoCreditCost(resolution: VideoResolution): number {
   return resolution === "4k"
-    ? Math.round(CREDIT_COSTS.VIDEO * 1.5)
-    : CREDIT_COSTS.VIDEO;
+    ? CREDIT_COSTS.STANDALONE_VIDEO_4K
+    : CREDIT_COSTS.STANDALONE_VIDEO_1080P;
 }
 
 /** Timeout: 2× typical generation (8s video ≈ 2–5 min; use 10 min base × 2) */

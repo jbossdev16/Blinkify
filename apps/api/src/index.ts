@@ -114,11 +114,18 @@ app.use("/admin", adminRoutes);
 
 app.use(
   (
-    err: Error & { status?: number },
+    err: Error & { status?: number; type?: string },
     _req: express.Request,
     res: express.Response,
     _next: express.NextFunction
   ) => {
+    if (err.type === "entity.too.large" || err.status === 413) {
+      res.status(413).json({
+        error:
+          "Request body too large. Try fewer or smaller images, or send one image at a time.",
+      });
+      return;
+    }
     const status = err.status ?? 500;
     res.status(status).json({
       error: err.message || "Internal server error",

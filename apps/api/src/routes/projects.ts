@@ -8,7 +8,11 @@ import { supabase } from "../lib/supabase.js";
 import { isUuid, isAllowedWebsiteUrl } from "../lib/validation.js";
 import { SIGNED_URL_EXPIRY_SECONDS } from "../lib/storage-constants.js";
 import { getPlanConfig } from "../lib/plan-config.js";
-import { fetchAndParseWebsite, buildCssColors } from "../lib/fetch-website.js";
+import {
+  fetchAndParseWebsite,
+  buildCssColors,
+  WebsiteFetchError,
+} from "../lib/fetch-website.js";
 import { analyzeBrandFromWebsite, BrandAnalysisResult } from "../lib/claude.js";
 import type { WebsiteExtract } from "../lib/fetch-website.js";
 import { extractGeminiErrorMessage } from "../lib/gemini.js";
@@ -951,6 +955,10 @@ router.post(
 
       res.json({ extract, suggestions });
     } catch (err: unknown) {
+      if (err instanceof WebsiteFetchError) {
+        res.status(422).json({ error: err.message });
+        return;
+      }
       if (err instanceof Error && err.name === "AbortError") {
         res.status(408).json({ error: "Request timed out" });
         return;

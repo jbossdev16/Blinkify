@@ -203,16 +203,23 @@ export async function setProjectLogoFromUrl(
   return { ok: true, brand_logo };
 }
 
+/** Server action must not throw on expected API errors — Next would surface a 500 on POST. */
+export type AnalyzeWebsiteActionResult =
+  | { ok: true; result: AnalyzeWebsiteResult }
+  | { ok: false; error: string };
+
 export async function analyzeWebsite(
   workspaceId: string,
   projectId: string,
   url: string
-): Promise<AnalyzeWebsiteResult> {
+): Promise<AnalyzeWebsiteActionResult> {
   const supabase = await createSupabaseServerClient();
   const {
     data: { session },
   } = await supabase.auth.getSession();
-  if (!session?.access_token) throw new Error("Not authenticated");
+  if (!session?.access_token) {
+    return { ok: false, error: "Not authenticated" };
+  }
 
   const res = await fetch(
     `${API_URL}/workspaces/${workspaceId}/projects/${projectId}/analyze-website`,
@@ -226,6 +233,12 @@ export async function analyzeWebsite(
     }
   );
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error((data as { error?: string }).error ?? `Analysis failed: ${res.status}`);
-  return data as AnalyzeWebsiteResult;
+  if (!res.ok) {
+    return {
+      ok: false,
+      error:
+        (data as { error?: string }).error ?? `Analysis failed: ${res.status}`,
+    };
+  }
+  return { ok: true, result: data as AnalyzeWebsiteResult };
 }

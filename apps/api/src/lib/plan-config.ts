@@ -66,7 +66,9 @@ export const CREDIT_COSTS = {
   IMAGE_1K: 10,
   IMAGE_4K: 20,
 
-  VIDEO: 50,
+  /** Creative Studio video tool only (`POST …/video-generations`). Full campaign video charges use `getFullCampaignPricing().perVideo`. */
+  STANDALONE_VIDEO_1080P: 100,
+  STANDALONE_VIDEO_4K: 150,
 
   /** Full campaign fixed totals (no separate “AI intelligence” charge). */
   FULL_CAMPAIGN_1K_TOTAL: 300,

@@ -606,7 +606,7 @@ function ValueSection() {
           {/* Center: Blinkify icon – between card 2 and 3 on mobile */}
           <BlurFade inView inViewMargin="-40px" delay={0.12} className="order-2 flex shrink-0 items-center justify-center my-2 md:my-0">
             <div className="rounded-2xl border border-black/5 bg-[#ffffff] p-6 md:p-8 shadow-[0_0_40px_-12px_rgba(0,0,0,0.08)]">
-              <BlinkifyLogo variant="icon" height={80} className="object-contain" />
+              <BlinkifyLogo variant="icon" height={56} className="object-contain" />
             </div>
           </BlurFade>
 
@@ -1074,7 +1074,7 @@ function AnimatedBeamBiDirectional() {
           </svg>
         </BeamCircle>
         <BeamCircle ref={div2Ref}>
-          <BlinkifyLogo variant="icon" height={28} className="object-contain" />
+          <BlinkifyLogo variant="icon" height={22} className="object-contain" />
         </BeamCircle>
       </div>
       <AnimatedBeam containerRef={containerRef} fromRef={div1Ref} toRef={div2Ref} startYOffset={8} endYOffset={8} curvature={-20} />

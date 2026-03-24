@@ -98,6 +98,71 @@ const SHOPIFY_PRODUCTS_TIMEOUT_MS = 5_000;
 const ABOUT_SNIPPET_MAX_CHARS = 2000;
 const SHOPIFY_PRODUCTS_MAX_CHARS = 1500;
 
+const UA_BOT =
+  "Mozilla/5.0 (compatible; BlinkifyBrandBot/1.0; +https://blinkify.com)";
+/** Some hosts block non-browser user agents; retry with a common Chrome UA. */
+const UA_BROWSER =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
+
+const HTML_ACCEPT =
+  "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8";
+
+/** Thrown when the public URL cannot be fetched or parsed for brand analysis (caller maps to 422). */
+export class WebsiteFetchError extends Error {
+  readonly statusCode: number;
+
+  constructor(message: string, statusCode = 0) {
+    super(message);
+    this.name = "WebsiteFetchError";
+    this.statusCode = statusCode;
+  }
+}
+
+function messageForHttpStatus(status: number): string {
+  if (status === 403 || status === 401) {
+    return "This website blocked automated access (often bot protection or a login wall). Try a different URL or enter your brand details manually.";
+  }
+  if (status === 404) {
+    return "That page was not found (404). Check the URL and try again.";
+  }
+  if (status === 429) {
+    return "The site is rate-limiting requests. Wait a minute and try again, or use another URL.";
+  }
+  if (status >= 500) {
+    return "The website server returned an error. Try again later or use another URL.";
+  }
+  return `Could not load this URL (HTTP ${status}). Try another link or enter your brand details manually.`;
+}
+
+async function fetchPageResponse(
+  url: string,
+  signal: AbortSignal
+): Promise<Response> {
+  const commonHeaders: Record<string, string> = {
+    Accept: HTML_ACCEPT,
+    "Accept-Language": "en-US,en;q=0.9",
+  };
+
+  let res = await fetch(url, {
+    signal,
+    headers: { "User-Agent": UA_BOT, ...commonHeaders },
+    redirect: "follow",
+  });
+
+  if (
+    !res.ok &&
+    (res.status === 403 || res.status === 401)
+  ) {
+    res = await fetch(url, {
+      signal,
+      headers: { "User-Agent": UA_BROWSER, ...commonHeaders },
+      redirect: "follow",
+    });
+  }
+
+  return res;
+}
+
 function isLikelySvgUrl(imageUrl: string): boolean {
   if (!imageUrl) return false;
   const lower = imageUrl.split("?")[0].toLowerCase();
@@ -207,22 +272,18 @@ export async function fetchAndParseWebsite(url: string): Promise<WebsiteExtract>
   const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
   try {
-    const res = await fetch(url, {
-      signal: controller.signal,
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (compatible; BlinkifyBrandBot/1.0; +https://blinkify.com)",
-      },
-      redirect: "follow",
-    });
+    const res = await fetchPageResponse(url, controller.signal);
     clearTimeout(timeout);
 
     if (!res.ok) {
-      throw new Error(`HTTP ${res.status}`);
+      throw new WebsiteFetchError(messageForHttpStatus(res.status), res.status);
     }
     const contentType = res.headers.get("content-type") ?? "";
     if (!contentType.toLowerCase().includes("text/html")) {
-      throw new Error("URL did not return HTML");
+      throw new WebsiteFetchError(
+        "That URL did not return a web page (HTML). Use your store’s public homepage URL.",
+        0
+      );
     }
 
     const html = await res.text();

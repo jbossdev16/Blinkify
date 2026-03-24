@@ -154,7 +154,7 @@ export const Lid = ({
           className="absolute inset-0 flex items-center justify-center rounded-lg bg-[#010101]"
         >
           <span className="text-white">
-            <BlinkifyLogo variant="icon" height={28} className="opacity-100" />
+            <BlinkifyLogo variant="icon" height={22} className="opacity-100" />
           </span>
         </div>
       </div>
