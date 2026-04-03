@@ -867,7 +867,7 @@ interface CreativeStudioChatProps {
 }
 
 export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: CreativeStudioChatProps) {
-  const { getStep, isDone, brandDone, hasGenerated, markGenerated } = useOnboarding();
+  const { getStep, isDone, brandDone, hasGenerated, markGenerated, welcomeSeen, markWelcomeSeen } = useOnboarding();
   const [activeProject, setActiveProject] = useState<Project>(project);
   const projectId = activeProject.id;
   const planFeatures = getPlanFeatures(plan);
@@ -1158,14 +1158,15 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
     const step = getStep();
     setOnboardingStep(step);
     if (typeof window === "undefined") return;
+    if (isDone() || welcomeSeen()) return;
     const params = new URLSearchParams(window.location.search);
     const isNewUser = params.get("new") === "true";
-    const shouldShowWelcome =
-      (step === "0" || step === "") && (isNewUser || !brandDone()) && !isDone();
-    if (!shouldShowWelcome) return;
+    if (!isNewUser) return;
+    if (step !== "0" && step !== "") return;
+    markWelcomeSeen();
     const t = window.setTimeout(() => setShowWelcome(true), 600);
     return () => window.clearTimeout(t);
-  }, [getStep, brandDone, isDone]);
+  }, [getStep, isDone, welcomeSeen, markWelcomeSeen]);
 
   useEffect(() => {
     if (isDone()) return;

@@ -3,6 +3,7 @@
 const STEP_KEY = "blinkify:onboarding:step";
 const BRAND_DONE_KEY = "blinkify:onboarding:brand_done";
 const GENERATED_KEY = "blinkify:onboarding:generated";
+const WELCOME_SEEN_KEY = "blinkify:onboarding:welcome_seen";
 
 function safeGet(key: string): string | null {
   if (typeof window === "undefined") return null;
@@ -53,6 +54,9 @@ export function useOnboarding() {
 
   const hasGenerated = () => safeGet(GENERATED_KEY) === "true";
 
+  const welcomeSeen = () => safeGet(WELCOME_SEEN_KEY) === "true";
+  const markWelcomeSeen = () => safeSet(WELCOME_SEEN_KEY, "true");
+
   return {
     getStep,
     setStep,
@@ -63,5 +67,7 @@ export function useOnboarding() {
     dismiss,
     brandDone,
     hasGenerated,
+    welcomeSeen,
+    markWelcomeSeen,
   };
 }

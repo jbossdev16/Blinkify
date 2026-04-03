@@ -117,6 +117,7 @@ const organizationLd = {
   contactPoint: {
     "@type": "ContactPoint",
     contactType: "customer support",
+    email: "hamza@blinkify.ai",
     url: CANONICAL,
   },
 };

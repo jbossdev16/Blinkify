@@ -13,7 +13,7 @@ const footerLinks = {
     { label: "About", href: "#" },
     { label: "Blog", href: "#" },
     { label: "Careers", href: "#" },
-    { label: "Contact", href: "#" },
+    { label: "Contact", href: "mailto:hamza@blinkify.ai" },
     { label: "Brand", href: "/brand-assets" },
   ],
   legal: [

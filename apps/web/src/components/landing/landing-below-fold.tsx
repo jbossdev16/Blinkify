@@ -19,6 +19,7 @@ import {
   ChevronDown,
   DollarSign,
   Clock,
+  Mail,
 } from "lucide-react";
 import { BlurFade } from "@/components/ui/blur-fade";
 import { BorderBeam } from "@/components/ui/border-beam";
@@ -1643,15 +1644,14 @@ const plans: {
     popular: false,
     benefits: [
       { label: "400 Credits / Month", included: true },
+      { label: "Up to 40 ad creatives (1K)", included: true },
+      { label: "Up to 20 ad creatives (4K)", included: true },
+      { label: "4–12 email templates", included: true },
       { label: "1 Brand", included: true },
-      { label: "1 Team Member", included: true },
-      { label: "Ad Creative Generation", included: true },
       { label: "Custom Branding", included: true },
-      { label: "AI Prompt Enhancement", included: true },
       { label: "Multiple Formats", included: true },
-      { label: "AI Email Marketing", included: true },
+      { label: "AI Prompt Enhancement", included: true },
       { label: "Product Video Shoot", included: false },
-      { label: "All AI Assets Unlocked", included: false },
       { label: "24/7 Priority Support", included: false },
     ],
   },
@@ -1663,15 +1663,14 @@ const plans: {
     popular: true,
     benefits: [
       { label: "1,500 Credits / Month", included: true },
+      { label: "Up to 150 ad creatives (1K)", included: true },
+      { label: "Up to 75 ad creatives (4K)", included: true },
+      { label: "15 product videos", included: true },
+      { label: "15–50 email templates", included: true },
       { label: "3 Brands", included: true },
-      { label: "1 Team Member", included: true },
-      { label: "Ad Creative Generation", included: true },
       { label: "Custom Branding", included: true },
-      { label: "AI Prompt Enhancement", included: true },
-      { label: "Multiple Formats", included: true },
-      { label: "AI Email Marketing", included: true },
-      { label: "Product Video Shoot", included: true },
       { label: "All AI Assets Unlocked", included: true },
+      { label: "AI Prompt Enhancement", included: true },
       { label: "24/7 Priority Support", included: true },
     ],
   },
@@ -1683,15 +1682,13 @@ const plans: {
     popular: false,
     benefits: [
       { label: "5,000 Credits / Month", included: true },
-      { label: "10 Brands", included: true },
-      { label: "10 Team Members", included: true },
-      { label: "Ad Creative Generation", included: true },
-      { label: "Custom Branding", included: true },
-      { label: "AI Prompt Enhancement", included: true },
-      { label: "Multiple Formats", included: true },
-      { label: "AI Email Marketing", included: true },
-      { label: "Product Video Shoot", included: true },
+      { label: "Up to 500 ad creatives (1K)", included: true },
+      { label: "Up to 250 ad creatives (4K)", included: true },
+      { label: "50 product videos", included: true },
+      { label: "50–150 email templates", included: true },
+      { label: "10 Brands · 10 Team Members", included: true },
       { label: "All AI Assets Unlocked", included: true },
+      { label: "AI Prompt Enhancement", included: true },
       { label: "24/7 Priority Support", included: true },
       { label: "Dedicated Account Manager", included: true },
     ],
@@ -1728,7 +1725,7 @@ function AnimatedPrice({
 }
 
 function PricingSection() {
-  const [billingPeriod, setBillingPeriod] = useState<"monthly" | "annual">("annual");
+  const [billingPeriod, setBillingPeriod] = useState<"monthly" | "annual">("monthly");
   return (
     <section id="pricing" className="py-24 bg-[#ffffff]">
       <div className="max-w-[1200px] mx-auto px-4">
@@ -1929,10 +1926,10 @@ function PricingSection() {
         <p className="text-center text-foreground mt-12 text-base font-normal">
           Need a custom plan or enterprise solution?{" "}
           <Link
-            href="mailto:support@blinkify.ai"
+            href="mailto:hamza@blinkify.ai"
             className="font-medium underline underline-offset-4 text-primary hover:text-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 rounded-sm"
           >
-            Book a call
+            Contact us
           </Link>{" "}
           and let&apos;s talk.
         </p>
@@ -2079,6 +2076,27 @@ function FinalCTASection() {
 }
 
 
+function ContactSection() {
+  return (
+    <section id="contact" className="py-20 bg-[#ffffff]">
+      <div className="max-w-[1200px] mx-auto px-4 text-center">
+        <h2 className="text-h2 font-medium tracking-tight text-foreground mb-4">
+          Contact Us
+        </h2>
+        <p className="text-slate-700 max-w-[520px] mx-auto mb-8 font-normal">
+          Have a question, need a custom plan, or just want to say hi? We&apos;d love to hear from you.
+        </p>
+        <Button asChild size="lg" className="text-base font-medium px-8">
+          <a href="mailto:hamza@blinkify.ai">
+            <Mail className="mr-2 h-5 w-5" />
+            hamza@blinkify.ai
+          </a>
+        </Button>
+      </div>
+    </section>
+  );
+}
+
 export default function LandingBelowFold() {
   return (
     <>
@@ -2100,6 +2118,8 @@ export default function LandingBelowFold() {
       <PricingSection />
       <SectionDivider />
       <FAQSection />
+      <SectionDivider />
+      <ContactSection />
       <SectionDivider />
       <FinalCTASection />
     </>
