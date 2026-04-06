@@ -11,9 +11,9 @@
   ],
   "scripts": {
     "dev": "next dev --port 3032",
-    "build": "node scripts/check-api-backend-env.js && next build --webpack",
-    "start": "next start",
-    "lint": "next lint",
+    "build": "node scripts/check-api-backend-env.js && npx next build --webpack",
+    "start": "npx next start",
+    "lint": "npx next lint",
     "clean": "rm -rf .next"
   },
   "dependencies": {

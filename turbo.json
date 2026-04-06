@@ -1,5 +1,17 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  "globalPassThroughEnv": [
+    "WEB_ORIGIN",
+    "GEMINI_API_KEY",
+    "ANTHROPIC_API_KEY",
+    "POLAR_ACCESS_TOKEN",
+    "POLAR_PRODUCT_ID_STANDARD",
+    "POLAR_PRODUCT_ID_PROFESSIONAL",
+    "POLAR_PRODUCT_ID_AGENCY",
+    "POLAR_PRODUCT_ID_STANDARD_ANNUAL",
+    "POLAR_PRODUCT_ID_PROFESSIONAL_ANNUAL",
+    "POLAR_PRODUCT_ID_AGENCY_ANNUAL"
+  ],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
