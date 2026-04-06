@@ -1,0 +1,13 @@
+---
+description: Dev server port convention — web runs on 3032, API on 4001
+alwaysApply: true
+---
+
+# Dev Server Ports
+
+- **Web (Next.js):** always `localhost:3032`
+- **API (Express):** always `localhost:4001`
+
+When starting the dev server, run `npm run dev` from the repo root. The web app will be at `http://localhost:3032`.
+
+Never change these port defaults without explicit user request.

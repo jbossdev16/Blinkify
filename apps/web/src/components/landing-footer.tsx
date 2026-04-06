@@ -7,12 +7,9 @@ const footerLinks = {
     { label: "Features", href: "/#value" },
     { label: "Pricing", href: "/#pricing" },
     { label: "Use Cases", href: "/#who-its-for" },
-    { label: "API", href: "#" },
   ],
   company: [
-    { label: "About", href: "#" },
-    { label: "Blog", href: "#" },
-    { label: "Careers", href: "#" },
+    { label: "Blog", href: "https://instagram.com/blinkify.ai" },
     { label: "Contact", href: "mailto:hamza@blinkify.ai" },
     { label: "Brand", href: "/brand-assets" },
   ],

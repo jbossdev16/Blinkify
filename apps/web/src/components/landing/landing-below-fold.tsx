@@ -19,7 +19,6 @@ import {
   ChevronDown,
   DollarSign,
   Clock,
-  Mail,
 } from "lucide-react";
 import { BlurFade } from "@/components/ui/blur-fade";
 import { BorderBeam } from "@/components/ui/border-beam";
@@ -1536,7 +1535,7 @@ const testimonials: {
 
 function TestimonialBentoSection() {
   return (
-    <section className="py-24 bg-[#ffffff]">
+    <section id="who-its-for" className="py-24 bg-[#ffffff]">
       <div className="max-w-[1200px] mx-auto px-4">
         <div className="text-center mb-8">
           <h2 className="text-h2 font-medium tracking-tight text-foreground mb-2">
@@ -1999,7 +1998,7 @@ function FAQSection() {
           })}
         </ul>
         <nav
-          className="max-w-[640px] mx-auto mt-10 pt-8 border-t border-black/[0.06] space-y-2 text-center"
+          className="sr-only"
           aria-label="Related guides"
         >
           <p className="text-sm text-muted-foreground mb-3">Learn more</p>
@@ -2075,28 +2074,6 @@ function FinalCTASection() {
   );
 }
 
-
-function ContactSection() {
-  return (
-    <section id="contact" className="py-20 bg-[#ffffff]">
-      <div className="max-w-[1200px] mx-auto px-4 text-center">
-        <h2 className="text-h2 font-medium tracking-tight text-foreground mb-4">
-          Contact Us
-        </h2>
-        <p className="text-slate-700 max-w-[520px] mx-auto mb-8 font-normal">
-          Have a question, need a custom plan, or just want to say hi? We&apos;d love to hear from you.
-        </p>
-        <Button asChild size="lg" className="text-base font-medium px-8">
-          <a href="mailto:hamza@blinkify.ai">
-            <Mail className="mr-2 h-5 w-5" />
-            hamza@blinkify.ai
-          </a>
-        </Button>
-      </div>
-    </section>
-  );
-}
-
 export default function LandingBelowFold() {
   return (
     <>
@@ -2118,8 +2095,6 @@ export default function LandingBelowFold() {
       <PricingSection />
       <SectionDivider />
       <FAQSection />
-      <SectionDivider />
-      <ContactSection />
       <SectionDivider />
       <FinalCTASection />
     </>

@@ -31,7 +31,7 @@ AI Image generation B2B SaaS — monorepo.
    npm run dev
    ```
 
-   - Web: http://localhost:3000  
+   - Web: http://localhost:3032  
    - API: http://localhost:4001 (health: http://localhost:4001/health)
 
 ## Commands (root)

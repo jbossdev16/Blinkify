@@ -9,11 +9,11 @@ const router = Router();
 const POLAR_ACCESS_TOKEN = process.env.POLAR_ACCESS_TOKEN ?? "";
 const POLAR_SANDBOX = process.env.POLAR_SANDBOX === "true" || process.env.POLAR_SANDBOX === "1";
 
-const allowedOrigins = (process.env.WEB_ORIGIN ?? "http://localhost:3000")
+const allowedOrigins = (process.env.WEB_ORIGIN ?? "http://localhost:3032")
   .split(",")
   .map((o) => o.trim())
   .filter(Boolean);
-const defaultOrigin = allowedOrigins[0] ?? "http://localhost:3000";
+const defaultOrigin = allowedOrigins[0] ?? "http://localhost:3032";
 
 function getOriginForRequest(req: Request): string {
   const origin = req.get("Origin");

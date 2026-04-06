@@ -37,19 +37,19 @@ const CLEANUP_UNSAVED_INTERVAL_MS = process.env.CLEANUP_UNSAVED_GENERATIONS_INTE
 const PORT = process.env.PORT ?? 4001;
 
 app.use(helmet());
-const allowedOrigins = (process.env.WEB_ORIGIN ?? "http://localhost:3000")
+const allowedOrigins = (process.env.WEB_ORIGIN ?? "http://localhost:3032")
   .split(",")
   .map((o) => o.trim())
   .filter(Boolean);
 
-/** Browsers treat localhost and 127.0.0.1 as different origins; allow both for local Next (port 3000). */
+/** Browsers treat localhost and 127.0.0.1 as different origins; allow both for local Next dev. */
 function isHttpLocalNextDevOrigin(origin: string): boolean {
   try {
     const u = new URL(origin);
     return (
       u.protocol === "http:" &&
       (u.hostname === "localhost" || u.hostname === "127.0.0.1") &&
-      u.port === "3000"
+      u.port === "3032"
     );
   } catch {
     return false;

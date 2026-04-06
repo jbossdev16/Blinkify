@@ -92,7 +92,7 @@ export async function apiClientFetch<T = unknown>(
     }
     if (err instanceof TypeError && err.message === "Failed to fetch") {
       throw new Error(
-        "Could not reach the API. On local dev, start the backend (port 4001) and check NEXT_PUBLIC_API_URL."
+        "Could not reach the API. On local dev, start the backend and check NEXT_PUBLIC_API_URL."
       );
     }
     throw err;

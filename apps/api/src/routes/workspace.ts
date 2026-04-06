@@ -15,11 +15,11 @@ import crypto from "crypto";
 
 const router = Router();
 
-const allowedOrigins = (process.env.WEB_ORIGIN ?? "http://localhost:3000")
+const allowedOrigins = (process.env.WEB_ORIGIN ?? "http://localhost:3032")
   .split(",")
   .map((o) => o.trim())
   .filter(Boolean);
-const defaultOrigin = allowedOrigins[0] ?? "http://localhost:3000";
+const defaultOrigin = allowedOrigins[0] ?? "http://localhost:3032";
 
 function getOriginForRequest(req: Request): string {
   const origin = req.get("Origin");

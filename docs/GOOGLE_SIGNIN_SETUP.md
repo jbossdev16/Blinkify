@@ -18,7 +18,7 @@ Your app already uses Supabase’s Google OAuth on signup and signin (`signInWit
    - Application type: **Web application**.
    - Name: e.g. `Blinkify Web`.
    - **Authorized JavaScript origins**:
-     - `http://localhost:3000` (dev)
+     - `http://localhost:3032` (dev)
      - Your production origin, e.g. `https://app.blinkify.ai` (or `https://blinkify.ai` if that’s where signup/signin live).
    - **Authorized redirect URIs** – add **Supabase’s callback URL**:
      - `https://<YOUR_SUPABASE_PROJECT_REF>.supabase.co/auth/v1/callback`
@@ -41,10 +41,10 @@ Your app already uses Supabase’s Google OAuth on signup and signin (`signInWit
 ## 3. Supabase – Redirect URLs
 
 1. **Authentication** → **URL Configuration**.
-2. **Site URL**: the main origin users see (e.g. `https://app.blinkify.ai` or `http://localhost:3000` for dev).
+2. **Site URL**: the main origin users see (e.g. `https://app.blinkify.ai` or `http://localhost:3032` for dev).
 3. **Redirect URLs**: add every origin/path your app uses as `redirectTo` after login:
-   - `http://localhost:3000/creative-studio`
-   - `http://localhost:3000/**` (optional; wildcard for dev)
+   - `http://localhost:3032/creative-studio`
+   - `http://localhost:3032/**` (optional; wildcard for dev)
    - `https://app.blinkify.ai/creative-studio`
    - `https://app.blinkify.ai/**` (optional)
    - Add `/signin` if you redirect there in some flows.
@@ -54,20 +54,20 @@ Your app currently uses:
 - Signin: `redirectTo: ${origin}${returnTo}` (e.g. `/creative-studio` or a path like `/creative-studio`)
 
 So at least:
-- `http://localhost:3000/creative-studio` and `http://localhost:3000/**` for dev.
+- `http://localhost:3032/creative-studio` and `http://localhost:3032/**` for dev.
 - `https://app.blinkify.ai/creative-studio` and `https://app.blinkify.ai/**` for prod (or your real app origin).
 
 ---
 
 ## 4. Local dev – optional
 
-For local testing, in **Google OAuth client** you already added `http://localhost:3000` as authorized origin and in Supabase you added `http://localhost:3000/creative-studio` (and optionally `http://localhost:3000/**`) as redirect URLs. No code change needed.
+For local testing, in **Google OAuth client** you already added `http://localhost:3032` as authorized origin and in Supabase you added `http://localhost:3032/creative-studio` (and optionally `http://localhost:3032/**`) as redirect URLs. No code change needed.
 
 ---
 
 ## 5. Verify
 
-1. Open signup or signin (e.g. `http://localhost:3000/signup` or your app URL).
+1. Open signup or signin (e.g. `http://localhost:3032/signup` or your app URL).
 2. Click **Continue with Google**.
 3. Sign in with Google; you should be redirected back to `/creative-studio` (or your `returnTo` path) with a session.
 4. Your API uses `ensureCurrentUser` and creates a `users` row from the JWT (`sub`, `email`, `name`, `picture`) when missing, so the first creative-studio load after Google sign-in should work without extra setup.

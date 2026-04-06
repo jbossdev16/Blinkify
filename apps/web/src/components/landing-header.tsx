@@ -52,12 +52,12 @@ export function LandingHeader() {
           >
             Pricing
           </Link>
-          <Link
-            href="/#contact"
+          <a
+            href="mailto:hamza@blinkify.ai"
             className="text-body-sm font-medium text-[#000000] transition-all duration-200 hover:-translate-y-0.5"
           >
             Contact
-          </Link>
+          </a>
         </nav>
         <div className="flex items-center gap-3 shrink-0">
           <a
