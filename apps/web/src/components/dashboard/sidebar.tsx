@@ -531,14 +531,14 @@ function UserMenuPopover({
           Settings
         </button>
 
-        <Link
-          href="/help"
+        <a
+          href="mailto:hamza@blinkify.ai"
           className="flex items-center gap-3 w-full px-4 py-2.5 text-sm text-foreground hover:bg-secondary/50 transition-colors"
         >
           <HelpCircle className="size-[18px] text-muted-foreground shrink-0" />
           <span className="flex-1 text-left">Help</span>
           <ChevronRight className="size-4 text-muted-foreground" />
-        </Link>
+        </a>
 
         <button
           type="button"

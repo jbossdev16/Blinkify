@@ -359,7 +359,9 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
   const [showApplySuccess, setShowApplySuccess] = useState(false);
   /** After save we set state from the API response. Skip syncing from project for a short window so router.refresh() / cached server data doesn't overwrite with stale brand_colors. */
   const lastSaveAtRef = useRef<number>(0);
-  const SAVE_SYNC_GRACE_MS = 10_000;
+  const SAVE_SYNC_GRACE_MS = 30_000;
+  /** Track fields from the last successful save so stale server data can never revert them. Cleared when server data catches up (matching values) or on project switch. */
+  const lastSavedFieldsRef = useRef<{ websiteUrl?: string; socialLinks?: string } | null>(null);
   /** Ignore project props older than our last successful save (stale RSC/cache) so website_url / social_links are not reverted. */
   const staleProjectGuardRef = useRef<{ projectId: string; minUpdatedAtMs: number } | null>(null);
   /** Apply Brand set a name that is not saved yet — don't let project prop sync revert it to "Brand 1" etc. */
@@ -376,6 +378,7 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
       lastProjectIdForSyncRef.current = project.id;
       pendingImportedBrandNameRef.current = null;
       staleProjectGuardRef.current = null;
+      lastSavedFieldsRef.current = null;
     }
     const guard = staleProjectGuardRef.current;
     if (guard && guard.projectId === project.id && project.updated_at) {
@@ -418,8 +421,30 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
     setBrandGuidelines(rest2);
     setColorSlotModes(Array.from({ length: COLOR_SLOT_COUNT }, (_, i) => (slotGradients[i]?.colors?.length > 1 ? "gradient" : "solid")));
     setColorSlotGradients(Array.from({ length: COLOR_SLOT_COUNT }, (_, i) => slotGradients[i] ?? { angle: 90, colors: [] }));
-    setWebsiteUrl(project.website_url ?? "");
-    setSocialLinks(socialLinksFromProject(project.social_links));
+    const incomingWebsiteUrl = project.website_url ?? "";
+    const incomingSocialLinksJson = JSON.stringify(serializeSocialLinksForApi(socialLinksFromProject(project.social_links)));
+    const saved = lastSavedFieldsRef.current;
+    if (saved) {
+      if (saved.websiteUrl !== undefined && incomingWebsiteUrl === saved.websiteUrl) {
+        lastSavedFieldsRef.current = { ...saved, websiteUrl: undefined };
+      }
+      if (saved.socialLinks !== undefined && incomingSocialLinksJson === saved.socialLinks) {
+        lastSavedFieldsRef.current = { ...saved, socialLinks: undefined };
+      }
+      if (saved.websiteUrl !== undefined && incomingWebsiteUrl !== saved.websiteUrl) {
+        setWebsiteUrl(saved.websiteUrl);
+      } else {
+        setWebsiteUrl(incomingWebsiteUrl);
+      }
+      if (saved.socialLinks !== undefined && incomingSocialLinksJson !== saved.socialLinks) {
+        // Server data is stale — keep saved social links (already in state)
+      } else {
+        setSocialLinks(socialLinksFromProject(project.social_links));
+      }
+    } else {
+      setWebsiteUrl(incomingWebsiteUrl);
+      setSocialLinks(socialLinksFromProject(project.social_links));
+    }
   }, [
     brandMode,
     project.name,
@@ -525,8 +550,11 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
       setBrandGuidelines(rest2);
       setColorSlotModes(Array.from({ length: COLOR_SLOT_COUNT }, (_, i) => (slotGradients[i]?.colors?.length > 1 ? "gradient" : "solid")));
       setColorSlotGradients(Array.from({ length: COLOR_SLOT_COUNT }, (_, i) => slotGradients[i] ?? { angle: 90, colors: [] }));
-      setWebsiteUrl(updatedProject.website_url ?? "");
+      const savedWebsiteUrl = updatedProject.website_url ?? "";
+      const savedSocialLinksJson = JSON.stringify(serializeSocialLinksForApi(socialLinksFromProject(updatedProject.social_links)));
+      setWebsiteUrl(savedWebsiteUrl);
       setSocialLinks(socialLinksFromProject(updatedProject.social_links));
+      lastSavedFieldsRef.current = { websiteUrl: savedWebsiteUrl, socialLinks: savedSocialLinksJson };
       pendingImportedBrandNameRef.current = null;
       const savedAt = updatedProject.updated_at ? new Date(updatedProject.updated_at).getTime() : 0;
       if (!Number.isNaN(savedAt) && savedAt > 0) {
