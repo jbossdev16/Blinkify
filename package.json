@@ -8,7 +8,6 @@
     "packages/*"
   ],
   "scripts": {
-    "postinstall": "mkdir -p apps/web/node_modules/.bin && ln -sf ../../../../node_modules/.bin/next apps/web/node_modules/.bin/next",
     "dev": "turbo run dev",
     "build": "turbo run build",
     "lint": "turbo run lint",
