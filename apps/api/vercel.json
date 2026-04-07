@@ -1,13 +1,15 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": null,
-  "installCommand": "cd ../.. && npm install",
-  "functions": {
-    "src/index.ts": {
-      "maxDuration": 300
+  "builds": [
+    {
+      "src": "src/index.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 300
+      }
     }
-  },
-  "rewrites": [
-    { "source": "/(.*)", "destination": "/src/index.ts" }
+  ],
+  "routes": [
+    { "src": "/(.*)", "dest": "src/index.ts" }
   ]
 }
