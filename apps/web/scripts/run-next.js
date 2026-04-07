@@ -1,45 +1,22 @@
 #!/usr/bin/env node
 const path = require("path");
 const fs = require("fs");
-const { execFileSync } = require("child_process");
+const { execFileSync, execSync } = require("child_process");
 
 const root = path.resolve(__dirname, "..", "..", "..");
-const candidates = [
-  path.join(root, "node_modules", "next", "dist", "bin", "next"),
-  path.join(root, "node_modules", ".bin", "next"),
-  path.join(__dirname, "..", "node_modules", "next", "dist", "bin", "next"),
-  path.join(__dirname, "..", "node_modules", ".bin", "next"),
-];
+const nextDir = path.join(root, "node_modules", "next");
 
-let bin;
-for (const c of candidates) {
-  if (fs.existsSync(c)) { bin = c; break; }
+if (!fs.existsSync(nextDir)) {
+  console.log("[run-next] next not found — installing workspace dependencies...");
+  execSync("npm install --workspaces --include-workspace-root", {
+    stdio: "inherit",
+    cwd: root,
+  });
 }
 
-if (!bin) {
-  console.error("[run-next] next binary not found. Searched:");
-  candidates.forEach((c) => console.error("  -", c));
-  console.error("\nRoot node_modules contents:");
-  const nm = path.join(root, "node_modules");
-  if (fs.existsSync(nm)) {
-    const entries = fs.readdirSync(nm).filter((e) => e.startsWith("next") || e === ".bin");
-    entries.forEach((e) => console.error("  ", e));
-    const bin_dir = path.join(nm, ".bin");
-    if (fs.existsSync(bin_dir)) {
-      console.error("\nRoot .bin contents:");
-      fs.readdirSync(bin_dir).filter((e) => e.includes("next")).forEach((e) => console.error("  ", e));
-    }
-  } else {
-    console.error("  (directory does not exist)");
-  }
-  console.error("\nLocal node_modules:");
-  const lnm = path.join(__dirname, "..", "node_modules");
-  if (fs.existsSync(lnm)) {
-    const entries = fs.readdirSync(lnm).filter((e) => e.startsWith("next") || e === ".bin");
-    entries.forEach((e) => console.error("  ", e));
-  } else {
-    console.error("  (directory does not exist)");
-  }
+const bin = path.join(nextDir, "dist", "bin", "next");
+if (!fs.existsSync(bin)) {
+  console.error("[run-next] FATAL: next binary not found at", bin);
   process.exit(1);
 }
 
