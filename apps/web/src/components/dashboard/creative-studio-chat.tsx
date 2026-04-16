@@ -606,10 +606,10 @@ async function loadCreativeStudioChatFromSupabase(workspaceId: string, projectId
   const stored = d.messages ?? [];
   const messages: CreativeMessage[] = stored.map((m) => ({
     role: m.role,
-    content: m.content,
+    content: typeof m.content === "string" ? m.content : String(m.content ?? ""),
     timestamp: m.timestamp,
     tool: m.tool,
-    stages: m.stages,
+    stages: Array.isArray(m.stages) ? m.stages.map((s) => (typeof s === "string" ? s : String(s ?? ""))) : m.stages,
     generationId: m.generationId,
     generationIds: m.generationIds,
     hasImage: m.hasImage,
@@ -1395,7 +1395,7 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
                 return { ...m, videoUrl, generating: false };
               }
               if (status === "failed") {
-                return { ...m, content: error ? `Error: ${error}` : "Video generation failed.", generating: false };
+                return { ...m, content: error ? `Error: ${typeof error === "string" ? error : "Generation failed"}` : "Video generation failed.", generating: false };
               }
               if (status === "cancelled") {
                 return { ...m, content: "Generation cancelled.", generating: false };
@@ -2140,7 +2140,7 @@ export function CreativeStudioChat({ project, allProjects, workspaceId, plan }: 
             if (m && m.role === "assistant") {
               next[msgIndex] = {
                 ...m,
-                content: `Error: ${res.error ?? "Generation failed"}`,
+                content: `Error: ${typeof res.error === "string" ? res.error : "Generation failed"}`,
                 generating: false,
               };
             }

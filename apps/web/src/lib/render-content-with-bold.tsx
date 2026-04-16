@@ -5,6 +5,7 @@ import type React from "react";
  * Use for AI assistant message content.
  */
 export function renderContentWithBold(content: string): React.ReactNode {
+  if (typeof content !== "string") content = String(content ?? "");
   if (!content.trim()) return content;
   const parts: React.ReactNode[] = [];
   const re = /\*\*(.+?)\*\*|\*(.+?)\*/g;

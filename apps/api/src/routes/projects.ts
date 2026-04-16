@@ -518,23 +518,26 @@ router.put(
         .single();
 
       if (result.error?.message?.includes("column") && Object.keys(brandUpdates).length > 0) {
-        // Some brand columns may not exist yet — retry without optional ones
-        const { font_styles: _fs, website_url: _wu, social_links: _sl, ...brandWithoutOptional } =
-          brandUpdates;
-        const fallbackUpdates =
-          Object.keys(brandWithoutOptional).length > 0
-            ? { ...updates, ...brandWithoutOptional }
-            : updates;
-        const fallback = await supabase
-          .from("projects")
-          .update(fallbackUpdates)
-          .eq("id", projectId)
-          .eq("workspace_id", workspaceId)
-          .is("deleted_at", null)
-          .select()
-          .single();
-        project = fallback.data;
-        error = fallback.error;
+        const optionalCols = ["font_styles", "website_url", "social_links"] as const;
+        let retryUpdates = { ...updates, ...brandUpdates };
+        let retryResult = result;
+        for (const col of optionalCols) {
+          if (!retryResult.error?.message?.includes("column")) break;
+          if (!(col in retryUpdates)) continue;
+          const { [col]: _dropped, ...rest } = retryUpdates;
+          retryUpdates = rest;
+          console.warn(`PUT project ${projectId}: column error — retrying without ${col}`);
+          retryResult = await supabase
+            .from("projects")
+            .update(retryUpdates)
+            .eq("id", projectId)
+            .eq("workspace_id", workspaceId)
+            .is("deleted_at", null)
+            .select()
+            .single();
+        }
+        project = retryResult.data;
+        error = retryResult.error;
       } else {
         project = result.data;
         error = result.error;
