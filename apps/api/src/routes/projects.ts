@@ -521,12 +521,18 @@ router.put(
         const optionalCols = ["font_styles", "website_url", "social_links"] as const;
         let retryUpdates = { ...updates, ...brandUpdates };
         let retryResult = result;
-        for (const col of optionalCols) {
+        for (let attempt = 0; attempt < optionalCols.length; attempt++) {
           if (!retryResult.error?.message?.includes("column")) break;
-          if (!(col in retryUpdates)) continue;
-          const { [col]: _dropped, ...rest } = retryUpdates;
+          const errMsg = retryResult.error.message;
+          const colMatch = errMsg.match(/['"](\w+)['"]/);
+          const badCol = colMatch?.[1];
+          const colToDrop = badCol && (badCol in retryUpdates) && optionalCols.includes(badCol as typeof optionalCols[number])
+            ? badCol
+            : optionalCols.find((c) => c in retryUpdates && errMsg.toLowerCase().includes(c));
+          if (!colToDrop) break;
+          const { [colToDrop]: _dropped, ...rest } = retryUpdates;
           retryUpdates = rest;
-          console.warn(`PUT project ${projectId}: column error — retrying without ${col}`);
+          console.warn(`PUT project ${projectId}: column "${colToDrop}" missing — retrying without it`);
           retryResult = await supabase
             .from("projects")
             .update(retryUpdates)

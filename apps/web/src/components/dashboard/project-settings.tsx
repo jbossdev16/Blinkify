@@ -366,6 +366,8 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
   const staleProjectGuardRef = useRef<{ projectId: string; minUpdatedAtMs: number } | null>(null);
   /** Apply Brand set a name that is not saved yet — don't let project prop sync revert it to "Brand 1" etc. */
   const pendingImportedBrandNameRef = useRef<string | null>(null);
+  /** Preserve user-typed website URL during Apply Brand (server action re-render would overwrite it). Cleared on save or project switch. */
+  const pendingApplyBrandUrlRef = useRef<string | null>(null);
   const lastProjectIdForSyncRef = useRef(project.id);
 
   // Sync local state when project prop changes (e.g. initial load or navigation).
@@ -377,6 +379,7 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
     if (project.id !== lastProjectIdForSyncRef.current) {
       lastProjectIdForSyncRef.current = project.id;
       pendingImportedBrandNameRef.current = null;
+      pendingApplyBrandUrlRef.current = null;
       staleProjectGuardRef.current = null;
       lastSavedFieldsRef.current = null;
     }
@@ -423,6 +426,7 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
     setColorSlotGradients(Array.from({ length: COLOR_SLOT_COUNT }, (_, i) => slotGradients[i] ?? { angle: 90, colors: [] }));
     const incomingWebsiteUrl = project.website_url ?? "";
     const incomingSocialLinksJson = JSON.stringify(serializeSocialLinksForApi(socialLinksFromProject(project.social_links)));
+    const pendingUrl = pendingApplyBrandUrlRef.current;
     const saved = lastSavedFieldsRef.current;
     if (saved) {
       if (saved.websiteUrl !== undefined && incomingWebsiteUrl === saved.websiteUrl) {
@@ -431,7 +435,9 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
       if (saved.socialLinks !== undefined && incomingSocialLinksJson === saved.socialLinks) {
         lastSavedFieldsRef.current = { ...saved, socialLinks: undefined };
       }
-      if (saved.websiteUrl !== undefined && incomingWebsiteUrl !== saved.websiteUrl) {
+      if (pendingUrl !== null) {
+        setWebsiteUrl(pendingUrl);
+      } else if (saved.websiteUrl !== undefined && incomingWebsiteUrl !== saved.websiteUrl) {
         setWebsiteUrl(saved.websiteUrl);
       } else {
         setWebsiteUrl(incomingWebsiteUrl);
@@ -442,7 +448,7 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
         setSocialLinks(socialLinksFromProject(project.social_links));
       }
     } else {
-      setWebsiteUrl(incomingWebsiteUrl);
+      setWebsiteUrl(pendingUrl ?? incomingWebsiteUrl);
       setSocialLinks(socialLinksFromProject(project.social_links));
     }
   }, [
@@ -555,6 +561,7 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
       setWebsiteUrl(savedWebsiteUrl);
       setSocialLinks(socialLinksFromProject(updatedProject.social_links));
       lastSavedFieldsRef.current = { websiteUrl: savedWebsiteUrl, socialLinks: savedSocialLinksJson };
+      pendingApplyBrandUrlRef.current = null;
       pendingImportedBrandNameRef.current = null;
       const savedAt = updatedProject.updated_at ? new Date(updatedProject.updated_at).getTime() : 0;
       if (!Number.isNaN(savedAt) && savedAt > 0) {
@@ -693,6 +700,7 @@ export function ProjectSettings({ project, workspaceId, logoUrl = null, brandMod
       setError("Enter a website URL above, then click Apply Brand.");
       return;
     }
+    pendingApplyBrandUrlRef.current = url;
     setError("");
     setApplyingBrand(true);
     try {
