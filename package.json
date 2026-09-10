@@ -2,7 +2,16 @@
   "name": "blinkify",
   "version": "1.0.0",
   "private": true,
-  "description": "AI Image generation B2B SaaS",
+  "description": "Open-source AI ad creative platform — product photos to campaigns",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jbossdev16/Blinkify.git"
+  },
+  "homepage": "https://blinkify.ai",
+  "bugs": {
+    "url": "https://github.com/jbossdev16/Blinkify/issues"
+  },
   "workspaces": [
     "apps/*",
     "packages/*"
@@ -19,7 +28,7 @@
   },
   "packageManager": "npm@10.0.0",
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "overrides": {
     "protobufjs": ">=7.2.5",

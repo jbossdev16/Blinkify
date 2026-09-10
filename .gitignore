@@ -1,9 +1,50 @@
+# Dependencies
 node_modules
+
+# Build output
 .next
 dist
 .turbo
+out
+coverage
+
+# Environment and secrets — never commit real values
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
+!**/.env.example
+!.env.*.example
+
+# Supabase CLI local cache (can contain project refs / pooler URLs)
+supabase/.temp/
+
+# Hosting / cloud
+.vercel
+.supabase
+
+# Credentials and keys
+*.pem
+*.p12
+*.pfx
+*.key
+!*.d.ts
+credentials.json
+service-account*.json
+*-service-account.json
+
+# Logs
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS / editor
 .DS_Store
+Thumbs.db
+.idea
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# Misc
+*.tsbuildinfo

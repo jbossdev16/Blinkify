@@ -1,6 +1,6 @@
-# Blinkify — Nano Banana Image Generation API Reference
+# Gemini image generation notes
 
-**Purpose:** Source of truth for implementing image generation (Phase 3).  
+Reference for Blinkify’s image generation (Google’s Gemini / “Nano Banana” models).  
 **Last updated:** Feb 11, 2026
 
 ---
